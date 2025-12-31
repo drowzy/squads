@@ -102,7 +102,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "already_started", message: "Session has already been started"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
@@ -127,7 +127,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "not_running", message: "Session is not running"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
@@ -174,7 +174,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
@@ -196,7 +196,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
@@ -218,7 +218,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
@@ -257,7 +257,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
@@ -298,7 +298,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
@@ -339,7 +339,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
@@ -379,7 +379,7 @@ defmodule SquadsWeb.API.SessionController do
           |> put_status(:conflict)
           |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
 
-        {:error, {:opencode_error, _reason}} = error ->
+        error ->
           error
       end
     end)
