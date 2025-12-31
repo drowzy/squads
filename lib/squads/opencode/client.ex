@@ -439,7 +439,7 @@ defmodule Squads.OpenCode.Client do
     req_opts = [
       connect_options: [timeout: timeout],
       receive_timeout: timeout,
-      retry: retry_count > 0,
+      retry: if(retry_count > 0, do: :transient, else: false),
       retry_delay: fn _ -> retry_delay end,
       max_retries: retry_count
     ]
