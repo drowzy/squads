@@ -47,14 +47,16 @@ function SquadOverview() {
           <button
             onClick={() => setCreateModalOpen(true)}
             disabled={!projectId}
+            aria-label="Create new squad"
             className={cn(
               "flex items-center gap-2 px-3 py-1.5 text-xs font-bold tracking-widest uppercase",
               "border border-tui-accent text-tui-accent",
               "hover:bg-tui-accent hover:text-tui-bg transition-colors",
-              "disabled:opacity-50 disabled:cursor-not-allowed"
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+              "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-tui-bg focus:ring-tui-accent"
             )}
           >
-            <Plus size={14} />
+            <Plus size={14} aria-hidden="true" />
             <span>New Squad</span>
           </button>
         </div>
@@ -104,6 +106,18 @@ function SquadCard({ squad, projectId }: { squad: Squad; projectId: string }) {
   const deleteSquad = useDeleteSquad()
   const { addNotification } = useNotifications()
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) {
+      window.addEventListener('keydown', handleKeyDown)
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [menuOpen])
+
   const agents = squad.agents ?? []
   const activeAgents = agents.filter(a => a.status !== 'offline')
   const workingAgents = agents.filter(a => a.status === 'working')
@@ -134,9 +148,14 @@ function SquadCard({ squad, projectId }: { squad: Squad; projectId: string }) {
         className="flex items-center gap-3 p-3 md:p-4 cursor-pointer hover:bg-tui-dim/10 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <button className="p-1 -m-1 text-tui-dim hover:text-tui-text">
+        <button 
+          className="p-1 -m-1 text-tui-dim hover:text-tui-text focus:outline-none focus:ring-1 focus:ring-tui-accent rounded"
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse squad details" : "Expand squad details"}
+        >
           <ChevronDown 
             size={18} 
+            aria-hidden="true"
             className={cn("transition-transform", !expanded && "-rotate-90")} 
           />
         </button>
@@ -174,10 +193,11 @@ function SquadCard({ squad, projectId }: { squad: Squad; projectId: string }) {
               e.stopPropagation()
               setCreateAgentModalOpen(true)
             }}
-            className="p-2 text-tui-dim hover:text-tui-accent hover:bg-tui-dim/20 rounded"
+            className="p-2 text-tui-dim hover:text-tui-accent hover:bg-tui-dim/20 rounded focus:outline-none focus:ring-1 focus:ring-tui-accent"
             title="Add Agent"
+            aria-label={`Add agent to ${squad.name}`}
           >
-            <UserPlus size={16} />
+            <UserPlus size={16} aria-hidden="true" />
           </button>
 
           <div className="relative">
@@ -186,38 +206,50 @@ function SquadCard({ squad, projectId }: { squad: Squad; projectId: string }) {
                 e.stopPropagation()
                 setMenuOpen(!menuOpen)
               }}
-              className="p-2 text-tui-dim hover:text-tui-text hover:bg-tui-dim/20 rounded"
+              className="p-2 text-tui-dim hover:text-tui-text hover:bg-tui-dim/20 rounded focus:outline-none focus:ring-1 focus:ring-tui-accent"
+              aria-label="More squad actions"
+              aria-expanded={menuOpen}
+              aria-haspopup="true"
             >
-              <MoreVertical size={16} />
+              <MoreVertical size={16} aria-hidden="true" />
             </button>
 
             {menuOpen && (
               <>
                 <div 
                   className="fixed inset-0 z-10" 
-                  onClick={() => setMenuOpen(false)} 
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setMenuOpen(false)
+                  }}
+                  aria-hidden="true"
                 />
-                <div className="absolute right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg min-w-[140px]">
+                <div 
+                  role="menu"
+                  className="absolute right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg min-w-[140px]"
+                >
                   <button
+                    role="menuitem"
                     onClick={(e) => {
                       e.stopPropagation()
                       setMenuOpen(false)
                       // TODO: Open edit modal
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
                   >
-                    <Pencil size={14} />
+                    <Pencil size={14} aria-hidden="true" />
                     Edit
                   </button>
                   <button
+                    role="menuitem"
                     onClick={(e) => {
                       e.stopPropagation()
                       setMenuOpen(false)
                       handleDelete()
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-ctp-red hover:bg-tui-dim/20"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-ctp-red hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={14} aria-hidden="true" />
                     Delete
                   </button>
                 </div>
@@ -263,6 +295,18 @@ function AgentRow({ agent, squadId }: { agent: Agent; squadId: string }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const deleteAgent = useDeleteAgent()
   const { addNotification } = useNotifications()
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) {
+      window.addEventListener('keydown', handleKeyDown)
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [menuOpen])
 
   const statusColors: Record<Agent['status'], string> = {
     idle: 'text-tui-dim',
@@ -332,27 +376,38 @@ function AgentRow({ agent, squadId }: { agent: Agent; squadId: string }) {
             e.stopPropagation()
             setMenuOpen(!menuOpen)
           }}
-          className="p-1.5 text-tui-dim hover:text-tui-text hover:bg-tui-dim/20 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          className="p-1.5 text-tui-dim hover:text-tui-text hover:bg-tui-dim/20 rounded opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-tui-accent"
+          aria-label={`Actions for ${agent.name}`}
+          aria-expanded={menuOpen}
+          aria-haspopup="true"
         >
-          <MoreVertical size={14} />
+          <MoreVertical size={14} aria-hidden="true" />
         </button>
 
         {menuOpen && (
           <>
             <div 
               className="fixed inset-0 z-10" 
-              onClick={() => setMenuOpen(false)} 
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen(false)
+              }}
+              aria-hidden="true"
             />
-            <div className="absolute right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg min-w-[120px]">
+            <div 
+              role="menu"
+              className="absolute right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg min-w-[120px]"
+            >
               <button
+                role="menuitem"
                 onClick={(e) => {
                   e.stopPropagation()
                   setMenuOpen(false)
                   handleDelete()
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-ctp-red hover:bg-tui-dim/20"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-ctp-red hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
               >
-                <Trash2 size={14} />
+                <Trash2 size={14} aria-hidden="true" />
                 Delete
               </button>
             </div>

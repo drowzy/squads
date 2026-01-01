@@ -11,7 +11,7 @@ defmodule SquadsWeb.Router do
   end
 
   pipeline :api do
-    plug :accepts, ["json"]
+    plug :accepts, ["json", "sse"]
   end
 
   scope "/", SquadsWeb do
@@ -103,6 +103,15 @@ defmodule SquadsWeb.Router do
     post "/mail/:id/read", MailController, :read
     post "/mail/:id/acknowledge", MailController, :acknowledge
     get "/mail/threads/:thread_id", MailController, :thread
+
+    # MCP endpoints
+    get "/mcp", MCPController, :index
+    post "/mcp", MCPController, :create
+    post "/mcp/:name/connect", MCPController, :connect
+    post "/mcp/:name/disconnect", MCPController, :disconnect
+    get "/mcp/:name/auth", MCPController, :auth
+    post "/mcp/:name/auth", MCPController, :auth
+    post "/mcp/:name/auth/callback", MCPController, :auth_callback
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

@@ -9,6 +9,43 @@ defmodule Squads.Reviews do
   alias Squads.Agents.Agent, as: AgentModel
 
   @doc """
+  Creates a review for a ticket, generating a summary from the associated worktree if available.
+  """
+  def request_review(project_id, author_id, ticket_id, worktree_name) do
+    with {:ok, summary_data} <- Squads.Worktrees.generate_pr_summary(project_id, worktree_name),
+         {:ok, reviewer_id} <- suggest_reviewer(author_id),
+         {:ok, review} <-
+           create_review(%{
+             project_id: project_id,
+             author_id: author_id,
+             ticket_id: ticket_id,
+             reviewer_id: reviewer_id,
+             summary: summary_data.summary,
+             status: "pending",
+             metadata: %{
+               test_results: summary_data.test_results,
+               generated_at: summary_data.generated_at
+             }
+           }) do
+      # Notify reviewer
+      if reviewer_id do
+        Squads.Mail.send_message(%{
+          project_id: project_id,
+          sender_id: author_id,
+          subject: "Review Request: #{ticket_id}",
+          body_md:
+            "Please review my changes for #{ticket_id}.\n\nSummary:\n#{summary_data.summary}",
+          importance: "normal",
+          ack_required: true,
+          to: [reviewer_id]
+        })
+      end
+
+      {:ok, review}
+    end
+  end
+
+  @doc """
   Lists all reviews for a ticket.
   """
   def list_reviews_for_ticket(ticket_id) do
@@ -51,18 +88,45 @@ defmodule Squads.Reviews do
   Approves a review.
   """
   def approve_review(review) do
-    Review.approve(review)
+    review = Repo.preload(review, :ticket)
+
+    with {:ok, updated} <- Review.approve(review) do
+      # Notify author
+      Squads.Mail.send_message(%{
+        project_id: review.ticket.project_id,
+        sender_id: updated.reviewer_id,
+        subject: "Review Approved: #{updated.ticket_id}",
+        body_md: "Your changes have been approved. You can now merge.",
+        to: [updated.author_id]
+      })
+
+      {:ok, updated}
+    end
   end
 
   @doc """
   Requests changes on a review.
   """
   def request_changes(review, summary) do
-    review
-    |> Ecto.Changeset.change()
-    |> Ecto.Changeset.put_change(:summary, summary)
-    |> Ecto.Changeset.put_change(:status, "changes_requested")
-    |> Repo.update()
+    review = Repo.preload(review, :ticket)
+
+    with {:ok, updated} <-
+           review
+           |> Ecto.Changeset.change()
+           |> Ecto.Changeset.put_change(:summary, summary)
+           |> Ecto.Changeset.put_change(:status, "changes_requested")
+           |> Repo.update() do
+      # Notify author
+      Squads.Mail.send_message(%{
+        project_id: review.ticket.project_id,
+        sender_id: updated.reviewer_id,
+        subject: "Changes Requested: #{updated.ticket_id}",
+        body_md: "Reviewer has requested changes:\n\n#{summary}",
+        to: [updated.author_id]
+      })
+
+      {:ok, updated}
+    end
   end
 
   @doc """

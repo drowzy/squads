@@ -126,4 +126,14 @@ defmodule Squads.Agents do
   def delete_agent(%Agent{} = agent) do
     Repo.delete(agent)
   end
+
+  @doc """
+  Gets a squad by ID.
+  """
+  def get_squad(id) do
+    case Repo.get(Squads.Agents.Squad, id) do
+      nil -> {:error, :not_found}
+      squad -> {:ok, squad}
+    end
+  end
 end

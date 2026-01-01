@@ -438,32 +438,49 @@ defmodule Squads.Sessions do
 
   @doc """
   Executes a slash command in a session.
-
-  ## Params
-
-    * `:arguments` - Optional. Command arguments.
-    * `:agent` - Optional. Agent to use.
-    * `:model` - Optional. Model to use.
-
-  ## Examples
-
-      Sessions.execute_command(session, "/help")
-      Sessions.execute_command(session, "/compact", arguments: "all")
   """
   def execute_command(session, command, params \\ [], opencode_opts \\ []) do
-    cond do
-      is_nil(session.opencode_session_id) ->
-        {:error, :no_opencode_session}
+    case command do
+      "/squads-status" ->
+        with {:ok, agent} <- Agents.get_agent(session.agent_id) do
+          status = get_squad_status(agent.squad_id)
+          {:ok, %{"output" => Jason.encode!(status, pretty: true)}}
+        end
 
-      session.status != "running" ->
-        {:error, :session_not_active}
+      "/squads-tickets" ->
+        with {:ok, agent} <- Agents.get_agent(session.agent_id),
+             {:ok, squad} <- Agents.get_squad(agent.squad_id) do
+          summary = Squads.Tickets.get_tickets_summary(squad.project_id)
+          {:ok, %{"output" => Jason.encode!(summary, pretty: true)}}
+        end
 
-      true ->
-        OpenCodeClient.execute_command(
-          session.opencode_session_id,
-          command,
-          Keyword.merge(params, opencode_opts)
-        )
+      "/check-mail" ->
+        with {:ok, agent} <- Agents.get_agent(session.agent_id) do
+          messages = Squads.Mail.list_inbox(agent.id, limit: 10)
+
+          output =
+            messages
+            |> Enum.map(fn m -> "[#{m.id}] From: #{m.sender.name} - #{m.subject}" end)
+            |> Enum.join("\n")
+
+          {:ok, %{"output" => output}}
+        end
+
+      _ ->
+        cond do
+          is_nil(session.opencode_session_id) ->
+            {:error, :no_opencode_session}
+
+          session.status != "running" ->
+            {:error, :session_not_active}
+
+          true ->
+            OpenCodeClient.execute_command(
+              session.opencode_session_id,
+              command,
+              Keyword.merge(params, opencode_opts)
+            )
+        end
     end
   end
 
@@ -608,6 +625,20 @@ defmodule Squads.Sessions do
   # ============================================================================
   # Private Helpers
   # ============================================================================
+
+  def get_squad_status(squad_id) do
+    with {:ok, agents} <- Agents.list_agents_for_squad(squad_id) do
+      agents
+      |> Enum.map(fn a ->
+        %{
+          id: a.id,
+          name: a.name,
+          role: a.role,
+          status: a.status
+        }
+      end)
+    end
+  end
 
   defp map_opencode_status(%{"status" => "idle"}), do: "running"
   defp map_opencode_status(%{"status" => "running"}), do: "running"

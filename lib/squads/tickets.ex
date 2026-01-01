@@ -218,9 +218,47 @@ defmodule Squads.Tickets do
   end
 
   @doc """
-  Closes a ticket and syncs to Beads.
+  Closes a ticket, optionally merges its associated worktree, and syncs to Beads.
   """
   def close_ticket(%Ticket{} = ticket, reason \\ nil) do
+    # Try to find an associated worktree to cleanup/merge
+    # Worktree name format: <agent_slug>-<ticket_id>
+    ticket = Repo.preload(ticket, [:assignee])
+
+    worktree_name =
+      if ticket.assignee do
+        "#{ticket.assignee.slug}-#{ticket.id}"
+      else
+        nil
+      end
+
+    if worktree_name &&
+         File.exists?(
+           Path.join([
+             ticket.project_id |> (fn id -> Repo.get(Squads.Projects.Project, id).path end).(),
+             ".squads",
+             "worktrees",
+             worktree_name
+           ])
+         ) do
+      # If worktree exists, we might want to merge it. 
+      # For now, let's just ensure we close the ticket in Beads first.
+      case perform_close(ticket, reason) do
+        {:ok, updated} ->
+          # Fire and forget worktree cleanup for now, or handle it synchronously?
+          # Best to handle it synchronously to ensure state consistency if possible.
+          Squads.Worktrees.merge_and_cleanup(ticket.project_id, worktree_name)
+          {:ok, updated}
+
+        error ->
+          error
+      end
+    else
+      perform_close(ticket, reason)
+    end
+  end
+
+  defp perform_close(ticket, reason) do
     with {:ok, _} <- Beads.close_issue(ticket.beads_id, reason),
          {:ok, updated} <-
            update_ticket(ticket, %{
@@ -442,6 +480,24 @@ defmodule Squads.Tickets do
          errors: length(result.errors)
        }}
     end
+  end
+
+  @doc """
+  Returns a command-friendly summary of tickets for a project.
+  """
+  def get_tickets_summary(project_id) do
+    summary = board_summary(project_id)
+
+    %{
+      todo: Enum.count(summary.ready),
+      in_progress: Enum.count(summary.in_progress),
+      blocked: Enum.count(summary.blocked),
+      closed: Enum.count(summary.closed),
+      active_tickets:
+        Enum.map(summary.in_progress, fn t ->
+          %{id: t.beads_id, title: t.title, assignee: t.assignee_name}
+        end)
+    }
   end
 
   # ============================================================================

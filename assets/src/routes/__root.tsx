@@ -147,7 +147,7 @@ function AppShell() {
       )}>
         <div className="p-4 border-b border-tui-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Terminal className="text-tui-accent" />
+            <Terminal className="text-tui-accent" aria-hidden="true" />
             <span className="font-bold text-xl tracking-tight">SQUADS_</span>
           </div>
           <button 
@@ -155,7 +155,7 @@ function AppShell() {
             className="p-2 text-tui-dim hover:text-tui-text md:hidden"
             onClick={() => setSidebarOpen(false)}
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 
@@ -163,12 +163,15 @@ function AppShell() {
         <div className="p-2 border-b border-tui-border">
           <div className="relative">
             <button
-              aria-label="Select project"
+              aria-label={projectDropdownOpen ? "Close project selector" : "Open project selector"}
+              aria-expanded={projectDropdownOpen}
+              aria-haspopup="true"
               onClick={() => setProjectDropdownOpen(!projectDropdownOpen)}
               className={cn(
                 "w-full flex items-center justify-between gap-2 px-3 py-2",
                 "text-left text-sm border border-tui-border rounded",
                 "hover:bg-tui-dim/10 transition-colors",
+                "focus:outline-none focus:ring-1 focus:ring-tui-accent",
                 projectDropdownOpen && "bg-tui-dim/10"
               )}
             >
@@ -189,17 +192,22 @@ function AppShell() {
                 <div 
                   className="fixed inset-0 z-10" 
                   onClick={() => setProjectDropdownOpen(false)} 
+                  aria-hidden="true"
                 />
-                <div className="absolute left-0 right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg max-h-64 overflow-auto">
+                <div 
+                  role="menu"
+                  className="absolute left-0 right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg max-h-64 overflow-auto"
+                >
                   {projects?.map(project => (
                     <button
                       key={project.id}
+                      role="menuitem"
                       onClick={() => {
                         setActiveProjectId(project.id)
                         setProjectDropdownOpen(false)
                       }}
                       className={cn(
-                        "w-full text-left px-3 py-2 text-sm hover:bg-tui-dim/20 transition-colors",
+                        "w-full text-left px-3 py-2 text-sm hover:bg-tui-dim/20 transition-colors focus:outline-none focus:bg-tui-dim/20",
                         project.id === activeProjectId && "bg-tui-accent/10 text-tui-accent"
                       )}
                     >
@@ -208,19 +216,20 @@ function AppShell() {
                     </button>
                   ))}
                   {(!projects || projects.length === 0) && (
-                    <div className="px-3 py-2 text-sm text-tui-dim">
+                    <div className="px-3 py-2 text-sm text-tui-dim" role="menuitem" aria-disabled="true">
                       No projects yet
                     </div>
                   )}
                   <div className="border-t border-tui-border">
                     <button
+                      role="menuitem"
                       onClick={() => {
                         setProjectDropdownOpen(false)
                         setCreateProjectOpen(true)
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-tui-accent hover:bg-tui-dim/20 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-tui-accent hover:bg-tui-dim/20 transition-colors focus:outline-none focus:bg-tui-dim/20"
                     >
-                      <Plus size={14} />
+                      <Plus size={14} aria-hidden="true" />
                       <span>New Project</span>
                     </button>
                   </div>
@@ -254,7 +263,7 @@ function AppShell() {
               className="p-2 -ml-2 text-tui-dim hover:text-tui-text md:hidden"
               onClick={() => setSidebarOpen(true)}
             >
-              <Menu size={24} />
+              <Menu size={24} aria-hidden="true" />
             </button>
             <span className="text-tui-dim hidden sm:inline">PATH:</span>
             <span className="text-tui-accent text-sm sm:text-base truncate max-w-[200px]">

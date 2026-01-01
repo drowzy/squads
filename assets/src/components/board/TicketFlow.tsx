@@ -176,7 +176,7 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
             className="absolute inset-0 bg-black/60 z-10 md:hidden"
             onClick={() => setSelectedTicketId(null)}
           />
-          <div className="absolute inset-4 md:inset-auto md:top-4 md:right-4 md:w-80 bg-tui-bg border border-tui-accent shadow-[0_0_30px_rgba(255,0,255,0.1)] z-20 flex flex-col md:max-h-[calc(100%-2rem)] animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="absolute inset-4 md:inset-auto md:top-4 md:right-4 md:w-80 bg-tui-bg border border-tui-accent shadow-[0_0_30px_rgba(255,0,255,0.1)] z-20 flex flex-col md:max-h-[calc(100%-2rem)] animate-in fade-in slide-in-from-right duration-300">
             <div className="p-3 border-b border-tui-accent bg-tui-accent/10 flex justify-between items-center">
               <span className="text-xs font-bold text-tui-accent tracking-widest uppercase flex items-center gap-2">
                 <Info size={14} />

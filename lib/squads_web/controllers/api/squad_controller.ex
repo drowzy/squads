@@ -9,7 +9,6 @@ defmodule SquadsWeb.API.SquadController do
   alias Squads.Squads, as: SquadsContext
   alias Squads.Projects
   alias Squads.Agents
-  alias Squads.Repo
 
   action_fallback SquadsWeb.FallbackController
 

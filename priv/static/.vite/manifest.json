@@ -1,0 +1,23 @@
+{
+  "node_modules/@tanstack/router-devtools-core/dist/FloatingTanStackRouterDevtools-DymJEvfG.js": {
+    "file": "assets/FloatingTanStackRouterDevtools-DymJEvfG.js",
+    "name": "FloatingTanStackRouterDevtools-DymJEvfG",
+    "src": "node_modules/@tanstack/router-devtools-core/dist/FloatingTanStackRouterDevtools-DymJEvfG.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.tsx"
+    ]
+  },
+  "src/main.tsx": {
+    "file": "assets/main.js",
+    "name": "main",
+    "src": "src/main.tsx",
+    "isEntry": true,
+    "dynamicImports": [
+      "node_modules/@tanstack/router-devtools-core/dist/FloatingTanStackRouterDevtools-DymJEvfG.js"
+    ],
+    "css": [
+      "assets/main.css"
+    ]
+  }
+}
