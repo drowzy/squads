@@ -27,6 +27,7 @@ import {
 } from '../api/queries'
 import { useActiveProject } from './__root'
 import { cn } from '../lib/cn'
+import { useNotifications } from '../components/Notifications'
 
 export const Route = createFileRoute('/mail')({
   component: MailSystem,
@@ -168,6 +169,7 @@ function ThreadView({ threadId, onBack }: { threadId: string; onBack: () => void
   const { data: messages = [], isLoading } = useMailThread(threadId)
   const [replyBody, setReplyBody] = useState('')
   const { activeProject } = useActiveProject()
+  const { addNotification } = useNotifications()
   const replyMutation = useReplyMessage()
 
   useEffect(() => {
@@ -180,8 +182,22 @@ function ThreadView({ threadId, onBack }: { threadId: string; onBack: () => void
 
   const handleReply = async () => {
     if (!replyBody.trim()) return
-    await replyMutation.mutateAsync({ thread_id: threadId, body_md: replyBody, project_id: activeProject?.id })
-    setReplyBody('')
+    try {
+      await replyMutation.mutateAsync({ thread_id: threadId, body_md: replyBody, project_id: activeProject?.id })
+      setReplyBody('')
+      addNotification({
+        type: 'success',
+        title: 'MAIL_SENT',
+        message: 'Reply delivered successfully.'
+      })
+    } catch (error) {
+      console.error('Failed to send reply:', error)
+      addNotification({
+        type: 'error',
+        title: 'TRANSMISSION_FAILURE',
+        message: 'Failed to deliver reply. Check subsystem status.'
+      })
+    }
   }
 
   if (isLoading) {
@@ -274,6 +290,7 @@ function ThreadView({ threadId, onBack }: { threadId: string; onBack: () => void
 
 function ComposeModal({ onClose }: { onClose: () => void }) {
   const { activeProject } = useActiveProject()
+  const { addNotification } = useNotifications()
   const [sender, setSender] = useState<string>('')
   const [to, setTo] = useState<string[]>([])
   const [subject, setSubject] = useState('')
@@ -300,8 +317,22 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
 
   const handleSend = async () => {
     if (!sender || to.length === 0 || !subject.trim() || !body.trim()) return
-    await sendMutation.mutateAsync({ to, subject, body_md: body, sender_name: sender, project_id: activeProject?.id })
-    onClose()
+    try {
+      await sendMutation.mutateAsync({ to, subject, body_md: body, sender_name: sender, project_id: activeProject?.id })
+      addNotification({
+        type: 'success',
+        title: 'MAIL_SENT',
+        message: 'Message delivered successfully.'
+      })
+      onClose()
+    } catch (error) {
+      console.error('Failed to send message:', error)
+      addNotification({
+        type: 'error',
+        title: 'TRANSMISSION_FAILURE',
+        message: 'Failed to deliver message. Check subsystem status.'
+      })
+    }
   }
 
   const toggleRecipient = (name: string) => {

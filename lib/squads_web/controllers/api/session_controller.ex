@@ -107,20 +107,12 @@ defmodule SquadsWeb.API.SessionController do
   def start_existing(conn, %{"session_id" => id} = params) do
     with_session(id, fn session ->
       opts = if params["title"], do: [title: params["title"]], else: []
-
-      case Sessions.start_session(session, opts) do
-        {:ok, session} ->
-          render(conn, :show, session: session)
-
-        {:error, :already_started} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "already_started", message: "Session has already been started"})
-
-        error ->
-          error
-      end
+      Sessions.start_session(session, opts)
     end)
+    |> case do
+      {:ok, session} -> render(conn, :show, session: session)
+      error -> error
+    end
   end
 
   @doc """
@@ -132,20 +124,12 @@ defmodule SquadsWeb.API.SessionController do
   def stop(conn, %{"session_id" => id} = params) do
     with_session(id, fn session ->
       exit_code = params["exit_code"] || 0
-
-      case Sessions.stop_session(session, exit_code) do
-        {:ok, session} ->
-          render(conn, :show, session: session)
-
-        {:error, :not_running} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "not_running", message: "Session is not running"})
-
-        error ->
-          error
-      end
+      Sessions.stop_session(session, exit_code)
     end)
+    |> case do
+      {:ok, session} -> render(conn, :show, session: session)
+      error -> error
+    end
   end
 
   @doc """
@@ -155,19 +139,12 @@ defmodule SquadsWeb.API.SessionController do
   """
   def cancel(conn, %{"session_id" => id}) do
     with_session(id, fn session ->
-      case Sessions.cancel_session(session) do
-        {:ok, session} ->
-          render(conn, :show, session: session)
-
-        {:error, :already_started} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{
-            error: "already_started",
-            message: "Cannot cancel a session that has already started"
-          })
-      end
+      Sessions.cancel_session(session)
     end)
+    |> case do
+      {:ok, session} -> render(conn, :show, session: session)
+      error -> error
+    end
   end
 
   @doc """
@@ -179,20 +156,12 @@ defmodule SquadsWeb.API.SessionController do
   def messages(conn, %{"session_id" => id} = params) do
     with_session(id, fn session ->
       opts = if params["limit"], do: [limit: String.to_integer(params["limit"])], else: []
-
-      case Sessions.get_messages(session, opts) do
-        {:ok, messages} ->
-          json(conn, %{data: messages})
-
-        {:error, :no_opencode_session} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
-
-        error ->
-          error
-      end
+      Sessions.get_messages(session, opts)
     end)
+    |> case do
+      {:ok, messages} -> json(conn, %{data: messages})
+      error -> error
+    end
   end
 
   @doc """
@@ -202,19 +171,12 @@ defmodule SquadsWeb.API.SessionController do
   """
   def diff(conn, %{"session_id" => id}) do
     with_session(id, fn session ->
-      case Sessions.get_diff(session) do
-        {:ok, diff} ->
-          json(conn, %{data: diff})
-
-        {:error, :no_opencode_session} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
-
-        error ->
-          error
-      end
+      Sessions.get_diff(session)
     end)
+    |> case do
+      {:ok, diff} -> json(conn, %{data: diff})
+      error -> error
+    end
   end
 
   @doc """
@@ -224,19 +186,12 @@ defmodule SquadsWeb.API.SessionController do
   """
   def todos(conn, %{"session_id" => id}) do
     with_session(id, fn session ->
-      case Sessions.get_todos(session) do
-        {:ok, todos} ->
-          json(conn, %{data: todos})
-
-        {:error, :no_opencode_session} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
-
-        error ->
-          error
-      end
+      Sessions.get_todos(session)
     end)
+    |> case do
+      {:ok, todos} -> json(conn, %{data: todos})
+      error -> error
+    end
   end
 
   # ============================================================================
@@ -258,24 +213,12 @@ defmodule SquadsWeb.API.SessionController do
         |> maybe_add(:agent, params["agent"])
         |> maybe_add(:no_reply, params["no_reply"])
 
-      case Sessions.send_prompt(session, prompt, opts) do
-        {:ok, response} ->
-          json(conn, %{data: response})
-
-        {:error, :session_not_active} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "session_not_active", message: "Session is not running"})
-
-        {:error, :no_opencode_session} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
-
-        error ->
-          error
-      end
+      Sessions.send_prompt(session, prompt, opts)
     end)
+    |> case do
+      {:ok, response} -> json(conn, %{data: response})
+      error -> error
+    end
   end
 
   def prompt(conn, %{"session_id" => _}) do
@@ -297,26 +240,17 @@ defmodule SquadsWeb.API.SessionController do
         |> maybe_add(:model, params["model"])
         |> maybe_add(:agent, params["agent"])
 
-      case Sessions.send_prompt_async(session, prompt, opts) do
-        {:ok, response} ->
-          conn
-          |> put_status(:accepted)
-          |> json(%{data: response})
-
-        {:error, :session_not_active} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "session_not_active", message: "Session is not running"})
-
-        {:error, :no_opencode_session} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
-
-        error ->
-          error
-      end
+      Sessions.send_prompt_async(session, prompt, opts)
     end)
+    |> case do
+      {:ok, response} ->
+        conn
+        |> put_status(:accepted)
+        |> json(%{data: response})
+
+      error ->
+        error
+    end
   end
 
   def prompt_async(conn, %{"session_id" => _}) do
@@ -340,24 +274,12 @@ defmodule SquadsWeb.API.SessionController do
         |> maybe_add(:agent, params["agent"])
         |> maybe_add(:model, params["model"])
 
-      case Sessions.execute_command(session, command, opts) do
-        {:ok, response} ->
-          json(conn, %{data: response})
-
-        {:error, :session_not_active} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "session_not_active", message: "Session is not running"})
-
-        {:error, :no_opencode_session} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
-
-        error ->
-          error
-      end
+      Sessions.execute_command(session, command, opts)
     end)
+    |> case do
+      {:ok, response} -> json(conn, %{data: response})
+      error -> error
+    end
   end
 
   def command(conn, %{"session_id" => _}) do
@@ -380,24 +302,12 @@ defmodule SquadsWeb.API.SessionController do
         |> maybe_add(:agent, params["agent"])
         |> maybe_add(:model, params["model"])
 
-      case Sessions.run_shell(session, command, opts) do
-        {:ok, response} ->
-          json(conn, %{data: response})
-
-        {:error, :session_not_active} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "session_not_active", message: "Session is not running"})
-
-        {:error, :no_opencode_session} ->
-          conn
-          |> put_status(:conflict)
-          |> json(%{error: "no_opencode_session", message: "Session has no OpenCode session"})
-
-        error ->
-          error
-      end
+      Sessions.run_shell(session, command, opts)
     end)
+    |> case do
+      {:ok, response} -> json(conn, %{data: response})
+      error -> error
+    end
   end
 
   def shell(conn, %{"session_id" => _}) do

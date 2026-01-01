@@ -453,9 +453,11 @@ export function useSendSessionPrompt() {
   return useMutation({
     mutationFn: (data: { session_id: string; prompt: string; model?: string; agent?: string; no_reply?: boolean }) => {
       const { session_id, ...payload } = data
+      // For prompts, we use a higher timeout because they can trigger long-running subagent tasks
       return fetcher<{ ok?: boolean }>(`/sessions/${session_id}/prompt`, {
         method: 'POST',
         body: JSON.stringify(payload),
+        timeout: 120000 // 2 minutes
       })
     },
     onSuccess: (_, variables) => {

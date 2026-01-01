@@ -85,10 +85,10 @@ defmodule Squads.Reviews do
   end
 
   @doc """
-  Approves a review.
+  Approves a review, and if successful, triggers worktree cleanup for the ticket.
   """
   def approve_review(review) do
-    review = Repo.preload(review, :ticket)
+    review = Repo.preload(review, [:ticket, author: :squad])
 
     with {:ok, updated} <- Review.approve(review) do
       # Notify author
@@ -99,6 +99,12 @@ defmodule Squads.Reviews do
         body_md: "Your changes have been approved. You can now merge.",
         to: [updated.author_id]
       })
+
+      # Cleanup worktree
+      if review.author && review.author.squad do
+        worktree_name = "#{review.author.slug}-#{review.ticket.id}"
+        Squads.Worktrees.merge_and_cleanup(review.author.squad.project_id, worktree_name)
+      end
 
       {:ok, updated}
     end

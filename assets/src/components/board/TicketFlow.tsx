@@ -128,13 +128,12 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
           source: edge.sources[0],
           target: edge.targets[0],
           animated: !isParent && ticket?.status === 'in_progress',
-          type: isParent ? 'straight' : 'default', // Parent edges are straight
-          label: isParent ? undefined : undefined,
+          type: isParent ? 'simplebezier' : 'default', // Parent edges are curved
           style: { 
             stroke: isParent ? '#4b5563' : '#00ff00', // Grey for parent, Green for deps
-            strokeWidth: isParent ? 2 : 1,
-            strokeDasharray: isParent ? '5,5' : undefined,
-            opacity: isParent ? 0.5 : 1
+            strokeWidth: isParent ? 3 : 1,
+            strokeDasharray: isParent ? '10,5' : undefined,
+            opacity: isParent ? 0.6 : 1
           },
         }
       }) || []
