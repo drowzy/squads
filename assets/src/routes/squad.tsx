@@ -63,12 +63,16 @@ function SquadOverview() {
       </div>
 
       {isLoading ? (
-        <div className="p-8 border border-tui-border border-dashed text-center text-tui-dim animate-pulse uppercase tracking-widest text-xs">
-          Loading_Squad_Data...
+        <div className="p-12 border border-tui-border border-dashed text-center space-y-4 bg-tui-dim/5">
+          <div className="text-tui-dim animate-pulse uppercase tracking-widest text-xs">
+            Scanning_Neural_Networks...
+          </div>
         </div>
       ) : !projectId ? (
-        <div className="p-8 border border-tui-border border-dashed text-center text-tui-dim uppercase tracking-widest text-xs">
-          Select_A_Project_First
+        <div className="p-12 border border-tui-border border-dashed text-center space-y-4 bg-tui-dim/5">
+          <div className="text-tui-dim uppercase tracking-widest text-xs">
+            Select_A_Project_First
+          </div>
         </div>
       ) : squads && squads.length > 0 ? (
         <div className="space-y-4">
@@ -77,15 +81,29 @@ function SquadOverview() {
           ))}
         </div>
       ) : (
-        <div className="p-8 border border-tui-border border-dashed text-center space-y-3">
-          <div className="text-tui-dim uppercase tracking-widest text-xs">
-            No_Squads_Found
+        <div className="p-16 border border-tui-border border-dashed text-center space-y-6 bg-tui-dim/5">
+          <div className="flex justify-center">
+            <div className="w-16 h-16 border border-tui-border flex items-center justify-center bg-tui-bg text-tui-dim">
+              <Users size={32} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-lg font-bold uppercase tracking-widest">No_Squads_Deployed</h3>
+            <p className="text-tui-dim text-sm max-w-md mx-auto italic">
+              Deploy your first squad to begin coordinating agent operations.
+            </p>
           </div>
           <button
             onClick={() => setCreateModalOpen(true)}
-            className="text-tui-accent text-sm hover:underline"
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-widest uppercase",
+              "border border-tui-accent text-tui-accent",
+              "hover:bg-tui-accent hover:text-tui-bg transition-colors",
+              "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-tui-bg focus:ring-tui-accent"
+            )}
           >
-            Create your first squad
+            <Plus size={14} aria-hidden="true" />
+            <span>Create First Squad</span>
           </button>
         </div>
       )}

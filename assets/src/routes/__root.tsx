@@ -102,6 +102,8 @@ function AppShell() {
         }
         if (kind.startsWith('agent.')) {
           queryClient.invalidateQueries({ queryKey: ['projects', activeProjectId, 'squads'] })
+          queryClient.invalidateQueries({ queryKey: ['projects', activeProjectId, 'agents'] })
+          queryClient.invalidateQueries({ queryKey: ['agents'] })
         }
         if (kind.startsWith('ticket.')) {
           queryClient.invalidateQueries({ queryKey: ['tickets'] })
@@ -297,7 +299,21 @@ function AppShell() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-4 md:p-6">
+        <div className="flex-1 overflow-auto p-4 md:p-6 relative">
+          {sseStatus === 'error' && (
+            <div className="mb-4 p-3 bg-ctp-red/10 border border-ctp-red/30 text-ctp-red flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-2 text-xs font-bold tracking-widest uppercase">
+                <WifiOff size={16} />
+                <span>Uplink_Signal_Lost_Retrying...</span>
+              </div>
+              <button 
+                onClick={() => window.location.reload()}
+                className="text-[10px] underline hover:no-underline font-bold uppercase tracking-widest"
+              >
+                Reconnect_Now
+              </button>
+            </div>
+          )}
           <Outlet />
         </div>
       </main>

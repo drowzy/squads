@@ -14,6 +14,7 @@ import { Route as SessionsRouteImport } from './routes/sessions'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as MailRouteImport } from './routes/mail'
 import { Route as BoardRouteImport } from './routes/board'
+import { Route as AgentRouteImport } from './routes/agent'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgentAgentIdRouteImport } from './routes/agent.$agentId'
 
@@ -42,19 +43,25 @@ const BoardRoute = BoardRouteImport.update({
   path: '/board',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentRoute = AgentRouteImport.update({
+  id: '/agent',
+  path: '/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentAgentIdRoute = AgentAgentIdRouteImport.update({
-  id: '/agent/$agentId',
-  path: '/agent/$agentId',
-  getParentRoute: () => rootRouteImport,
+  id: '/$agentId',
+  path: '/$agentId',
+  getParentRoute: () => AgentRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agent': typeof AgentRouteWithChildren
   '/board': typeof BoardRoute
   '/mail': typeof MailRoute
   '/review': typeof ReviewRoute
@@ -64,6 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agent': typeof AgentRouteWithChildren
   '/board': typeof BoardRoute
   '/mail': typeof MailRoute
   '/review': typeof ReviewRoute
@@ -74,6 +82,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agent': typeof AgentRouteWithChildren
   '/board': typeof BoardRoute
   '/mail': typeof MailRoute
   '/review': typeof ReviewRoute
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agent'
     | '/board'
     | '/mail'
     | '/review'
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agent'
     | '/board'
     | '/mail'
     | '/review'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agent'
     | '/board'
     | '/mail'
     | '/review'
@@ -113,12 +125,12 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentRoute: typeof AgentRouteWithChildren
   BoardRoute: typeof BoardRoute
   MailRoute: typeof MailRoute
   ReviewRoute: typeof ReviewRoute
   SessionsRoute: typeof SessionsRoute
   SquadRoute: typeof SquadRoute
-  AgentAgentIdRoute: typeof AgentAgentIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -158,6 +170,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BoardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agent': {
+      id: '/agent'
+      path: '/agent'
+      fullPath: '/agent'
+      preLoaderRoute: typeof AgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -167,22 +186,32 @@ declare module '@tanstack/react-router' {
     }
     '/agent/$agentId': {
       id: '/agent/$agentId'
-      path: '/agent/$agentId'
+      path: '/$agentId'
       fullPath: '/agent/$agentId'
       preLoaderRoute: typeof AgentAgentIdRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AgentRoute
     }
   }
 }
 
+interface AgentRouteChildren {
+  AgentAgentIdRoute: typeof AgentAgentIdRoute
+}
+
+const AgentRouteChildren: AgentRouteChildren = {
+  AgentAgentIdRoute: AgentAgentIdRoute,
+}
+
+const AgentRouteWithChildren = AgentRoute._addFileChildren(AgentRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentRoute: AgentRouteWithChildren,
   BoardRoute: BoardRoute,
   MailRoute: MailRoute,
   ReviewRoute: ReviewRoute,
   SessionsRoute: SessionsRoute,
   SquadRoute: SquadRoute,
-  AgentAgentIdRoute: AgentAgentIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
