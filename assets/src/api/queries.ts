@@ -330,6 +330,22 @@ export function useCreateSession() {
   })
 }
 
+export function useStopSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { session_id: string }) =>
+      fetcher<void>('/sessions/stop', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
 export function useUpdateTicket(projectId?: string) {
   const queryClient = useQueryClient()
   return useMutation({

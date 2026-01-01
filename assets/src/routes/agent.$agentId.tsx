@@ -8,10 +8,25 @@ import {
   Clock,
   ChevronRight,
   Loader2,
-  Inbox
+  Inbox,
+  Pencil
 } from 'lucide-react'
-import { useEvents, useSessions, useMailThreads, useSquads } from '../api/queries'
+import { useState, useEffect } from 'react'
+import { 
+  useEvents, 
+  useSessions, 
+  useMailThreads, 
+  useSquads, 
+  useStopSession, 
+  useUpdateAgent,
+  useAgentRolesConfig,
+  useModels,
+  useSyncProviders,
+  type Agent
+} from '../api/queries'
 import { useActiveProject } from './__root'
+import { Modal, FormField, Input, Button } from '../components/Modal'
+import { useNotifications } from '../components/Notifications'
 
 export const Route = createFileRoute('/agent/$agentId')({
   component: AgentDetail,
@@ -23,6 +38,9 @@ function AgentDetail() {
   const { data: sessions = [], isLoading: isLoadingSessions } = useSessions()
   const { data: squads = [] } = useSquads(activeProject?.id || '')
   const { data: threads = [] } = useMailThreads(activeProject?.id)
+  const stopSession = useStopSession()
+  const { addNotification } = useNotifications()
+  const [editModalOpen, setEditModalOpen] = useState(false)
 
   const agentData = squads.flatMap(s => s.agents ?? []).find(a => a.id === agentId)
   
@@ -36,6 +54,26 @@ function AgentDetail() {
     agent_id: agentId,
     limit: 50
   })
+
+  const handleStopSession = async () => {
+    if (!activeSession) return
+    if (!confirm('Are you sure you want to terminate this session? The agent will stop working immediately.')) return
+
+    try {
+      await stopSession.mutateAsync({ session_id: activeSession.id })
+      addNotification({
+        type: 'success',
+        title: 'Session Terminated',
+        message: 'The agent session has been stopped successfully.'
+      })
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Action Failed',
+        message: error instanceof Error ? error.message : 'Failed to stop session'
+      })
+    }
+  }
 
   if (isLoadingSessions || isLoadingEvents) {
     return (
@@ -72,6 +110,14 @@ function AgentDetail() {
               <span className={`text-xs px-2 py-0.5 border font-bold ${agent.status === 'ACTIVE' ? 'border-tui-accent text-tui-accent' : 'border-tui-dim text-tui-dim'}`}>
                 {agent.status}
               </span>
+              <button 
+                onClick={() => setEditModalOpen(true)}
+                disabled={!agentData}
+                className="p-1 text-tui-dim hover:text-tui-accent transition-colors focus:outline-none"
+                title="Edit Agent"
+              >
+                <Pencil size={14} />
+              </button>
             </div>
             <p className="text-tui-dim font-bold tracking-widest text-xs mt-1">
               {agent.role} • {agent.model}
@@ -187,12 +233,25 @@ function AgentDetail() {
           </section>
 
           {activeSession && (
-            <button className="w-full border border-red-900/50 bg-red-950/20 py-3 text-red-500 font-bold text-xs hover:bg-red-900/30 transition-colors uppercase tracking-widest">
-              Terminate Session
+            <button 
+              onClick={handleStopSession}
+              disabled={stopSession.isPending}
+              className="w-full border border-red-900/50 bg-red-950/20 py-3 text-red-500 font-bold text-xs hover:bg-red-900/30 transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {stopSession.isPending ? 'Terminating...' : 'Terminate Session'}
             </button>
           )}
         </div>
       </div>
+
+      {agentData && activeProject && (
+        <EditAgentModal
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          agent={agentData}
+          projectId={activeProject.id}
+        />
+      )}
     </div>
   )
 }
@@ -219,5 +278,188 @@ function StatItem({ label, value }: { label: string; value: string }) {
       <span className="text-xs text-tui-dim font-bold tracking-widest">{label}</span>
       <span className="text-sm font-bold">{value}</span>
     </div>
+  )
+}
+
+interface EditAgentModalProps {
+  isOpen: boolean
+  onClose: () => void
+  agent: Agent
+  projectId: string
+}
+
+function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalProps) {
+  const { data: roleConfig } = useAgentRolesConfig()
+  const modelsQuery = useModels(projectId)
+  const syncProviders = useSyncProviders()
+  const { addNotification } = useNotifications()
+  const updateAgent = useUpdateAgent()
+
+  const models = modelsQuery.data ?? []
+
+  const [model, setModel] = useState(agent.model || '')
+  const [role, setRole] = useState(agent.role)
+  const [level, setLevel] = useState<Agent['level']>(agent.level)
+  const [systemInstruction, setSystemInstruction] = useState(agent.system_instruction || '')
+  
+  // Reset form when modal opens or agent changes
+  useEffect(() => {
+    if (isOpen) {
+      setModel(agent.model || '')
+      setRole(agent.role)
+      setLevel(agent.level)
+      setSystemInstruction(agent.system_instruction || '')
+    }
+  }, [isOpen, agent])
+
+  const defaultSystemInstruction = roleConfig?.system_instructions?.[role]?.[level] ?? ''
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      await updateAgent.mutateAsync({
+        id: agent.id,
+        squad_id: agent.squad_id,
+        model: model || undefined,
+        role,
+        level,
+        system_instruction: systemInstruction.trim() || undefined,
+      })
+      
+      addNotification({
+        type: 'success',
+        title: 'Agent Updated',
+        message: `Agent "${agent.name}" has been updated`,
+      })
+      onClose()
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'Update Failed',
+        message: err instanceof Error ? err.message : 'Failed to update agent',
+      })
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Edit Agent: ${agent.name}`} size="md">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <FormField
+          label="Role"
+          hint={
+            roleConfig?.roles.find((r) => r.id === role)?.description ||
+            'Select what this agent is best suited for'
+          }
+        >
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="w-full px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+            disabled={!roleConfig}
+          >
+            {roleConfig ? (
+              roleConfig.roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))
+            ) : (
+              <option value={role}>Loading roles...</option>
+            )}
+          </select>
+        </FormField>
+
+        <FormField label="Level" hint="Seniority influences default system instruction">
+          <select
+            value={level}
+            onChange={(e) => setLevel(e.target.value as Agent['level'])}
+            className="w-full px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+            disabled={!roleConfig}
+          >
+            {roleConfig ? (
+              roleConfig.levels.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))
+            ) : (
+              <option value={level}>Loading levels...</option>
+            )}
+          </select>
+        </FormField>
+
+        <FormField label="Default System Instruction" hint="Derived from role + level">
+          <textarea
+            value={defaultSystemInstruction || 'Loading...'}
+            readOnly
+            rows={6}
+            className="w-full px-3 py-2 bg-tui-bg border border-tui-border rounded text-xs text-tui-text focus:outline-none"
+          />
+        </FormField>
+
+        <FormField label="System Instruction Override" hint="Optional: overrides the default system instruction">
+          <textarea
+            value={systemInstruction}
+            onChange={(e) => setSystemInstruction(e.target.value)}
+            rows={6}
+            placeholder="Optional override (leave blank to use the default)"
+            className="w-full px-3 py-2 bg-tui-bg border border-tui-border rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none"
+          />
+        </FormField>
+
+        <FormField label="Model" hint="Available models from configured providers">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="flex-1 px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+                disabled={modelsQuery.isLoading || models.length === 0}
+              >
+                {models.length === 0 ? (
+                  <option value="">No providers configured</option>
+                ) : (
+                  <>
+                    <option value="">Default (Auto)</option>
+                    {models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}
+                      </option>
+                    ))}
+                  </>
+                )}
+              </select>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => syncProviders.mutate({ project_id: projectId })}
+                disabled={!projectId || syncProviders.isPending}
+              >
+                {syncProviders.isPending ? 'Syncing...' : 'Sync'}
+              </Button>
+            </div>
+            
+            {!modelsQuery.isLoading && models.length === 0 && (
+              <div className="text-xs text-tui-dim">no providers configured</div>
+            )}
+          </div>
+        </FormField>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button 
+            type="submit" 
+            variant="primary"
+            disabled={updateAgent.isPending}
+          >
+            {updateAgent.isPending ? 'Updating...' : 'Save Changes'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   )
 }

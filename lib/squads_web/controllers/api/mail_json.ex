@@ -3,6 +3,10 @@ defmodule SquadsWeb.API.MailJSON do
     %{data: Enum.map(messages, &data/1)}
   end
 
+  def threads_index(%{threads: threads}) do
+    %{data: Enum.map(threads, &thread_data/1)}
+  end
+
   def show(%{message: message}) do
     %{data: data(message)}
   end
@@ -39,6 +43,44 @@ defmodule SquadsWeb.API.MailJSON do
       recipient_type: recipient.recipient_type,
       read_at: recipient.read_at,
       acknowledged_at: recipient.acknowledged_at
+    }
+  end
+
+  defp thread_data(thread) do
+    # Calculate derived fields from preloaded messages if available
+    {message_count, unread_count, participants} =
+      if Ecto.assoc_loaded?(thread.messages) do
+        msgs = thread.messages
+        count = length(msgs)
+
+        # For now we don't have per-user read state on threads easily available here without more context
+        # So we'll just placeholder unread_count or calculate it if we had a current user context
+        unread = 0
+
+        parts =
+          msgs
+          |> Enum.flat_map(fn m ->
+            [m.sender_id] ++ Enum.map(m.recipients || [], & &1.agent_id)
+          end)
+          |> Enum.uniq()
+          |> Enum.reject(&is_nil/1)
+
+        {count, unread, parts}
+      else
+        {0, 0, []}
+      end
+
+    %{
+      id: thread.id,
+      subject: thread.subject,
+      last_message_at: thread.last_message_at,
+      project_id: thread.project_id,
+      ticket_id: thread.ticket_id,
+      message_count: message_count,
+      unread_count: unread_count,
+      participants: participants,
+      inserted_at: thread.inserted_at,
+      updated_at: thread.updated_at
     }
   end
 end

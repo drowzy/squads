@@ -37,6 +37,23 @@ defmodule Squads.Mail do
   end
 
   @doc """
+  Lists mail threads, optionally filtered by project.
+  """
+  def list_threads(opts \\ []) do
+    project_id = opts[:project_id]
+
+    query =
+      Thread
+      |> order_by(desc: :last_message_at)
+
+    query = if project_id, do: where(query, project_id: ^project_id), else: query
+
+    query
+    |> Repo.all()
+    |> Repo.preload(messages: [:sender, :recipients])
+  end
+
+  @doc """
   Gets a message by ID.
   """
   def get_message!(id),

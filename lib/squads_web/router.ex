@@ -48,6 +48,8 @@ defmodule SquadsWeb.Router do
       post "/tickets/sync", TicketController, :sync
       get "/tickets/beads/:beads_id", TicketController, :show_by_beads_id
 
+      get "/mail/threads", MailController, :threads_index
+
       # Worktree endpoints nested under projects
       resources "/worktrees", WorktreeController, only: [:index, :create, :delete]
     end
@@ -97,6 +99,7 @@ defmodule SquadsWeb.Router do
     # Mail endpoints
     get "/mail", MailController, :index
     get "/mail/search", MailController, :search
+    get "/mail/threads", MailController, :threads_index
     get "/mail/:id", MailController, :show
     post "/mail", MailController, :create
     post "/mail/:id/reply", MailController, :reply

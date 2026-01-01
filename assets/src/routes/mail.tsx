@@ -15,7 +15,7 @@ import {
   AlertCircle,
   X
 } from 'lucide-react'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { 
   useMailThreads, 
   useMailThread, 

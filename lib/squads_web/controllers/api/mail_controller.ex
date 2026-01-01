@@ -66,4 +66,10 @@ defmodule SquadsWeb.API.MailController do
     messages = Mail.search_messages(project_id, query, limit)
     render(conn, :index, messages: messages)
   end
+
+  def threads_index(conn, params) do
+    opts = if params["project_id"], do: [project_id: params["project_id"]], else: []
+    threads = Mail.list_threads(opts)
+    render(conn, :threads_index, threads: threads)
+  end
 end
