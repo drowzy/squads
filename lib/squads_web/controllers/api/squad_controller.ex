@@ -129,9 +129,15 @@ defmodule SquadsWeb.API.SquadController do
   # Helper functions
 
   defp with_project(project_id, fun) do
-    case Projects.get_project(project_id) do
-      nil -> {:error, :not_found}
-      project -> fun.(project)
+    case Ecto.UUID.cast(project_id) do
+      {:ok, uuid} ->
+        case Projects.get_project(uuid) do
+          nil -> {:error, :not_found}
+          project -> fun.(project)
+        end
+
+      :error ->
+        {:error, :not_found}
     end
   end
 

@@ -18,19 +18,28 @@ defmodule SquadsWeb.API.SessionController do
   GET /api/sessions?agent_id=uuid
   """
   def index(conn, params) do
-    sessions =
-      cond do
-        params["status"] ->
-          Sessions.list_sessions_by_status(params["status"])
+    cond do
+      params["status"] ->
+        sessions = Sessions.list_sessions_by_status(params["status"])
+        render(conn, :index, sessions: sessions)
 
-        params["agent_id"] ->
-          Sessions.list_sessions_for_agent(params["agent_id"])
+      agent_id = params["agent_id"] ->
+        case Ecto.UUID.cast(agent_id) do
+          {:ok, uuid} ->
+            sessions = Sessions.list_sessions_for_agent(uuid)
+            render(conn, :index, sessions: sessions)
 
-        true ->
-          Sessions.list_sessions()
-      end
+          :error ->
+            # Return empty list for invalid agent ID, or 404.
+            # Returning empty list is safer for "list" endpoints unless we want strict validation.
+            # Given list_sessions_for_agent queries by agent_id, empty is appropriate.
+            render(conn, :index, sessions: [])
+        end
 
-    render(conn, :index, sessions: sessions)
+      true ->
+        sessions = Sessions.list_sessions()
+        render(conn, :index, sessions: sessions)
+    end
   end
 
   @doc """
@@ -39,9 +48,15 @@ defmodule SquadsWeb.API.SessionController do
   GET /api/sessions/:id
   """
   def show(conn, %{"id" => id}) do
-    with_session(id, fn session ->
-      render(conn, :show, session: session)
-    end)
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} ->
+        with_session(uuid, fn session ->
+          render(conn, :show, session: session)
+        end)
+
+      :error ->
+        {:error, :not_found}
+    end
   end
 
   @doc """

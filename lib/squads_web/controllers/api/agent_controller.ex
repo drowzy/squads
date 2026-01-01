@@ -148,9 +148,15 @@ defmodule SquadsWeb.API.AgentController do
   # Helper functions
 
   defp with_squad(squad_id, fun) do
-    case SquadsContext.get_squad(squad_id) do
-      nil -> {:error, :not_found}
-      squad -> fun.(squad)
+    case Ecto.UUID.cast(squad_id) do
+      {:ok, uuid} ->
+        case SquadsContext.get_squad(uuid) do
+          nil -> {:error, :not_found}
+          squad -> fun.(squad)
+        end
+
+      :error ->
+        {:error, :not_found}
     end
   end
 

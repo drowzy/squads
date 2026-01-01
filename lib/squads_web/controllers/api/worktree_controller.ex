@@ -6,8 +6,18 @@ defmodule SquadsWeb.API.WorktreeController do
   action_fallback SquadsWeb.FallbackController
 
   def index(conn, %{"project_id" => project_id}) do
-    worktrees = Worktrees.list_worktrees(project_id)
-    render(conn, :index, worktrees: worktrees)
+    case Ecto.UUID.cast(project_id) do
+      {:ok, uuid} ->
+        worktrees = Worktrees.list_worktrees(uuid)
+        render(conn, :index, worktrees: worktrees)
+
+      :error ->
+        # Force JSON response for API pipeline
+        conn
+        |> put_resp_content_type("application/json")
+        |> put_view(SquadsWeb.API.WorktreeJSON)
+        |> render(:index, worktrees: [])
+    end
   end
 
   def create(conn, %{"project_id" => project_id, "agent_id" => agent_id, "ticket_id" => ticket_id}) do

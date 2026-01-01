@@ -17,16 +17,22 @@ defmodule SquadsWeb.API.ProviderController do
   GET /api/projects/:project_id/providers?status=connected
   """
   def index(conn, %{"project_id" => project_id} = params) do
-    providers =
-      case params["status"] do
-        "connected" ->
-          Providers.list_connected_providers(project_id)
+    case Ecto.UUID.cast(project_id) do
+      {:ok, uuid} ->
+        providers =
+          case params["status"] do
+            "connected" ->
+              Providers.list_connected_providers(uuid)
 
-        _ ->
-          Providers.list_providers(project_id)
-      end
+            _ ->
+              Providers.list_providers(uuid)
+          end
 
-    render(conn, :index, providers: providers)
+        render(conn, :index, providers: providers)
+
+      :error ->
+        render(conn, :index, providers: [])
+    end
   end
 
   @doc """
@@ -35,12 +41,18 @@ defmodule SquadsWeb.API.ProviderController do
   GET /api/providers/:id
   """
   def show(conn, %{"id" => id}) do
-    case Providers.get_provider(id) do
-      nil ->
-        {:error, :not_found}
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} ->
+        case Providers.get_provider(uuid) do
+          nil ->
+            {:error, :not_found}
 
-      provider ->
-        render(conn, :show, provider: provider)
+          provider ->
+            render(conn, :show, provider: provider)
+        end
+
+      :error ->
+        {:error, :not_found}
     end
   end
 
@@ -50,8 +62,14 @@ defmodule SquadsWeb.API.ProviderController do
   GET /api/projects/:project_id/models
   """
   def models(conn, %{"project_id" => project_id}) do
-    models = Providers.list_all_models(project_id)
-    render(conn, :models, models: models)
+    case Ecto.UUID.cast(project_id) do
+      {:ok, uuid} ->
+        models = Providers.list_all_models(uuid)
+        render(conn, :models, models: models)
+
+      :error ->
+        render(conn, :models, models: [])
+    end
   end
 
   @doc """
@@ -60,12 +78,18 @@ defmodule SquadsWeb.API.ProviderController do
   GET /api/projects/:project_id/models/default
   """
   def default_model(conn, %{"project_id" => project_id}) do
-    case Providers.get_default_model(project_id) do
-      nil ->
-        {:error, :not_found}
+    case Ecto.UUID.cast(project_id) do
+      {:ok, uuid} ->
+        case Providers.get_default_model(uuid) do
+          nil ->
+            {:error, :not_found}
 
-      model ->
-        render(conn, :model, model: model)
+          model ->
+            render(conn, :model, model: model)
+        end
+
+      :error ->
+        {:error, :not_found}
     end
   end
 
@@ -75,19 +99,27 @@ defmodule SquadsWeb.API.ProviderController do
   POST /api/projects/:project_id/providers/sync
   """
   def sync(conn, %{"project_id" => project_id}) do
-    case Providers.sync_from_opencode(project_id) do
-      {:ok, providers} ->
-        render(conn, :index, providers: providers)
+    case Ecto.UUID.cast(project_id) do
+      {:ok, uuid} ->
+        case Providers.sync_from_opencode(uuid) do
+          {:ok, providers} ->
+            render(conn, :index, providers: providers)
 
-      {:error, {:transport_error, _}} ->
-        conn
-        |> put_status(:service_unavailable)
-        |> json(%{error: "OpenCode server not available"})
+          {:error, {:transport_error, _}} ->
+            conn
+            |> put_status(:service_unavailable)
+            |> json(%{error: "OpenCode server not available"})
 
-      {:error, reason} ->
+          {:error, reason} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{error: "Sync failed", details: inspect(reason)})
+        end
+
+      :error ->
         conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "Sync failed", details: inspect(reason)})
+        |> put_status(:bad_request)
+        |> json(%{error: "invalid_id", message: "Invalid project ID"})
     end
   end
 end

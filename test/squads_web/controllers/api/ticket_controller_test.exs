@@ -198,7 +198,7 @@ defmodule SquadsWeb.API.TicketControllerTest do
       blocked = create_ticket(project, %{status: "open", title: "Blocked"})
       {:ok, _} = Tickets.add_dependency(blocked.id, blocker.id, "blocks")
 
-      conn = get(conn, ~p"/api/projects/#{project.id}/tickets/board")
+      conn = get(conn, ~p"/api/projects/#{project.id}/board")
       response = json_response(conn, 200)
 
       data = response["data"]

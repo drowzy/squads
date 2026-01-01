@@ -141,7 +141,7 @@ defmodule SquadsWeb.API.TicketController do
   @doc """
   Get a board view with tickets grouped by status.
 
-  GET /api/projects/:project_id/tickets/board
+  GET /api/projects/:project_id/board
   """
   def board(conn, %{"project_id" => project_id}) do
     with_project(project_id, fn _project ->
@@ -167,7 +167,7 @@ defmodule SquadsWeb.API.TicketController do
   end
 
   @doc """
-  Sync tickets from Beads for a project.
+  Syncs tickets from Beads for a project.
 
   POST /api/projects/:project_id/tickets/sync
   """
@@ -177,10 +177,31 @@ defmodule SquadsWeb.API.TicketController do
         {:ok, data} ->
           json(conn, %{data: data})
 
-        {:error, reason} ->
+        {:error, :no_beads_db} ->
+          conn
+          |> put_status(:precondition_required)
+          |> json(%{
+            error: "beads_not_initialized",
+            message: "Beads database not found. Run 'bd init' in the project root."
+          })
+
+        {:error, {:beads_error, :no_beads_db}} ->
+          conn
+          |> put_status(:precondition_required)
+          |> json(%{
+            error: "beads_not_initialized",
+            message: "Beads database not found. Run 'bd init' in the project root."
+          })
+
+        {:error, {:beads_error, reason}} ->
           conn
           |> put_status(:bad_gateway)
           |> json(%{error: "beads_error", message: inspect(reason)})
+
+        {:error, reason} ->
+          conn
+          |> put_status(:bad_gateway)
+          |> json(%{error: "sync_error", message: inspect(reason)})
       end
     end)
   end

@@ -22,9 +22,12 @@ defmodule SquadsWeb.API.ProjectController do
   Shows a single project by ID.
   """
   def show(conn, %{"id" => id}) do
-    case Projects.get_project(id) do
+    with {:ok, uuid} <- Ecto.UUID.cast(id),
+         project when not is_nil(project) <- Projects.get_project(uuid) do
+      render(conn, :show, project: project)
+    else
+      :error -> {:error, :not_found}
       nil -> {:error, :not_found}
-      project -> render(conn, :show, project: project)
     end
   end
 

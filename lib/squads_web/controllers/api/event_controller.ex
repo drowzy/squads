@@ -7,15 +7,42 @@ defmodule SquadsWeb.API.EventController do
   def index(conn, params) do
     opts = parse_opts(params)
 
-    events =
-      cond do
-        id = params["project_id"] -> Events.list_events_for_project(id, opts)
-        id = params["session_id"] -> Events.list_events_for_session(id, opts)
-        id = params["agent_id"] -> Events.list_events_for_agent(id, opts)
-        true -> []
-      end
+    cond do
+      id = params["project_id"] ->
+        case Ecto.UUID.cast(id) do
+          {:ok, uuid} ->
+            events = Events.list_events_for_project(uuid, opts)
+            render(conn, :index, events: events)
 
-    render(conn, :index, events: events)
+          :error ->
+            render(conn, :index, events: [])
+        end
+
+      id = params["session_id"] ->
+        case Ecto.UUID.cast(id) do
+          {:ok, uuid} ->
+            events = Events.list_events_for_session(uuid, opts)
+            render(conn, :index, events: events)
+
+          :error ->
+            render(conn, :index, events: [])
+        end
+
+      id = params["agent_id"] ->
+        case Ecto.UUID.cast(id) do
+          {:ok, uuid} ->
+            events = Events.list_events_for_agent(uuid, opts)
+            render(conn, :index, events: events)
+
+          :error ->
+            render(conn, :index, events: [])
+        end
+
+      true ->
+        # No filter provided, return empty list or all events?
+        # Original code returned empty list for no filter.
+        render(conn, :index, events: [])
+    end
   end
 
   defp parse_opts(params) do

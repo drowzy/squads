@@ -44,7 +44,7 @@ defmodule SquadsWeb.Router do
       get "/tickets/ready", TicketController, :ready
       get "/tickets/in_progress", TicketController, :in_progress
       get "/tickets/blocked", TicketController, :blocked
-      get "/tickets/board", TicketController, :board
+      get "/board", TicketController, :board
       post "/tickets/sync", TicketController, :sync
       get "/tickets/beads/:beads_id", TicketController, :show_by_beads_id
 
@@ -90,9 +90,6 @@ defmodule SquadsWeb.Router do
       post "/command", SessionController, :command
       post "/shell", SessionController, :shell
     end
-
-    get "/board", BoardController, :index
-    get "/board/:id", BoardController, :show
 
     get "/events", EventController, :index
 

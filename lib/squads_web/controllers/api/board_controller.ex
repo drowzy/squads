@@ -1,29 +1,17 @@
 defmodule SquadsWeb.API.BoardController do
   use SquadsWeb, :controller
 
-  alias Squads.Beads.Adapter
-
   def index(conn, _params) do
-    case Adapter.list_issues() do
-      {:ok, tickets} ->
-        json(conn, %{data: tickets})
-
-      {:error, detail} ->
-        conn
-        |> put_status(:internal_server_error)
-        |> json(%{error: "Failed to list tickets", detail: detail})
-    end
+    # Fallback/Global board functionality is tricky without a project context for Beads.
+    # We might want to remove this or make it just return an empty list if no project is active.
+    # For now, let's return an empty list to avoid 500 errors when no project is selected.
+    json(conn, %{data: []})
   end
 
-  def show(conn, %{"id" => id}) do
-    case Adapter.show_issue(id) do
-      {:ok, ticket} ->
-        json(conn, %{data: ticket})
-
-      {:error, detail} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Ticket not found", detail: detail})
-    end
+  def show(conn, %{"id" => _id}) do
+    # Similarly, showing a specific ticket without project context is difficult with the current Adapter.
+    conn
+    |> put_status(:not_found)
+    |> json(%{error: "Ticket not found", detail: "Global ticket lookup not supported"})
   end
 end

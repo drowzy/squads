@@ -174,8 +174,10 @@ defmodule Squads.Tickets do
   This sets the ticket to in_progress status and assigns it to the agent.
   """
   def claim_ticket(%Ticket{} = ticket, agent_id, agent_name) do
+    path = get_project_path(ticket.project_id)
+
     with {:ok, _} <-
-           Beads.update_issue(ticket.beads_id, status: "in_progress", assignee: agent_name),
+           Beads.update_issue(path, ticket.beads_id, status: "in_progress", assignee: agent_name),
          {:ok, updated} <-
            update_ticket(ticket, %{
              status: "in_progress",
@@ -184,6 +186,7 @@ defmodule Squads.Tickets do
            }) do
       {:ok, updated}
     else
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, {:beads_error, reason}}
     end
   end
@@ -192,7 +195,9 @@ defmodule Squads.Tickets do
   Unclaims a ticket (removes assignment and sets back to open).
   """
   def unclaim_ticket(%Ticket{} = ticket) do
-    with {:ok, _} <- Beads.update_issue(ticket.beads_id, status: "open", assignee: ""),
+    path = get_project_path(ticket.project_id)
+
+    with {:ok, _} <- Beads.update_issue(path, ticket.beads_id, status: "open", assignee: ""),
          {:ok, updated} <-
            update_ticket(ticket, %{
              status: "open",
@@ -201,6 +206,7 @@ defmodule Squads.Tickets do
            }) do
       {:ok, updated}
     else
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, {:beads_error, reason}}
     end
   end
@@ -209,10 +215,13 @@ defmodule Squads.Tickets do
   Updates ticket status and syncs to Beads.
   """
   def update_status(%Ticket{} = ticket, status) do
-    with {:ok, _} <- Beads.update_status(ticket.beads_id, status),
+    path = get_project_path(ticket.project_id)
+
+    with {:ok, _} <- Beads.update_status(path, ticket.beads_id, status),
          {:ok, updated} <- update_ticket(ticket, %{status: status}) do
       {:ok, updated}
     else
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, {:beads_error, reason}}
     end
   end
@@ -224,6 +233,7 @@ defmodule Squads.Tickets do
     # Try to find an associated worktree to cleanup/merge
     # Worktree name format: <agent_slug>-<ticket_id>
     ticket = Repo.preload(ticket, [:assignee])
+    path = get_project_path(ticket.project_id)
 
     worktree_name =
       if ticket.assignee do
@@ -235,7 +245,7 @@ defmodule Squads.Tickets do
     if worktree_name &&
          File.exists?(
            Path.join([
-             ticket.project_id |> (fn id -> Repo.get(Squads.Projects.Project, id).path end).(),
+             path,
              ".squads",
              "worktrees",
              worktree_name
@@ -243,7 +253,7 @@ defmodule Squads.Tickets do
          ) do
       # If worktree exists, we might want to merge it. 
       # For now, let's just ensure we close the ticket in Beads first.
-      case perform_close(ticket, reason) do
+      case perform_close(ticket, path, reason) do
         {:ok, updated} ->
           # Fire and forget worktree cleanup for now, or handle it synchronously?
           # Best to handle it synchronously to ensure state consistency if possible.
@@ -254,12 +264,12 @@ defmodule Squads.Tickets do
           error
       end
     else
-      perform_close(ticket, reason)
+      perform_close(ticket, path, reason)
     end
   end
 
-  defp perform_close(ticket, reason) do
-    with {:ok, _} <- Beads.close_issue(ticket.beads_id, reason),
+  defp perform_close(ticket, path, reason) do
+    with {:ok, _} <- Beads.close_issue(path, ticket.beads_id, reason),
          {:ok, updated} <-
            update_ticket(ticket, %{
              status: "closed",
@@ -267,6 +277,7 @@ defmodule Squads.Tickets do
            }) do
       {:ok, updated}
     else
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, {:beads_error, reason}}
     end
   end
@@ -275,6 +286,8 @@ defmodule Squads.Tickets do
   Creates a new ticket via Beads CLI and mirrors it locally.
   """
   def create_via_beads(project_id, title, opts \\ []) do
+    path = get_project_path(project_id)
+
     beads_opts =
       [
         type: opts[:issue_type],
@@ -283,7 +296,7 @@ defmodule Squads.Tickets do
       ]
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
-    with {:ok, beads_data} <- Beads.create_issue(title, beads_opts) do
+    with {:ok, beads_data} <- Beads.create_issue(path, title, beads_opts) do
       attrs =
         Ticket.map_from_beads(beads_data)
         |> Map.put(:project_id, project_id)
@@ -299,6 +312,7 @@ defmodule Squads.Tickets do
 
       create_ticket(attrs)
     else
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, {:beads_error, reason}}
     end
   end
@@ -359,7 +373,9 @@ defmodule Squads.Tickets do
   Returns {:ok, %{created: n, updated: m}} on success.
   """
   def sync_from_beads(project_id) do
-    with {:ok, issues} <- Beads.list_issues() do
+    path = get_project_path(project_id)
+
+    with {:ok, issues} <- Beads.list_issues(path) do
       results =
         issues
         |> Enum.map(&sync_single_ticket(project_id, &1))
@@ -378,7 +394,9 @@ defmodule Squads.Tickets do
   Syncs a single ticket from Beads data.
   """
   def sync_ticket(project_id, beads_id) do
-    with {:ok, data} <- Beads.show_issue(beads_id) do
+    path = get_project_path(project_id)
+
+    with {:ok, data} <- Beads.show_issue(path, beads_id) do
       sync_single_ticket(project_id, data)
     end
   end
@@ -409,7 +427,9 @@ defmodule Squads.Tickets do
   This should be called after sync_from_beads to resolve dependency references.
   """
   def sync_dependencies(project_id) do
-    with {:ok, issues} <- Beads.list_issues() do
+    path = get_project_path(project_id)
+
+    with {:ok, issues} <- Beads.list_issues(path) do
       results =
         issues
         |> Enum.flat_map(&extract_dependencies(project_id, &1))
@@ -525,5 +545,9 @@ defmodule Squads.Tickets do
       where: td.dependency_type == "blocks",
       where: d.status != "closed",
       select: td.ticket_id
+  end
+
+  defp get_project_path(project_id) do
+    Squads.Projects.get_project(project_id).path
   end
 end

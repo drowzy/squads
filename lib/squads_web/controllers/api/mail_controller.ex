@@ -6,21 +6,35 @@ defmodule SquadsWeb.API.MailController do
   action_fallback SquadsWeb.FallbackController
 
   def index(conn, %{"agent_id" => agent_id} = params) do
-    limit = if params["limit"], do: String.to_integer(params["limit"]), else: 20
+    case Ecto.UUID.cast(agent_id) do
+      {:ok, agent_uuid} ->
+        limit = if params["limit"], do: String.to_integer(params["limit"]), else: 20
 
-    opts = %{
-      limit: limit,
-      since_ts: params["since_ts"],
-      urgent_only: params["urgent_only"] == "true"
-    }
+        opts = %{
+          limit: limit,
+          since_ts: params["since_ts"],
+          urgent_only: params["urgent_only"] == "true"
+        }
 
-    messages = Mail.list_inbox(agent_id, opts)
-    render(conn, :index, messages: messages)
+        messages = Mail.list_inbox(agent_uuid, opts)
+        render(conn, :index, messages: messages)
+
+      :error ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "not_found", message: "Invalid agent ID"})
+    end
   end
 
   def show(conn, %{"id" => id}) do
-    message = Mail.get_message!(id)
-    render(conn, :show, message: message)
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} ->
+        message = Mail.get_message!(uuid)
+        render(conn, :show, message: message)
+
+      :error ->
+        {:error, :not_found}
+    end
   end
 
   def thread(conn, %{"thread_id" => thread_id}) do

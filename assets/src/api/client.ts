@@ -10,8 +10,18 @@ export async function fetcher<T>(path: string, options?: RequestInit): Promise<T
   })
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'An unknown error occurred' }))
-    throw new Error(error.message || response.statusText)
+    const errorText = await response.text()
+    let errorMessage = response.statusText
+
+    try {
+      const errorJson = JSON.parse(errorText)
+      errorMessage = errorJson.message || errorMessage
+    } catch {
+      // ignore JSON parse errors
+    }
+    
+    console.error(`API Error: ${response.status} ${errorMessage}`, errorText)
+    throw new Error(`API Error: ${response.status} ${errorMessage}`)
   }
 
   if (response.status === 204) {

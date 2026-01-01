@@ -110,6 +110,13 @@ export interface Ticket {
   dependencies?: string[]
 }
 
+export interface BoardSummary {
+  ready: Ticket[]
+  in_progress: Ticket[]
+  blocked: Ticket[]
+  closed: Ticket[]
+}
+
 export interface MailMessage {
   id: string
   subject: string
@@ -215,7 +222,19 @@ export function useTickets(projectId?: string) {
     queryKey: projectId ? ['projects', projectId, 'tickets'] : ['tickets'],
     queryFn: () => {
       const url = projectId ? `/projects/${projectId}/board` : '/board'
-      return fetcher<Ticket[]>(url)
+      return fetcher<BoardSummary | Ticket[]>(url).then(res => {
+          // Flatten the board structure into a list of tickets for the frontend to consume
+          if (projectId && res && typeof res === 'object' && !Array.isArray(res)) {
+            const summary = res as BoardSummary
+              return [
+                  ...(summary.ready || []),
+                  ...(summary.in_progress || []),
+                  ...(summary.blocked || []),
+                  ...(summary.closed || [])
+              ]
+          }
+          return (res as Ticket[]) || []
+      })
     },
     enabled: true,
   })
@@ -351,13 +370,30 @@ export function useUpdateTicket(projectId?: string) {
   return useMutation({
     mutationFn: (data: { id: string; status: Ticket['status']; assignee?: string; project_id?: string }) => {
       const actualProjectId = data.project_id || projectId
-      const url = actualProjectId 
-        ? `/projects/${actualProjectId}/board/tickets/${data.id}`
-        : `/board/tickets/${data.id}`
-      return fetcher<Ticket>(url, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      })
+      const url = `/tickets/${data.id}`
+      // We use the status endpoint for status updates and claim/unclaim for assignments
+      // But for simplicity in this hook, we'll assume we can patch properties or use specific endpoints
+      // Let's stick to status updates for now or assume a generic update if available
+      
+      // If we're updating status:
+      if (data.status) {
+         return fetcher<Ticket>(`${url}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: data.status }),
+        })
+      }
+      
+      // If we're updating assignee (claiming):
+      if (data.assignee) {
+        return fetcher<Ticket>(`${url}/claim`, {
+          method: 'POST',
+          body: JSON.stringify({ agent_id: 'current-user-or-agent', agent_name: data.assignee }),
+        })
+      }
+      
+       // Fallback to a generic patch if we had one, but we don't seem to expose a generic update on TicketController
+       // So we might need to rely on the specific actions.
+       throw new Error("Update not fully supported via single endpoint yet")
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] })
