@@ -221,10 +221,8 @@ defmodule SquadsWeb.API.SessionController do
     end
   end
 
-  def prompt(conn, %{"session_id" => _}) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "missing_prompt", message: "prompt is required"})
+  def prompt(_conn, %{"session_id" => _}) do
+    {:error, :missing_prompt}
   end
 
   @doc """
@@ -253,10 +251,8 @@ defmodule SquadsWeb.API.SessionController do
     end
   end
 
-  def prompt_async(conn, %{"session_id" => _}) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "missing_prompt", message: "prompt is required"})
+  def prompt_async(_conn, %{"session_id" => _}) do
+    {:error, :missing_prompt}
   end
 
   @doc """
@@ -282,10 +278,8 @@ defmodule SquadsWeb.API.SessionController do
     end
   end
 
-  def command(conn, %{"session_id" => _}) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "missing_command", message: "command is required"})
+  def command(_conn, %{"session_id" => _}) do
+    {:error, :missing_command}
   end
 
   @doc """
@@ -310,10 +304,8 @@ defmodule SquadsWeb.API.SessionController do
     end
   end
 
-  def shell(conn, %{"session_id" => _}) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "missing_command", message: "command is required"})
+  def shell(_conn, %{"session_id" => _}) do
+    {:error, :missing_command}
   end
 
   # Helper to fetch a session or return not found

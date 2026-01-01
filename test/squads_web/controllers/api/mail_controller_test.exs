@@ -66,10 +66,10 @@ defmodule SquadsWeb.API.MailControllerTest do
     } do
       attrs = %{
         "project_id" => project.id,
-        "sender_id" => sender.id,
+        "sender_name" => sender.name,
         "subject" => "API Test",
         "body_md" => "Testing API",
-        "to" => [recipient.id]
+        "to" => [recipient.name]
       }
 
       conn = post(conn, ~p"/api/mail", attrs)

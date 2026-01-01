@@ -152,7 +152,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/cancel")
       response = json_response(conn, 409)
 
-      assert response["error"] == "already_started"
+      assert response["errors"]["detail"] == "Session has already been started"
     end
   end
 
@@ -165,7 +165,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/stop")
       response = json_response(conn, 409)
 
-      assert response["error"] == "not_running"
+      assert response["errors"]["detail"] == "Session is not running"
     end
   end
 
@@ -178,7 +178,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = get(conn, ~p"/api/sessions/#{session.id}/messages")
       response = json_response(conn, 409)
 
-      assert response["error"] == "no_opencode_session"
+      assert response["errors"]["detail"] == "Session has no OpenCode session"
     end
   end
 
@@ -191,7 +191,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = get(conn, ~p"/api/sessions/#{session.id}/diff")
       response = json_response(conn, 409)
 
-      assert response["error"] == "no_opencode_session"
+      assert response["errors"]["detail"] == "Session has no OpenCode session"
     end
   end
 
@@ -204,7 +204,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = get(conn, ~p"/api/sessions/#{session.id}/todos")
       response = json_response(conn, 409)
 
-      assert response["error"] == "no_opencode_session"
+      assert response["errors"]["detail"] == "Session has no OpenCode session"
     end
   end
 
@@ -221,7 +221,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/prompt", %{"prompt" => "Hello"})
       response = json_response(conn, 409)
 
-      assert response["error"] == "session_not_active"
+      assert response["errors"]["detail"] == "Session is not running"
     end
 
     @tag :tmp_dir
@@ -232,7 +232,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/prompt", %{"prompt" => "Hello"})
       response = json_response(conn, 409)
 
-      assert response["error"] == "session_not_active"
+      assert response["errors"]["detail"] == "Session is not running"
     end
 
     @tag :tmp_dir
@@ -243,7 +243,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/prompt", %{})
       response = json_response(conn, 400)
 
-      assert response["error"] == "missing_prompt"
+      assert response["errors"]["detail"] == "missing_prompt"
     end
 
     test "returns 404 for unknown session", %{conn: conn} do
@@ -261,7 +261,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/prompt_async", %{"prompt" => "Hello"})
       response = json_response(conn, 409)
 
-      assert response["error"] == "session_not_active"
+      assert response["errors"]["detail"] == "Session is not running"
     end
 
     @tag :tmp_dir
@@ -272,7 +272,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/prompt_async", %{})
       response = json_response(conn, 400)
 
-      assert response["error"] == "missing_prompt"
+      assert response["errors"]["detail"] == "missing_prompt"
     end
   end
 
@@ -285,7 +285,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/command", %{"command" => "/help"})
       response = json_response(conn, 409)
 
-      assert response["error"] == "no_opencode_session"
+      assert response["errors"]["detail"] == "Session has no OpenCode session"
     end
 
     @tag :tmp_dir
@@ -296,7 +296,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/command", %{})
       response = json_response(conn, 400)
 
-      assert response["error"] == "missing_command"
+      assert response["errors"]["detail"] == "missing_command"
     end
 
     @tag :tmp_dir
@@ -313,7 +313,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/command", %{"command" => "/help"})
       response = json_response(conn, 409)
 
-      assert response["error"] == "session_not_active"
+      assert response["errors"]["detail"] == "Session is not running"
     end
   end
 
@@ -326,7 +326,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/shell", %{"command" => "mix test"})
       response = json_response(conn, 409)
 
-      assert response["error"] == "no_opencode_session"
+      assert response["errors"]["detail"] == "Session has no OpenCode session"
     end
 
     @tag :tmp_dir
@@ -337,7 +337,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/shell", %{})
       response = json_response(conn, 400)
 
-      assert response["error"] == "missing_command"
+      assert response["errors"]["detail"] == "missing_command"
     end
 
     @tag :tmp_dir
@@ -354,7 +354,7 @@ defmodule SquadsWeb.API.SessionControllerTest do
       conn = post(conn, ~p"/api/sessions/#{session.id}/shell", %{"command" => "mix test"})
       response = json_response(conn, 409)
 
-      assert response["error"] == "session_not_active"
+      assert response["errors"]["detail"] == "Session is not running"
     end
   end
 end
