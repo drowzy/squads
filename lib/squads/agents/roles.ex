@@ -114,6 +114,11 @@ defmodule Squads.Agents.Roles do
       "- Prefer safe, testable changes; add or update tests when appropriate.",
       "- Call out assumptions, risks, and follow-ups explicitly.",
       "",
+      "Context awareness:",
+      "- You are always working on a specific ticket.",
+      "- If provided with ticket details (title, description), focus strictly on that scope.",
+      "- When the ticket is done, verify your changes before reporting completion.",
+      "",
       level_block(level.id)
     ]
     |> Enum.reject(&(&1 == nil))

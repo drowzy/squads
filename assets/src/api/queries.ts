@@ -105,7 +105,9 @@ export interface Ticket {
   issue_type: string
   created_at: string
   updated_at: string
-  assignee?: string
+  assignee?: string // Deprecated, mapped from assignee_name
+  assignee_name?: string
+  assignee_id?: string
   parent_id?: string
   dependencies?: string[]
 }
@@ -221,10 +223,14 @@ export function useTickets(projectId?: string) {
   return useQuery({
     queryKey: projectId ? ['projects', projectId, 'tickets'] : ['tickets'],
     queryFn: () => {
-      const url = projectId ? `/projects/${projectId}/board` : '/board'
+      // If we don't have a projectId, we can't load the board yet
+      // This prevents the global /api/board 400 error by not calling it
+      if (!projectId) return [] as Ticket[]
+
+      const url = `/projects/${projectId}/board`
       return fetcher<BoardSummary | Ticket[]>(url).then(res => {
           // Flatten the board structure into a list of tickets for the frontend to consume
-          if (projectId && res && typeof res === 'object' && !Array.isArray(res)) {
+          if (res && typeof res === 'object' && !Array.isArray(res)) {
             const summary = res as BoardSummary
               return [
                   ...(summary.ready || []),
@@ -236,7 +242,7 @@ export function useTickets(projectId?: string) {
           return (res as Ticket[]) || []
       })
     },
-    enabled: true,
+    enabled: !!projectId,
   })
 }
 
@@ -396,6 +402,21 @@ export function useUpdateTicket(projectId?: string) {
        throw new Error("Update not fully supported via single endpoint yet")
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] })
+    },
+  })
+}
+
+export function useCreateTicket() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { project_id: string; title: string; issue_type?: string; priority?: number; parent_beads_id?: string }) =>
+      fetcher<Ticket>(`/projects/${data.project_id}/tickets`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['projects', variables.project_id, 'tickets'] })
       queryClient.invalidateQueries({ queryKey: ['tickets'] })
     },
   })

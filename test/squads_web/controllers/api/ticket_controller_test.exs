@@ -86,6 +86,11 @@ defmodule SquadsWeb.API.TicketControllerTest do
       conn = get(conn, ~p"/api/projects/#{Ecto.UUID.generate()}/tickets")
       assert json_response(conn, 404)
     end
+
+    test "handles invalid UUID gracefully", %{conn: conn} do
+      conn = get(conn, ~p"/api/projects/invalid-uuid-string/tickets")
+      assert json_response(conn, 404)
+    end
   end
 
   describe "GET /api/tickets/:id" do

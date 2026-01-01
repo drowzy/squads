@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { ClipboardList, Clock, AlertCircle, CheckCircle2, Loader2, Layout, Network, Search, Filter, X } from 'lucide-react'
-import { useTickets, Ticket } from '../api/queries'
+import { useTickets, Ticket, useCreateTicket } from '../api/queries'
 import { useState, useMemo } from 'react'
 import { TicketFlow } from '../components/board/TicketFlow'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useActiveProject } from './__root'
+import { CreateTicketModal } from '../components/board/CreateTicketModal'
 
 export const Route = createFileRoute('/board')({
   component: TicketBoardWrapper,
@@ -24,6 +25,7 @@ function TicketBoard() {
   const [viewMode, setViewMode] = useState<'kanban' | 'flow'>('kanban')
   const [searchQuery, setSearchQuery] = useState('')
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const assignees = useMemo(() => {
     const set = new Set<string>()
@@ -59,8 +61,19 @@ function TicketBoard() {
     return (
       <div className="h-full flex flex-col items-center justify-center text-tui-accent">
         <AlertCircle size={48} className="mb-4" />
-        <h3 className="text-xl font-bold">FAILED_TO_LOAD_BOARD</h3>
-        <p className="text-sm opacity-70">Check backend connection</p>
+        <h3 className="text-xl font-bold">
+          {error.message === 'BEADS_NOT_INITIALIZED' ? 'BEADS_PROJECT_NOT_FOUND' : 'FAILED_TO_LOAD_BOARD'}
+        </h3>
+        <p className="text-sm opacity-70">
+          {error.message === 'BEADS_NOT_INITIALIZED' 
+            ? 'No .beads directory found in this project. Please run "bd init" in the CLI.'
+            : (error instanceof Error ? error.message : 'Check backend connection')}
+        </p>
+        <p className="text-xs text-tui-dim mt-2 max-w-md text-center">
+           {error.message === 'BEADS_NOT_INITIALIZED' 
+             ? 'This view requires the Beads issue tracker to be initialized.'
+             : 'Possible causes: Backend offline, proxy error, or missing Beads init (.beads folder) in project.'}
+        </p>
       </div>
     )
   }
@@ -106,6 +119,13 @@ function TicketBoard() {
           </div>
 
           <div className="flex border border-tui-border shrink-0">
+            <button 
+              onClick={() => setIsCreateModalOpen(true)}
+              className="px-3 md:px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase hover:bg-white transition-colors"
+            >
+              New_Ticket
+            </button>
+            <div className="w-[1px] bg-tui-border"></div>
             <button 
               onClick={() => setViewMode('kanban')}
               className={`p-2.5 md:p-2 transition-colors ${viewMode === 'kanban' ? 'bg-tui-accent text-tui-bg' : 'text-tui-dim hover:text-tui-text'}`}
@@ -156,6 +176,14 @@ function TicketBoard() {
           <TicketFlow tickets={filteredTickets} />
         )}
       </div>
+
+      {activeProject && (
+        <CreateTicketModal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          projectId={activeProject.id}
+        />
+      )}
     </div>
   )
 }

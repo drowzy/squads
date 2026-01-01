@@ -31,5 +31,12 @@ export default defineConfig({
     origin: 'http://localhost:5173',
     cors: true,
     allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
 })

@@ -20,6 +20,10 @@ export async function fetcher<T>(path: string, options?: RequestInit): Promise<T
       // ignore JSON parse errors
     }
     
+    if (response.status === 428) {
+      throw new Error("BEADS_NOT_INITIALIZED")
+    }
+    
     console.error(`API Error: ${response.status} ${errorMessage}`, errorText)
     throw new Error(`API Error: ${response.status} ${errorMessage}`)
   }

@@ -200,35 +200,37 @@ defmodule Squads.Sessions do
     * `:opencode_opts` - Optional. Options to pass to OpenCode client.
   """
   def create_and_start_session(attrs, opencode_opts \\ []) do
-    Repo.transaction(fn ->
-      # Create local session first
-      case create_session(attrs) do
-        {:ok, session} ->
-          # Start OpenCode session
-          title = attrs[:title] || "Session #{session.id}"
+    Ecto.Multi.new()
+    |> Ecto.Multi.insert(:session, Session.changeset(%Session{}, attrs))
+    |> Ecto.Multi.run(:opencode_session, fn _repo, %{session: session} ->
+      title = attrs[:title] || "Session #{session.id}"
 
-          case OpenCodeClient.create_session(Keyword.merge(opencode_opts, title: title)) do
-            {:ok, %{"id" => opencode_id}} ->
-              # Update local session with OpenCode ID and mark as running
-              start_attrs = %{
-                opencode_session_id: opencode_id,
-                worktree_path: attrs[:worktree_path],
-                branch: attrs[:branch]
-              }
-
-              session
-              |> Session.start_changeset(start_attrs)
-              |> Repo.update!()
-
-            {:error, reason} ->
-              Logger.error("Failed to start OpenCode session: #{inspect(reason)}")
-              Repo.rollback({:opencode_error, reason})
-          end
-
-        {:error, changeset} ->
-          Repo.rollback(changeset)
+      case OpenCodeClient.create_session(Keyword.merge(opencode_opts, title: title)) do
+        {:ok, %{"id" => opencode_id}} -> {:ok, opencode_id}
+        {:error, reason} -> {:error, reason}
       end
     end)
+    |> Ecto.Multi.update(:updated_session, fn %{session: session, opencode_session: opencode_id} ->
+      start_attrs = %{
+        opencode_session_id: opencode_id,
+        worktree_path: attrs[:worktree_path],
+        branch: attrs[:branch]
+      }
+
+      Session.start_changeset(session, start_attrs)
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{updated_session: session}} ->
+        {:ok, session}
+
+      {:error, :opencode_session, reason, _changes} ->
+        Logger.error("Failed to start OpenCode session: #{inspect(reason)}")
+        {:error, {:opencode_error, reason}}
+
+      {:error, _step, reason, _changes} ->
+        {:error, reason}
+    end
   end
 
   # ============================================================================

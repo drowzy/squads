@@ -314,17 +314,29 @@ defmodule SquadsWeb.API.TicketController do
 
   # Helper to validate project exists
   defp with_project(project_id, fun) do
-    case Projects.get_project(project_id) do
-      nil -> {:error, :not_found}
-      project -> fun.(project)
+    case Ecto.UUID.cast(project_id) do
+      {:ok, uuid} ->
+        case Projects.get_project(uuid) do
+          nil -> {:error, :not_found}
+          project -> fun.(project)
+        end
+
+      :error ->
+        {:error, :not_found}
     end
   end
 
   # Helper to fetch ticket or return not found
   defp with_ticket(id, fun) do
-    case Tickets.get_ticket(id) do
-      nil -> {:error, :not_found}
-      ticket -> fun.(ticket)
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} ->
+        case Tickets.get_ticket(uuid) do
+          nil -> {:error, :not_found}
+          ticket -> fun.(ticket)
+        end
+
+      :error ->
+        {:error, :not_found}
     end
   end
 

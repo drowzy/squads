@@ -73,22 +73,29 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
         width: 256,
         height: 120,
       })
+    })
 
+    // Create a set for quick lookup of existing nodes to prevent dangling edges
+    const nodeIds = new Set(tickets.map(t => t.id))
+
+    tickets.forEach((ticket) => {
       if (ticket.dependencies) {
         ticket.dependencies.forEach(depId => {
           const actualDepId = depId.startsWith('discovered-from:') 
             ? depId.replace('discovered-from:', '')
             : depId
           
-          elkEdges.push({
-            id: `e-${actualDepId}-${ticket.id}`,
-            sources: [actualDepId],
-            targets: [ticket.id],
-          })
+          if (nodeIds.has(actualDepId)) {
+            elkEdges.push({
+              id: `e-${actualDepId}-${ticket.id}`,
+              sources: [actualDepId],
+              targets: [ticket.id],
+            })
+          }
         })
       }
 
-      if (ticket.parent_id) {
+      if (ticket.parent_id && nodeIds.has(ticket.parent_id)) {
         elkEdges.push({
           id: `p-${ticket.parent_id}-${ticket.id}`,
           sources: [ticket.parent_id],
