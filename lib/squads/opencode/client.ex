@@ -186,6 +186,7 @@ defmodule Squads.OpenCode.Client do
 
     * `:parent_id` - Parent session ID for forking
     * `:title` - Session title
+    * `:directory` - Working directory for the session
   """
   @spec create_session(keyword()) :: response()
   def create_session(params \\ []) do
@@ -193,7 +194,11 @@ defmodule Squads.OpenCode.Client do
     body = if params[:parent_id], do: Map.put(body, :parentID, params[:parent_id]), else: body
     body = if params[:title], do: Map.put(body, :title, params[:title]), else: body
 
-    post("/session", body, Keyword.drop(params, [:parent_id, :title]))
+    # Make sure we pass :directory in the query params if provided
+    query_params = Keyword.take(params, [:directory])
+    opts = Keyword.drop(params, [:parent_id, :title, :directory])
+
+    post("/session", body, Keyword.merge(opts, query: query_params))
   end
 
   @doc """

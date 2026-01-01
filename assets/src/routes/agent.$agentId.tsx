@@ -5,11 +5,11 @@ import {
   Archive, 
   Activity, 
   Cpu,
-  Clock,
   ChevronRight,
   Loader2,
   Inbox,
-  Pencil
+  Pencil,
+  Play
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { 
@@ -22,11 +22,13 @@ import {
   useAgentRolesConfig,
   useModels,
   useSyncProviders,
-  type Agent
+  useCreateSession,
+  type Agent,
 } from '../api/queries'
 import { useActiveProject } from './__root'
-import { Modal, FormField, Input, Button } from '../components/Modal'
+import { Modal, FormField, Button } from '../components/Modal'
 import { useNotifications } from '../components/Notifications'
+import { SessionChat, type AgentMode } from '../components/SessionChat'
 
 export const Route = createFileRoute('/agent/$agentId')({
   component: AgentDetail,
@@ -38,15 +40,27 @@ function AgentDetail() {
   const { data: sessions = [], isLoading: isLoadingSessions } = useSessions()
   const { data: squads = [] } = useSquads(activeProject?.id || '')
   const { data: threads = [] } = useMailThreads(activeProject?.id)
+  const modelsQuery = useModels(activeProject?.id || '') // Fetch models for context limits
   const stopSession = useStopSession()
+  const createSession = useCreateSession()
   const { addNotification } = useNotifications()
   const [editModalOpen, setEditModalOpen] = useState(false)
+  
+  // Sticky mode state per session (runtime only, not persisted)
+  const [sessionModes, setSessionModes] = useState<Record<string, AgentMode>>({})
+  const handleModeChange = (sessionId: string, mode: AgentMode) => {
+    setSessionModes(prev => ({ ...prev, [sessionId]: mode }))
+  }
 
   const agentData = squads.flatMap(s => s.agents ?? []).find(a => a.id === agentId)
   
   // Find the active session for this agent
   const activeSession = sessions.find(s => s.agent_id === agentId && s.status === 'running')
   
+  // Find active model info if available
+  const activeModelId = activeSession?.model || agentData?.model || ''
+  const activeModelInfo = modelsQuery.data?.find(m => m.id === activeModelId || m.model_id === activeModelId || `${m.provider_id}/${m.model_id}` === activeModelId)
+
   // Filter mail threads where this agent is a participant
   const agentThreads = threads.filter(t => t.participants.includes(agentData?.name || agentId))
 
@@ -71,6 +85,28 @@ function AgentDetail() {
         type: 'error',
         title: 'Action Failed',
         message: error instanceof Error ? error.message : 'Failed to stop session'
+      })
+    }
+  }
+
+  const handleStartSession = async () => {
+    if (!agentData) return
+
+    try {
+      await createSession.mutateAsync({
+        agent_id: agentData.id,
+        title: `Session for ${agentData.name}`,
+      })
+      addNotification({
+        type: 'success',
+        title: 'Session Started',
+        message: `Session started for ${agentData.name}.`
+      })
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Start Failed',
+        message: error instanceof Error ? error.message : 'Failed to start session'
       })
     }
   }
@@ -119,15 +155,37 @@ function AgentDetail() {
                 <Pencil size={14} />
               </button>
             </div>
-            <p className="text-tui-dim font-bold tracking-widest text-xs mt-1">
-              {agent.role} • {agent.model}
+            <p className="text-tui-dim font-bold tracking-widest text-xs mt-1 flex items-center gap-2 flex-wrap">
+              <span>{agent.role}</span>
+              <span>•</span>
+              <span title={activeModelInfo ? `Context: ${activeModelInfo.context_window || '?'} • Output: ${activeModelInfo.max_output || '?'}` : 'Model details unavailable'}>
+                {agent.model}
+                {activeModelInfo && (activeModelInfo.context_window || activeModelInfo.max_output) && (
+                   <span className="ml-1 text-[10px] opacity-70">
+                     ({activeModelInfo.context_window ? `${Math.round(activeModelInfo.context_window / 1000)}k` : '?'} / {activeModelInfo.max_output ? `${Math.round(activeModelInfo.max_output / 1000)}k` : '?'})
+                   </span>
+                )}
+              </span>
             </p>
           </div>
         </div>
 
-        <div className="text-left sm:text-right space-y-1">
-          <div className="text-xs text-tui-dim">SESSION_ID</div>
-          <div className="text-sm font-bold text-tui-text font-mono truncate max-w-[200px] sm:max-w-none">{agent.session_id}</div>
+        <div className="flex items-start justify-end gap-3">
+          <div className="text-left sm:text-right space-y-1">
+            <div className="text-xs text-tui-dim">SESSION_ID</div>
+            <div className="text-sm font-bold text-tui-text font-mono truncate max-w-[200px] sm:max-w-none">{agent.session_id}</div>
+          </div>
+          {!activeSession && (
+            <button
+              onClick={handleStartSession}
+              disabled={!agentData || createSession.isPending}
+              className="p-2 border border-tui-accent text-tui-accent hover:bg-tui-accent/10 transition-colors focus:outline-none disabled:opacity-50"
+              title="Start Session"
+              aria-label="Start session"
+            >
+              {createSession.isPending ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -159,6 +217,36 @@ function AgentDetail() {
               )}
             </div>
           </section>
+
+          {/* Session Chat - Using shared component */}
+          {activeSession ? (
+            <section className="border border-tui-border flex flex-col min-h-[320px] md:min-h-[360px]">
+              <SessionChat
+                session={activeSession}
+                mode={sessionModes[activeSession.id] || 'plan'}
+                onModeChange={(mode) => handleModeChange(activeSession.id, mode)}
+                showModeToggle={true}
+                showHeader={true}
+                className="h-full"
+              />
+            </section>
+          ) : (
+            <section className="border border-tui-border flex flex-col min-h-[320px] md:min-h-[360px]">
+              <div className="p-2 border-b border-tui-border bg-tui-dim/10 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold">
+                  <Terminal size={14} />
+                  SESSION_CHAT
+                </div>
+                <span className="px-2 py-0.5 border border-tui-border text-tui-dim text-[10px] font-bold uppercase">
+                  OFFLINE
+                </span>
+              </div>
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-tui-dim gap-2 bg-black/40 p-4">
+                <div className="text-xs uppercase tracking-widest">NO_ACTIVE_SESSION</div>
+                <div className="text-[10px] italic">Start a session to begin chatting with this agent.</div>
+              </div>
+            </section>
+          )}
 
           <section className="border border-tui-border">
             <div className="p-2 border-b border-tui-border bg-tui-dim/10 flex items-center gap-2 text-xs font-bold">
@@ -232,13 +320,22 @@ function AgentDetail() {
             </div>
           </section>
 
-          {activeSession && (
+          {activeSession ? (
             <button 
               onClick={handleStopSession}
               disabled={stopSession.isPending}
               className="w-full border border-red-900/50 bg-red-950/20 py-3 text-red-500 font-bold text-xs hover:bg-red-900/30 transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {stopSession.isPending ? 'Terminating...' : 'Terminate Session'}
+            </button>
+          ) : (
+            <button
+              onClick={handleStartSession}
+              disabled={!agentData || createSession.isPending}
+              className="w-full border border-tui-accent bg-tui-accent/10 py-3 text-tui-accent font-bold text-xs hover:bg-tui-accent hover:text-tui-bg transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {createSession.isPending ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              {createSession.isPending ? 'Starting...' : 'Start Session'}
             </button>
           )}
         </div>
@@ -280,6 +377,7 @@ function StatItem({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
+
 
 interface EditAgentModalProps {
   isOpen: boolean

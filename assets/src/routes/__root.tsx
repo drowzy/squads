@@ -1,6 +1,6 @@
 import { createRootRouteWithContext, Link, Outlet, useLocation } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/router-devtools'
-import { Terminal, Users, LayoutDashboard, UserCircle, ClipboardList, Mail, Wifi, WifiOff, Menu, X, ChevronDown, Plus, FolderOpen } from 'lucide-react'
+import { Terminal, Users, LayoutDashboard, UserCircle, ClipboardList, Mail, Wifi, WifiOff, Menu, X, ChevronDown, Plus, FolderOpen, Play } from 'lucide-react'
 import type { QueryClient } from '@tanstack/react-query'
 import { useEffect, useState, createContext, useContext } from 'react'
 import { useProjects, type Project } from '../api/queries'
@@ -242,6 +242,7 @@ function AppShell() {
         <nav className="flex-1 p-2 space-y-1">
           <NavItem to="/" icon={<LayoutDashboard size={20} />} label="OVERVIEW" />
           <NavItem to="/squad" icon={<Users size={20} />} label="SQUAD" />
+          <NavItem to="/sessions" icon={<Play size={20} />} label="SESSIONS" />
           <NavItem to="/board" icon={<ClipboardList size={20} />} label="BOARD" />
           <NavItem to="/agent" icon={<UserCircle size={20} />} label="AGENTS" />
           <NavItem to="/review" icon={<ClipboardList size={20} />} label="REVIEW" />

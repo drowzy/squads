@@ -37,6 +37,8 @@ defmodule Squads.Tickets.Ticket do
     belongs_to :assignee, Agent
     belongs_to :parent, __MODULE__
     has_many :children, __MODULE__, foreign_key: :parent_id
+    has_many :ticket_dependencies, Squads.Tickets.TicketDependency
+    has_many :dependencies, through: [:ticket_dependencies, :dependency]
     has_many :sessions, Session
 
     timestamps(type: :utc_datetime)

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SquadRouteImport } from './routes/squad'
+import { Route as SessionsRouteImport } from './routes/sessions'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as MailRouteImport } from './routes/mail'
 import { Route as BoardRouteImport } from './routes/board'
@@ -19,6 +20,11 @@ import { Route as AgentAgentIdRouteImport } from './routes/agent.$agentId'
 const SquadRoute = SquadRouteImport.update({
   id: '/squad',
   path: '/squad',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SessionsRoute = SessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReviewRoute = ReviewRouteImport.update({
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/board': typeof BoardRoute
   '/mail': typeof MailRoute
   '/review': typeof ReviewRoute
+  '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/board': typeof BoardRoute
   '/mail': typeof MailRoute
   '/review': typeof ReviewRoute
+  '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
 }
@@ -69,20 +77,36 @@ export interface FileRoutesById {
   '/board': typeof BoardRoute
   '/mail': typeof MailRoute
   '/review': typeof ReviewRoute
+  '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/board' | '/mail' | '/review' | '/squad' | '/agent/$agentId'
+  fullPaths:
+    | '/'
+    | '/board'
+    | '/mail'
+    | '/review'
+    | '/sessions'
+    | '/squad'
+    | '/agent/$agentId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/board' | '/mail' | '/review' | '/squad' | '/agent/$agentId'
+  to:
+    | '/'
+    | '/board'
+    | '/mail'
+    | '/review'
+    | '/sessions'
+    | '/squad'
+    | '/agent/$agentId'
   id:
     | '__root__'
     | '/'
     | '/board'
     | '/mail'
     | '/review'
+    | '/sessions'
     | '/squad'
     | '/agent/$agentId'
   fileRoutesById: FileRoutesById
@@ -92,6 +116,7 @@ export interface RootRouteChildren {
   BoardRoute: typeof BoardRoute
   MailRoute: typeof MailRoute
   ReviewRoute: typeof ReviewRoute
+  SessionsRoute: typeof SessionsRoute
   SquadRoute: typeof SquadRoute
   AgentAgentIdRoute: typeof AgentAgentIdRoute
 }
@@ -103,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/squad'
       fullPath: '/squad'
       preLoaderRoute: typeof SquadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sessions': {
+      id: '/sessions'
+      path: '/sessions'
+      fullPath: '/sessions'
+      preLoaderRoute: typeof SessionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/review': {
@@ -148,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   BoardRoute: BoardRoute,
   MailRoute: MailRoute,
   ReviewRoute: ReviewRoute,
+  SessionsRoute: SessionsRoute,
   SquadRoute: SquadRoute,
   AgentAgentIdRoute: AgentAgentIdRoute,
 }

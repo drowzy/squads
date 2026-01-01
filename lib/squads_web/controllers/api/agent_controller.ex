@@ -39,6 +39,22 @@ defmodule SquadsWeb.API.AgentController do
   end
 
   @doc """
+  List all agents for a project (across all squads).
+
+  GET /api/projects/:project_id/agents
+  """
+  def index_by_project(conn, %{"project_id" => project_id}) do
+    case Ecto.UUID.cast(project_id) do
+      {:ok, uuid} ->
+        agents = Agents.list_agents_for_project(uuid)
+        render(conn, :index, agents: agents)
+
+      :error ->
+        {:error, :not_found}
+    end
+  end
+
+  @doc """
   Show a single agent.
 
   GET /api/agents/:id

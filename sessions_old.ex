@@ -200,56 +200,35 @@ defmodule Squads.Sessions do
     * `:opencode_opts` - Optional. Options to pass to OpenCode client.
   """
   def create_and_start_session(attrs, opencode_opts \\ []) do
-    Ecto.Multi.new()
-    |> Ecto.Multi.insert(:session, Session.changeset(%Session{}, attrs))
-    |> Ecto.Multi.run(:opencode_server, fn _repo, %{session: session} ->
-      agent = Repo.get(Squads.Agents.Agent, session.agent_id) |> Repo.preload(squad: :project)
-      squad = agent && agent.squad
+    Repo.transaction(fn ->
+      # Create local session first
+      case create_session(attrs) do
+        {:ok, session} ->
+          # Start OpenCode session
+          title = attrs[:title] || "Session #{session.id}"
 
-      if agent && squad do
-        Squads.OpenCode.Server.ensure_running(squad.project_id, squad.project.path)
-      else
-        {:error, :agent_or_squad_not_found}
+          case OpenCodeClient.create_session(Keyword.merge(opencode_opts, title: title)) do
+            {:ok, %{"id" => opencode_id}} ->
+              # Update local session with OpenCode ID and mark as running
+              start_attrs = %{
+                opencode_session_id: opencode_id,
+                worktree_path: attrs[:worktree_path],
+                branch: attrs[:branch]
+              }
+
+              session
+              |> Session.start_changeset(start_attrs)
+              |> Repo.update!()
+
+            {:error, reason} ->
+              Logger.error("Failed to start OpenCode session: #{inspect(reason)}")
+              Repo.rollback({:opencode_error, reason})
+          end
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
       end
     end)
-    |> Ecto.Multi.run(:opencode_session, fn _repo,
-                                            %{session: session, opencode_server: base_url} ->
-      title = attrs[:title] || "Session #{session.id}"
-      directory = resolve_session_directory(session, attrs[:worktree_path])
-
-      opts =
-        opencode_opts
-        |> Keyword.merge(title: title, base_url: base_url)
-        |> Keyword.put(:directory, directory)
-
-      case OpenCodeClient.create_session(opts) do
-        {:ok, %{"id" => opencode_id}} -> {:ok, opencode_id}
-        {:error, reason} -> {:error, reason}
-      end
-    end)
-    |> Ecto.Multi.update(:updated_session, fn %{session: session, opencode_session: opencode_id} ->
-      directory = resolve_session_directory(session, attrs[:worktree_path])
-
-      start_attrs = %{
-        opencode_session_id: opencode_id,
-        worktree_path: directory,
-        branch: attrs[:branch]
-      }
-
-      Session.start_changeset(session, start_attrs)
-    end)
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{updated_session: session}} ->
-        {:ok, session}
-
-      {:error, :opencode_session, reason, _changes} ->
-        Logger.error("Failed to start OpenCode session: #{inspect(reason)}")
-        {:error, {:opencode_error, reason}}
-
-      {:error, _step, reason, _changes} ->
-        {:error, reason}
-    end
   end
 
   # ============================================================================
@@ -263,38 +242,16 @@ defmodule Squads.Sessions do
     if session.status != "pending" do
       {:error, :already_started}
     else
-      agent = Repo.get(Squads.Agents.Agent, session.agent_id) |> Repo.preload(squad: :project)
-      squad = agent && agent.squad
+      title = opencode_opts[:title] || "Session #{session.id}"
 
-      if agent && squad do
-        case Squads.OpenCode.Server.ensure_running(squad.project_id, squad.project.path) do
-          {:ok, base_url} ->
-            title = opencode_opts[:title] || "Session #{session.id}"
-            directory = resolve_session_directory(session, opencode_opts[:worktree_path])
+      case OpenCodeClient.create_session(Keyword.merge(opencode_opts, title: title)) do
+        {:ok, %{"id" => opencode_id}} ->
+          session
+          |> Session.start_changeset(%{opencode_session_id: opencode_id})
+          |> Repo.update()
 
-            opts =
-              opencode_opts
-              |> Keyword.merge(title: title, base_url: base_url)
-              |> Keyword.put(:directory, directory)
-
-            case OpenCodeClient.create_session(opts) do
-              {:ok, %{"id" => opencode_id}} ->
-                session
-                |> Session.start_changeset(%{
-                  opencode_session_id: opencode_id,
-                  worktree_path: directory
-                })
-                |> Repo.update()
-
-              {:error, reason} ->
-                {:error, {:opencode_error, reason}}
-            end
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-      else
-        {:error, :agent_or_squad_not_found}
+        {:error, reason} ->
+          {:error, {:opencode_error, reason}}
       end
     end
   end
@@ -314,10 +271,8 @@ defmodule Squads.Sessions do
         |> Repo.update()
 
       true ->
-        opts = with_base_url(session, [])
-
         # Abort OpenCode session first
-        case OpenCodeClient.abort_session(session.opencode_session_id, opts) do
+        case OpenCodeClient.abort_session(session.opencode_session_id) do
           {:ok, _} ->
             session
             |> Session.finish_changeset(exit_code)
@@ -383,9 +338,7 @@ defmodule Squads.Sessions do
   """
   def sync_session_status(session) do
     if session.opencode_session_id do
-      opts = with_base_url(session, [])
-
-      case OpenCodeClient.get_sessions_status(opts) do
+      case OpenCodeClient.get_sessions_status() do
         {:ok, statuses} ->
           case Map.get(statuses, session.opencode_session_id) do
             nil ->
@@ -429,8 +382,7 @@ defmodule Squads.Sessions do
   """
   def send_message(session, params, opencode_opts \\ []) do
     if session.opencode_session_id && session.status == "running" do
-      opts = with_base_url(session, opencode_opts)
-      OpenCodeClient.send_message(session.opencode_session_id, params, opts)
+      OpenCodeClient.send_message(session.opencode_session_id, params, opencode_opts)
     else
       {:error, :session_not_active}
     end
@@ -441,8 +393,7 @@ defmodule Squads.Sessions do
   """
   def send_message_async(session, params, opencode_opts \\ []) do
     if session.opencode_session_id && session.status == "running" do
-      opts = with_base_url(session, opencode_opts)
-      OpenCodeClient.send_message_async(session.opencode_session_id, params, opts)
+      OpenCodeClient.send_message_async(session.opencode_session_id, params, opencode_opts)
     else
       {:error, :session_not_active}
     end
@@ -453,7 +404,6 @@ defmodule Squads.Sessions do
   """
   def get_messages(session, opts \\ []) do
     if session.opencode_session_id do
-      opts = with_base_url(session, opts)
       OpenCodeClient.list_messages(session.opencode_session_id, opts)
     else
       {:error, :no_opencode_session}
@@ -465,7 +415,6 @@ defmodule Squads.Sessions do
   """
   def get_diff(session, opts \\ []) do
     if session.opencode_session_id do
-      opts = with_base_url(session, opts)
       OpenCodeClient.get_session_diff(session.opencode_session_id, opts)
     else
       {:error, :no_opencode_session}
@@ -477,7 +426,6 @@ defmodule Squads.Sessions do
   """
   def get_todos(session, opts \\ []) do
     if session.opencode_session_id do
-      opts = with_base_url(session, opts)
       OpenCodeClient.get_session_todos(session.opencode_session_id, opts)
     else
       {:error, :no_opencode_session}
@@ -490,63 +438,32 @@ defmodule Squads.Sessions do
 
   @doc """
   Executes a slash command in a session.
+
+  ## Params
+
+    * `:arguments` - Optional. Command arguments.
+    * `:agent` - Optional. Agent to use.
+    * `:model` - Optional. Model to use.
+
+  ## Examples
+
+      Sessions.execute_command(session, "/help")
+      Sessions.execute_command(session, "/compact", arguments: "all")
   """
   def execute_command(session, command, params \\ [], opencode_opts \\ []) do
-    case command do
-      "/squads-status" ->
-        agent = Agents.get_agent(session.agent_id)
+    cond do
+      is_nil(session.opencode_session_id) ->
+        {:error, :no_opencode_session}
 
-        if agent do
-          status = get_squad_status(agent.squad_id)
-          {:ok, %{"output" => Jason.encode!(status, pretty: true)}}
-        else
-          {:error, :agent_not_found}
-        end
+      session.status != "running" ->
+        {:error, :session_not_active}
 
-      "/squads-tickets" ->
-        agent = Agents.get_agent(session.agent_id)
-        squad = agent && Squads.Squads.get_squad(agent.squad_id)
-
-        if squad do
-          summary = Squads.Tickets.get_tickets_summary(squad.project_id)
-          {:ok, %{"output" => Jason.encode!(summary, pretty: true)}}
-        else
-          {:error, :squad_not_found}
-        end
-
-      "/check-mail" ->
-        agent = Agents.get_agent(session.agent_id)
-
-        if agent do
-          messages = Squads.Mail.list_inbox(agent.id, limit: 10)
-
-          output =
-            messages
-            |> Enum.map(fn m -> "[#{m.id}] From: #{m.sender.name} - #{m.subject}" end)
-            |> Enum.join("\n")
-
-          {:ok, %{"output" => output}}
-        else
-          {:error, :agent_not_found}
-        end
-
-      _ ->
-        cond do
-          is_nil(session.opencode_session_id) ->
-            {:error, :no_opencode_session}
-
-          session.status != "running" ->
-            {:error, :session_not_active}
-
-          true ->
-            opts = with_base_url(session, Keyword.merge(params, opencode_opts))
-
-            OpenCodeClient.execute_command(
-              session.opencode_session_id,
-              command,
-              opts
-            )
-        end
+      true ->
+        OpenCodeClient.execute_command(
+          session.opencode_session_id,
+          command,
+          Keyword.merge(params, opencode_opts)
+        )
     end
   end
 
@@ -572,12 +489,10 @@ defmodule Squads.Sessions do
         {:error, :session_not_active}
 
       true ->
-        opts = with_base_url(session, Keyword.merge(params, opencode_opts))
-
         OpenCodeClient.run_shell(
           session.opencode_session_id,
           command,
-          opts
+          Keyword.merge(params, opencode_opts)
         )
     end
   end
@@ -637,8 +552,7 @@ defmodule Squads.Sessions do
     params = if opts[:no_reply], do: Map.put(params, :no_reply, opts[:no_reply]), else: params
     params = if system_override, do: Map.put(params, :system, system_override), else: params
 
-    opts = with_base_url(session, Keyword.drop(opts, [:model, :agent, :no_reply, :system]))
-    send_message(session, params, opts)
+    send_message(session, params, Keyword.drop(opts, [:model, :agent, :no_reply, :system]))
   end
 
   @doc """
@@ -688,73 +602,17 @@ defmodule Squads.Sessions do
     params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
     params = if system_override, do: Map.put(params, :system, system_override), else: params
 
-    opts = with_base_url(session, Keyword.drop(opts, [:model, :agent, :system]))
-    send_message_async(session, params, opts)
+    send_message_async(session, params, Keyword.drop(opts, [:model, :agent, :system]))
   end
 
   # ============================================================================
   # Private Helpers
   # ============================================================================
 
-  def get_squad_status(squad_id) do
-    agents = Agents.list_agents_for_squad(squad_id)
-
-    agents
-    |> Enum.map(fn a ->
-      %{
-        id: a.id,
-        name: a.name,
-        role: a.role,
-        status: a.status
-      }
-    end)
-  end
-
   defp map_opencode_status(%{"status" => "idle"}), do: "running"
   defp map_opencode_status(%{"status" => "running"}), do: "running"
   defp map_opencode_status(%{"status" => "completed"}), do: "completed"
   defp map_opencode_status(%{"status" => "errored"}), do: "failed"
   defp map_opencode_status(%{"status" => "aborted"}), do: "cancelled"
-
-  defp get_base_url_for_session(session) do
-    with agent_id when not is_nil(agent_id) <- session.agent_id,
-         agent when not is_nil(agent) <- Repo.get(Agents.Agent, agent_id),
-         squad when not is_nil(squad) <- Repo.get(Squads.Squads.Squad, agent.squad_id),
-         {:ok, base_url} <- Squads.OpenCode.Server.get_url(squad.project_id) do
-      base_url
-    else
-      _ -> nil
-    end
-  end
-
-  defp with_base_url(session, opts) do
-    case get_base_url_for_session(session) do
-      nil -> opts
-      url -> Keyword.put_new(opts, :base_url, url)
-    end
-  end
-
-  defp resolve_session_directory(session, explicit_worktree_path) do
-    cond do
-      # 1. Explicit worktree path provided (e.g. at start time)
-      is_binary(explicit_worktree_path) and explicit_worktree_path != "" ->
-        explicit_worktree_path
-
-      # 2. Session already has a worktree path
-      is_binary(session.worktree_path) and session.worktree_path != "" ->
-        session.worktree_path
-
-      # 3. Fallback to project path
-      true ->
-        with agent_id when not is_nil(agent_id) <- session.agent_id,
-             agent when not is_nil(agent) <- Repo.get(Agents.Agent, agent_id),
-             squad when not is_nil(squad) <- Repo.get(Squads.Squads.Squad, agent.squad_id),
-             project when not is_nil(project) <-
-               Repo.get(Squads.Projects.Project, squad.project_id) do
-          project.path
-        else
-          _ -> nil
-        end
-    end
-  end
+  defp map_opencode_status(_), do: "running"
 end

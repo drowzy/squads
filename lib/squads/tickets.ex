@@ -22,6 +22,7 @@ defmodule Squads.Tickets do
     Ticket
     |> where(project_id: ^project_id)
     |> apply_filters(opts)
+    |> preload([:dependencies])
     |> order_by([t], asc: t.priority, desc: t.beads_updated_at)
     |> Repo.all()
   end
@@ -29,7 +30,12 @@ defmodule Squads.Tickets do
   @doc """
   Gets a ticket by ID.
   """
-  def get_ticket(id), do: Repo.get(Ticket, id)
+  def get_ticket(id) do
+    Ticket
+    |> where(id: ^id)
+    |> preload([:dependencies])
+    |> Repo.one()
+  end
 
   @doc """
   Gets a ticket by ID with sessions preloaded.
@@ -97,6 +103,7 @@ defmodule Squads.Tickets do
     Ticket
     |> where(project_id: ^project_id, status: "open")
     |> where([t], t.id not in subquery(blocked_ids))
+    |> preload([:dependencies])
     |> order_by([t], asc: t.priority, desc: t.beads_updated_at)
     |> Repo.all()
   end
@@ -107,6 +114,7 @@ defmodule Squads.Tickets do
   def list_in_progress_tickets(project_id) do
     Ticket
     |> where(project_id: ^project_id, status: "in_progress")
+    |> preload([:dependencies])
     |> order_by([t], asc: t.priority, desc: t.beads_updated_at)
     |> Repo.all()
   end
@@ -121,6 +129,7 @@ defmodule Squads.Tickets do
     |> where(project_id: ^project_id)
     |> where([t], t.status in ["open", "in_progress"])
     |> where([t], t.id in subquery(blocked_ids))
+    |> preload([:dependencies])
     |> order_by([t], asc: t.priority, desc: t.beads_updated_at)
     |> Repo.all()
   end
@@ -132,6 +141,7 @@ defmodule Squads.Tickets do
     Ticket
     |> where(assignee_id: ^agent_id)
     |> where([t], t.status != "closed")
+    |> preload([:dependencies])
     |> order_by([t], asc: t.priority, desc: t.beads_updated_at)
     |> Repo.all()
   end
@@ -142,6 +152,7 @@ defmodule Squads.Tickets do
   def list_children(ticket_id) do
     Ticket
     |> where(parent_id: ^ticket_id)
+    |> preload([:dependencies])
     |> order_by([t], asc: t.priority, asc: t.beads_id)
     |> Repo.all()
   end
@@ -440,6 +451,37 @@ defmodule Squads.Tickets do
     end
   end
 
+  @doc """
+  Syncs parent-child relationships from Beads data.
+
+  This should be called after sync_from_beads to resolve parent references.
+  """
+  def sync_parents(project_id) do
+    path = get_project_path(project_id)
+
+    with {:ok, issues} <- Beads.list_issues(path) do
+      results =
+        issues
+        |> Enum.filter(fn issue -> issue["parent"] end)
+        |> Enum.map(fn issue ->
+          child_beads_id = issue["id"]
+          parent_beads_id = issue["parent"]
+
+          child = get_ticket_by_beads_id(project_id, child_beads_id)
+          parent = get_ticket_by_beads_id(project_id, parent_beads_id)
+
+          if child && parent do
+            update_ticket(child, %{parent_id: parent.id})
+          else
+            {:ignore, :missing_relation}
+          end
+        end)
+        |> Enum.count(&match?({:ok, _}, &1))
+
+      {:ok, %{synced: results}}
+    end
+  end
+
   defp extract_dependencies(project_id, %{"id" => beads_id, "dependencies" => deps})
        when is_list(deps) do
     ticket = get_ticket_by_beads_id(project_id, beads_id)
@@ -491,12 +533,14 @@ defmodule Squads.Tickets do
   """
   def sync_all(project_id) do
     with {:ok, result} <- sync_from_beads(project_id),
-         {:ok, dep_result} <- sync_dependencies(project_id) do
+         {:ok, dep_result} <- sync_dependencies(project_id),
+         {:ok, parent_result} <- sync_parents(project_id) do
       {:ok,
        %{
          created: result.created,
          updated: result.updated,
          dependencies_synced: dep_result.synced,
+         parents_synced: parent_result.synced,
          errors: length(result.errors)
        }}
     end

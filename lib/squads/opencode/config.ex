@@ -252,7 +252,9 @@ defmodule Squads.OpenCode.Config do
         }
       },
       "agent" => %{
-        "default" => "generalist",
+        "default" => %{
+          "agent" => "generalist"
+        },
         "commands" => %{
           "squads-status" => %{
             "description" => "Show current squad status and tasks",

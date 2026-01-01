@@ -14,6 +14,8 @@ defmodule Squads.Application do
        repos: Application.fetch_env!(:squads, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:squads, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Squads.PubSub},
+      {Registry, keys: :unique, name: Squads.OpenCode.ServerRegistry},
+      {Squads.OpenCode.Server, []},
       # Start a worker by calling: Squads.Worker.start_link(arg)
       # {Squads.Worker, arg},
       # Start to serve requests, typically the last entry

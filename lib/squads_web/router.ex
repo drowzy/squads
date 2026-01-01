@@ -32,6 +32,9 @@ defmodule SquadsWeb.Router do
       resources "/squads", SquadController, only: [:index, :create]
       get "/events/stream", EventController, :stream
 
+      # Agent listing for a project (across all squads)
+      get "/agents", AgentController, :index_by_project
+
       # Provider endpoints nested under projects
       get "/providers", ProviderController, :index
       post "/providers/sync", ProviderController, :sync
@@ -49,6 +52,8 @@ defmodule SquadsWeb.Router do
       get "/tickets/beads/:beads_id", TicketController, :show_by_beads_id
 
       get "/mail/threads", MailController, :threads_index
+      post "/mail/send", MailController, :create
+      post "/mail/threads/:thread_id/reply", MailController, :reply
 
       # Worktree endpoints nested under projects
       resources "/worktrees", WorktreeController, only: [:index, :create, :delete]
@@ -77,6 +82,8 @@ defmodule SquadsWeb.Router do
     resources "/agents", AgentController, only: [:show, :update, :delete] do
       patch "/status", AgentController, :update_status
     end
+
+    post "/sessions/start", SessionController, :start
 
     resources "/sessions", SessionController, only: [:index, :show, :create] do
       post "/start", SessionController, :start_existing

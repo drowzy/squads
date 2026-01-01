@@ -20,6 +20,7 @@ defmodule Squads.Mail.Message do
     field :importance, :string, default: "normal"
     field :ack_required, :boolean, default: false
     field :kind, :string, default: "text"
+    field :author_name, :string
 
     belongs_to :thread, Thread
     belongs_to :sender, Agent
@@ -32,8 +33,17 @@ defmodule Squads.Mail.Message do
   @doc false
   def changeset(message, attrs) do
     message
-    |> cast(attrs, [:subject, :body_md, :importance, :ack_required, :kind, :thread_id, :sender_id])
-    |> validate_required([:body_md, :thread_id, :sender_id])
+    |> cast(attrs, [
+      :subject,
+      :body_md,
+      :importance,
+      :ack_required,
+      :kind,
+      :thread_id,
+      :sender_id,
+      :author_name
+    ])
+    |> validate_required([:body_md, :thread_id])
     |> validate_inclusion(:importance, @importances)
     |> validate_inclusion(:kind, @kinds)
     |> foreign_key_constraint(:thread_id)

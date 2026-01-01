@@ -21,6 +21,8 @@ defmodule SquadsWeb.API.MailJSON do
       kind: message.kind,
       thread_id: message.thread_id,
       sender: sender(message.sender),
+      sender_name:
+        message.author_name || if(message.sender, do: message.sender.name, else: "Unknown"),
       recipients: Enum.map(message.recipients, &recipient/1),
       inserted_at: message.inserted_at,
       updated_at: message.updated_at

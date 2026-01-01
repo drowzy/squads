@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite build --watch",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -27,18 +27,26 @@
     "vite": "^7.3.0"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.90.16",
     "@tanstack/react-query-devtools": "^5.91.2",
     "@tanstack/react-router": "^1.144.0",
     "@types/prismjs": "^1.26.5",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@xyflow/react": "^12.10.0",
     "clsx": "^2.1.1",
     "elkjs": "^0.11.0",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^0.562.0",
     "prismjs": "^1.30.0",
     "react": "^19.2.3",
     "react-diff-view": "^3.3.2",
     "react-dom": "^19.2.3",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7"
   }

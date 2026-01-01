@@ -46,6 +46,8 @@ export interface ModelOption {
   name: string
   provider_id: string
   provider_name: string
+  context_window?: number
+  max_output?: number
 }
 
 export interface AgentRoleDefinition {
@@ -84,6 +86,115 @@ export interface Session {
   status: string
   model: string
   inserted_at: string
+  ticket_key?: string
+  worktree_path?: string
+  branch?: string
+  started_at?: string
+  finished_at?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface SessionMessageInfo {
+  id: string
+  role: string
+  time?: { created?: number; completed?: number }
+  agent?: string
+  model?: { providerID?: string; modelID?: string } | string
+  providerID?: string
+  modelID?: string
+  mode?: string
+  finish?: string
+  summary?: boolean | { title?: string; body?: string }
+  error?: string | { message?: string; type?: string }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: { read: number; write: number }
+  }
+}
+
+export interface SessionMessagePartBase {
+  id?: string
+  type?: string
+}
+
+export interface SessionMessageTextPart extends SessionMessagePartBase {
+  type: 'text'
+  text: string
+  ignored?: boolean
+  synthetic?: boolean
+}
+
+export interface SessionMessageReasoningPart extends SessionMessagePartBase {
+  type: 'reasoning'
+  text: string
+}
+
+export interface SessionMessageToolPart extends SessionMessagePartBase {
+  type: 'tool'
+  tool?: string
+  callID?: string
+  state?: {
+    status?: string
+    title?: string
+    input?: Record<string, unknown>
+    output?: string
+    error?: string
+    metadata?: Record<string, unknown>
+  }
+}
+
+export interface SessionMessageStepPart extends SessionMessagePartBase {
+  type: 'step-start' | 'step-finish'
+  reason?: string
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: { read: number; write: number }
+  }
+}
+
+export interface SessionMessageFilePart extends SessionMessagePartBase {
+  type: 'file'
+  filename?: string
+  mime?: string
+  url?: string
+}
+
+export interface SessionMessagePatchPart extends SessionMessagePartBase {
+  type: 'patch'
+  hash?: string
+  files?: string[]
+}
+
+export interface SessionMessageMetaPart extends SessionMessagePartBase {
+  type: 'snapshot' | 'compaction' | 'agent' | 'retry' | 'subtask'
+  name?: string
+  description?: string
+  prompt?: string
+  attempt?: number
+  error?: { message?: string } | string
+  auto?: boolean
+  snapshot?: string
+}
+
+export type SessionMessagePart =
+  | SessionMessageTextPart
+  | SessionMessageReasoningPart
+  | SessionMessageToolPart
+  | SessionMessageStepPart
+  | SessionMessageFilePart
+  | SessionMessagePatchPart
+  | SessionMessageMetaPart
+  | SessionMessagePartBase
+
+export interface SessionMessageEntry {
+  info: SessionMessageInfo
+  parts: SessionMessagePart[]
 }
 
 export interface Event {
@@ -268,7 +379,7 @@ export function useMailThread(id: string) {
 export function useSendMessage(projectId?: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: { subject: string; body_md: string; to: string[]; project_id?: string }) => {
+    mutationFn: (data: { subject: string; body_md: string; to: string[]; sender_name: string; project_id?: string }) => {
       const actualProjectId = data.project_id || projectId
       const url = actualProjectId ? `/projects/${actualProjectId}/mail/send` : '/mail/send'
       return fetcher<MailMessage>(url, {
@@ -324,6 +435,35 @@ export function useSession(id: string) {
   })
 }
 
+export function useSessionMessages(
+  sessionId: string,
+  options?: { limit?: number; enabled?: boolean; refetchInterval?: number | false }
+) {
+  const limit = options?.limit ?? 50
+  return useQuery({
+    queryKey: ['sessions', sessionId, 'messages', limit],
+    queryFn: () => fetcher<SessionMessageEntry[]>(`/sessions/${sessionId}/messages?limit=${limit}`),
+    enabled: options?.enabled ?? !!sessionId,
+    refetchInterval: options?.refetchInterval,
+  })
+}
+
+export function useSendSessionPrompt() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { session_id: string; prompt: string; model?: string; agent?: string; no_reply?: boolean }) => {
+      const { session_id, ...payload } = data
+      return fetcher<{ ok?: boolean }>(`/sessions/${session_id}/prompt`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id, 'messages'] })
+    },
+  })
+}
+
 export function useReviews() {
   return useQuery({
     queryKey: ['reviews'],
@@ -344,8 +484,15 @@ export function useReview(id: string) {
 export function useCreateSession() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: { project_id: string; agent_id: string; model: string }) =>
-      fetcher<Session>('/sessions', {
+    mutationFn: (data: {
+      agent_id: string
+      ticket_key?: string
+      title?: string
+      worktree_path?: string
+      branch?: string
+      metadata?: Record<string, unknown>
+    }) =>
+      fetcher<Session>('/sessions/start', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

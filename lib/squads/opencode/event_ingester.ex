@@ -90,7 +90,13 @@ defmodule Squads.OpenCode.EventIngester do
   @impl true
   def init(opts) do
     project_id = Keyword.fetch!(opts, :project_id)
-    base_url = Keyword.get(opts, :base_url) || get_base_url()
+
+    base_url =
+      case Squads.OpenCode.Server.get_url(project_id) do
+        {:ok, url} -> url
+        _ -> Keyword.get(opts, :base_url) || get_base_url()
+      end
+
     auto_connect = Keyword.get(opts, :auto_connect, true)
 
     state = %{

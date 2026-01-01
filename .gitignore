@@ -29,3 +29,7 @@ opencode_squads-*.tar
 *.db
 *.db-*
 
+# Node
+assets/node_modules/
+assets/.tanstack/
+

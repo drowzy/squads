@@ -21,6 +21,18 @@ defmodule Squads.Agents do
   end
 
   @doc """
+  Lists all agents for a project (across all squads).
+  """
+  @spec list_agents_for_project(Ecto.UUID.t()) :: [Agent.t()]
+  def list_agents_for_project(project_id) do
+    Agent
+    |> join(:inner, [a], s in Squads.Squads.Squad, on: a.squad_id == s.id)
+    |> where([a, s], s.project_id == ^project_id)
+    |> preload(:squad)
+    |> Repo.all()
+  end
+
+  @doc """
   Gets an agent by ID.
   """
   @spec get_agent(Ecto.UUID.t()) :: Agent.t() | nil
@@ -42,6 +54,41 @@ defmodule Squads.Agents do
   @spec get_agent_by_slug(Ecto.UUID.t(), String.t()) :: Agent.t() | nil
   def get_agent_by_slug(squad_id, slug) do
     Repo.get_by(Agent, squad_id: squad_id, slug: slug)
+  end
+
+  @doc """
+  Gets an agent by name within a project.
+  """
+  @spec get_agent_by_name(Ecto.UUID.t(), String.t()) :: Agent.t() | nil
+  def get_agent_by_name(project_id, name) do
+    Agent
+    |> join(:inner, [a], s in Squads.Squads.Squad, on: a.squad_id == s.id)
+    |> where([a, s], s.project_id == ^project_id and a.name == ^name)
+    |> Repo.one()
+  end
+
+  @doc """
+  Resolves a list of agent names to their UUIDs within a project.
+  Returns {:ok, uuids} if all names are found, {:error, missing_names} otherwise.
+  """
+  @spec resolve_agent_names(Ecto.UUID.t(), [String.t()]) ::
+          {:ok, [Ecto.UUID.t()]} | {:error, [String.t()]}
+  def resolve_agent_names(project_id, names) when is_list(names) do
+    agents =
+      Agent
+      |> join(:inner, [a], s in Squads.Squads.Squad, on: a.squad_id == s.id)
+      |> where([a, s], s.project_id == ^project_id and a.name in ^names)
+      |> select([a], {a.name, a.id})
+      |> Repo.all()
+      |> Map.new()
+
+    missing = Enum.filter(names, fn name -> not Map.has_key?(agents, name) end)
+
+    if missing == [] do
+      {:ok, Enum.map(names, fn name -> Map.get(agents, name) end)}
+    else
+      {:error, missing}
+    end
   end
 
   @doc """

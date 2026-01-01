@@ -112,6 +112,12 @@ defmodule Squads.Providers do
   def sync_from_opencode(project_id, opts \\ []) do
     client_opts = Keyword.get(opts, :client_opts, [])
 
+    client_opts =
+      case Squads.OpenCode.Server.get_url(project_id) do
+        {:ok, url} -> Keyword.put_new(client_opts, :base_url, url)
+        _ -> client_opts
+      end
+
     with {:ok, provider_payload} <- Client.list_providers(client_opts) do
       config_payload =
         case Client.get_config_providers(client_opts) do
@@ -132,6 +138,12 @@ defmodule Squads.Providers do
           {:ok, Provider.t()} | {:error, term()}
   def sync_provider_status(%Provider{} = provider, opts \\ []) do
     client_opts = Keyword.get(opts, :client_opts, [])
+
+    client_opts =
+      case Squads.OpenCode.Server.get_url(provider.project_id) do
+        {:ok, url} -> Keyword.put_new(client_opts, :base_url, url)
+        _ -> client_opts
+      end
 
     case Client.list_providers(client_opts) do
       {:ok, %{"all" => providers} = payload} ->
@@ -313,6 +325,9 @@ defmodule Squads.Providers do
         model
         |> Map.put_new("id", model_id)
         |> Map.put_new("name", model["id"] || model_id)
+        # Preserve context/output limits if they exist in the model map
+        |> Map.put_new("context_window", model["context_window"] || model["contextWindow"])
+        |> Map.put_new("max_output", model["max_output"] || model["maxOutput"])
 
       {model_id, _} ->
         %{"id" => model_id, "name" => model_id}
@@ -328,7 +343,9 @@ defmodule Squads.Providers do
       model when is_map(model) ->
         %{
           "id" => model["id"] || model["model"],
-          "name" => model["name"] || model["id"] || model["model"]
+          "name" => model["name"] || model["id"] || model["model"],
+          "context_window" => model["context_window"] || model["contextWindow"],
+          "max_output" => model["max_output"] || model["maxOutput"]
         }
     end)
   end

@@ -274,6 +274,7 @@ function ThreadView({ threadId, onBack }: { threadId: string; onBack: () => void
 
 function ComposeModal({ onClose }: { onClose: () => void }) {
   const { activeProject } = useActiveProject()
+  const [sender, setSender] = useState<string>('')
   const [to, setTo] = useState<string[]>([])
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -290,9 +291,16 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
+  // Auto-select first agent as sender if not set
+  useEffect(() => {
+    if (agents.length > 0 && !sender) {
+      setSender("Human")
+    }
+  }, [agents, sender])
+
   const handleSend = async () => {
-    if (to.length === 0 || !subject.trim() || !body.trim()) return
-    await sendMutation.mutateAsync({ to, subject, body_md: body, project_id: activeProject?.id })
+    if (!sender || to.length === 0 || !subject.trim() || !body.trim()) return
+    await sendMutation.mutateAsync({ to, subject, body_md: body, sender_name: sender, project_id: activeProject?.id })
     onClose()
   }
 
@@ -322,9 +330,38 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
       
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
         <div className="space-y-2">
+          <label className="text-xs font-bold text-tui-dim uppercase tracking-widest">From</label>
+          <div className="flex flex-wrap gap-2 p-2 border border-tui-border bg-black/20 min-h-[44px]">
+            <button
+              onClick={() => setSender("Human")}
+              className={`text-xs px-3 py-1.5 border transition-colors ${
+                sender === "Human"
+                  ? 'border-tui-accent bg-tui-accent/20 text-tui-text'
+                  : 'border-tui-border text-tui-dim hover:border-tui-text'
+              }`}
+            >
+              HUMAN
+            </button>
+            {agents.map(agent => (
+              <button
+                key={agent.id}
+                onClick={() => setSender(agent.name)}
+                className={`text-xs px-3 py-1.5 border transition-colors ${
+                  sender === agent.name 
+                    ? 'border-tui-accent bg-tui-accent/20 text-tui-text' 
+                    : 'border-tui-border text-tui-dim hover:border-tui-text'
+                }`}
+              >
+                {agent.name.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
           <label className="text-xs font-bold text-tui-dim uppercase tracking-widest">Recipients</label>
           <div className="flex flex-wrap gap-2 p-2 border border-tui-border bg-black/20 min-h-[44px]">
-            {agents.map(agent => (
+            {agents.filter(a => a.name !== sender).map(agent => (
               <button
                 key={agent.id}
                 onClick={() => toggleRecipient(agent.name)}
@@ -337,8 +374,8 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
                 {agent.name.toUpperCase()}
               </button>
             ))}
-            {agents.length === 0 && (
-              <span className="text-xs text-tui-dim italic uppercase">No_Agents_Available</span>
+            {agents.filter(a => a.name !== sender).length === 0 && (
+              <span className="text-xs text-tui-dim italic uppercase">No_Recipients_Available</span>
             )}
           </div>
         </div>
@@ -374,7 +411,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
         </button>
         <button 
           onClick={handleSend}
-          disabled={sendMutation.isPending || to.length === 0 || !subject.trim() || !body.trim()}
+          disabled={sendMutation.isPending || !sender || to.length === 0 || !subject.trim() || !body.trim()}
           className="bg-tui-accent text-tui-bg px-6 py-2.5 text-xs font-bold flex items-center justify-center gap-2 uppercase tracking-widest transition-colors disabled:opacity-50 order-1 sm:order-2"
         >
           {sendMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}

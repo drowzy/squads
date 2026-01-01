@@ -120,7 +120,15 @@ defmodule Squads.Mail do
           {if(is_binary(k), do: String.to_existing_atom(k), else: k), v}
         end)
         |> Map.new()
-        |> Map.take([:subject, :body_md, :importance, :ack_required, :kind, :sender_id])
+        |> Map.take([
+          :subject,
+          :body_md,
+          :importance,
+          :ack_required,
+          :kind,
+          :sender_id,
+          :author_name
+        ])
         |> Map.put(:thread_id, thread.id)
 
       message =
@@ -152,6 +160,7 @@ defmodule Squads.Mail do
 
       Squads.Events.create_event(%{
         project_id: project_id,
+        # Can be nil if human
         agent_id: message.sender_id,
         kind: "mail.sent",
         occurred_at: DateTime.utc_now() |> DateTime.truncate(:second),
@@ -159,7 +168,8 @@ defmodule Squads.Mail do
           message_id: message.id,
           subject: message.subject,
           thread_id: message.thread_id,
-          recipients: Enum.map(message.recipients, & &1.agent_id)
+          recipients: Enum.map(message.recipients, & &1.agent_id),
+          author_name: message.author_name
         }
       })
 

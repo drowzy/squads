@@ -26,7 +26,8 @@ defmodule Squads.Repo.Migrations.CreateMailTables do
       add :thread_id, references(:mail_threads, on_delete: :delete_all, type: :binary_id),
         null: false
 
-      add :sender_id, references(:agents, on_delete: :nothing, type: :binary_id), null: false
+      add :sender_id, references(:agents, on_delete: :nothing, type: :binary_id), null: true
+      add :author_name, :string
       add :subject, :string
       add :body_md, :text
       add :importance, :string, default: "normal"

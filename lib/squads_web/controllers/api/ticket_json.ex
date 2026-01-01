@@ -51,7 +51,14 @@ defmodule SquadsWeb.API.TicketJSON do
       beads_closed_at: ticket.beads_closed_at,
       synced_at: ticket.synced_at,
       inserted_at: ticket.inserted_at,
-      updated_at: ticket.updated_at
+      updated_at: ticket.updated_at,
+      dependencies: render_dependencies(ticket.dependencies)
     }
   end
+
+  defp render_dependencies(dependencies) when is_list(dependencies) do
+    Enum.map(dependencies, & &1.id)
+  end
+
+  defp render_dependencies(_), do: []
 end
