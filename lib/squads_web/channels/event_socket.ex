@@ -3,7 +3,11 @@ defmodule SquadsWeb.EventSocket do
 
   def child_spec(_opts) do
     # We won't spawn any process, so this can return a dummy task
-    %{id: __MODULE__, start: {Task, :start_link, [fn -> :ok end]}, type: :worker}
+    %{
+      id: __MODULE__,
+      start: {Task, :start_link, [fn -> :process.sleep(:infinity) end]},
+      type: :worker
+    }
   end
 
   def connect(map) do
