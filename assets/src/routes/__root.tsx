@@ -1,11 +1,13 @@
 import { createRootRouteWithContext, Link, Outlet, useLocation } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/router-devtools'
-import { Terminal, Users, LayoutDashboard, UserCircle, ClipboardList, Mail, Wifi, WifiOff, Menu, X, ChevronDown, Plus, FolderOpen, Play } from 'lucide-react'
+import { Terminal, Users, LayoutDashboard, UserCircle, ClipboardList, Mail, Wifi, WifiOff, Menu, X, ChevronDown, Plus, FolderOpen, Play, Search } from 'lucide-react'
 import type { QueryClient } from '@tanstack/react-query'
 import { useEffect, useState, createContext, useContext } from 'react'
 import { useProjects, type Project } from '../api/queries'
 import { NotificationProvider, useNotifications } from '../components/Notifications'
 import { ProjectCreateModal } from '../components/ProjectCreateModal'
+import { CommandPalette } from '../components/CommandPalette'
+import { TerminalPanel } from '../components/TerminalPanel'
 import { cn } from '../lib/cn'
 
 interface MyRouterContext {
@@ -45,6 +47,7 @@ function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [createProjectOpen, setCreateProjectOpen] = useState(false)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const location = useLocation()
 
   // Set first project as active when projects load
@@ -273,6 +276,22 @@ function AppShell() {
               {activeProject?.path || '~/workspace'}
             </span>
           </div>
+          
+          <div className="flex-1 flex justify-center px-4 max-w-md mx-auto hidden md:flex">
+             <button 
+                onClick={() => setCommandPaletteOpen(true)}
+                className="w-full max-w-sm flex items-center justify-between gap-3 px-3 py-1.5 bg-black/40 border border-tui-border rounded text-tui-dim hover:text-tui-text hover:border-tui-accent transition-all group"
+             >
+                <div className="flex items-center gap-2">
+                  <Search size={14} className="group-hover:text-tui-accent" />
+                  <span className="text-xs font-bold tracking-widest uppercase">Search_Commands...</span>
+                </div>
+                <div className="flex items-center gap-1">
+                   <kbd className="px-1.5 py-0.5 rounded border border-tui-border bg-tui-dim/10 text-[10px] group-hover:border-tui-accent group-hover:text-tui-accent transition-colors">⌘K</kbd>
+                </div>
+             </button>
+          </div>
+
           <div className="flex items-center gap-2 sm:gap-6 text-[10px] font-bold tracking-widest uppercase">
             <div className="flex items-center gap-2 sm:gap-3">
               <span className="text-tui-dim hidden sm:inline">UPLINK:</span>
@@ -322,6 +341,12 @@ function AppShell() {
         isOpen={createProjectOpen} 
         onClose={() => setCreateProjectOpen(false)} 
       />
+      <CommandPalette 
+        isOpen={commandPaletteOpen}
+        setIsOpen={setCommandPaletteOpen}
+        activeProjectId={activeProjectId}
+      />
+      {activeProjectId && <TerminalPanel projectId={activeProjectId} />}
       <TanStackRouterDevtools />
     </div>
     </ProjectContext.Provider>
