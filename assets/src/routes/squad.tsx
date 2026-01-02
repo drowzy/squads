@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { Users, Shield, Cpu, Activity, ChevronRight, ChevronDown, Plus, MoreVertical, Pencil, Trash2, UserPlus } from 'lucide-react'
+import { useNavigate, createFileRoute, Link } from '@tanstack/react-router'
+import { Users, Shield, Cpu, Activity, ChevronRight, ChevronDown, Plus, MoreVertical, Pencil, Trash2, UserPlus, Play, StopCircle, MessageSquare, Eye } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   useSquads,
@@ -10,6 +10,9 @@ import {
   useModels,
   useSyncProviders,
   useAgentRolesConfig,
+  useSessions,
+  useCreateSession,
+  useStopSession,
   type Squad,
   type Agent,
 } from '../api/queries'
@@ -27,6 +30,7 @@ function SquadOverview() {
   const { activeProject, isLoading: projectsLoading } = useActiveProject()
   const projectId = activeProject?.id ?? ''
   const { data: squads, isLoading: squadsLoading } = useSquads(projectId)
+  const { data: sessions = [] } = useSessions()
   const [createModalOpen, setCreateModalOpen] = useState(false)
 
   const isLoading = projectsLoading || (projectId && squadsLoading)
@@ -35,7 +39,7 @@ function SquadOverview() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase">Squad_Command</h2>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase">Squad Command</h2>
           <p className="text-tui-dim text-xs md:text-sm italic">Manage squads and their agents</p>
         </div>
         <div className="flex items-center gap-3">
@@ -65,19 +69,19 @@ function SquadOverview() {
       {isLoading ? (
         <div className="p-12 border border-tui-border border-dashed text-center space-y-4 bg-tui-dim/5">
           <div className="text-tui-dim animate-pulse uppercase tracking-widest text-xs">
-            Scanning_Neural_Networks...
+            Scanning neural networks...
           </div>
         </div>
       ) : !projectId ? (
         <div className="p-12 border border-tui-border border-dashed text-center space-y-4 bg-tui-dim/5">
           <div className="text-tui-dim uppercase tracking-widest text-xs">
-            Select_A_Project_First
+            Select a project first
           </div>
         </div>
       ) : squads && squads.length > 0 ? (
         <div className="space-y-4">
           {squads.map((squad) => (
-            <SquadCard key={squad.id} squad={squad} projectId={projectId} />
+            <SquadCard key={squad.id} squad={squad} projectId={projectId} sessions={sessions} />
           ))}
         </div>
       ) : (
@@ -88,7 +92,7 @@ function SquadOverview() {
             </div>
           </div>
           <div className="space-y-2">
-            <h3 className="text-lg font-bold uppercase tracking-widest">No_Squads_Deployed</h3>
+            <h3 className="text-lg font-bold uppercase tracking-widest">No Squads Deployed</h3>
             <p className="text-tui-dim text-sm max-w-md mx-auto italic">
               Deploy your first squad to begin coordinating agent operations.
             </p>
@@ -117,7 +121,7 @@ function SquadOverview() {
   )
 }
 
-function SquadCard({ squad, projectId }: { squad: Squad; projectId: string }) {
+function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: string; sessions: any[] }) {
   const [expanded, setExpanded] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [createAgentModalOpen, setCreateAgentModalOpen] = useState(false)
@@ -281,9 +285,17 @@ function SquadCard({ squad, projectId }: { squad: Squad; projectId: string }) {
       {expanded && (
         <div className="border-t border-tui-border">
           {agents.length > 0 ? (
-            agents.map((agent) => (
-              <AgentRow key={agent.id} agent={agent} squadId={squad.id} />
-            ))
+            agents.map((agent) => {
+              const activeSession = sessions.find(s => s.agent_id === agent.id && s.status === 'running')
+              return (
+                <AgentRow 
+                  key={agent.id} 
+                  agent={agent} 
+                  squadId={squad.id} 
+                  activeSession={activeSession}
+                />
+              )
+            })
           ) : (
             <div className="p-4 text-center text-xs text-tui-dim space-y-2">
               <div className="uppercase tracking-widest">No agents in this squad</div>
@@ -309,10 +321,13 @@ function SquadCard({ squad, projectId }: { squad: Squad; projectId: string }) {
   )
 }
 
-function AgentRow({ agent, squadId }: { agent: Agent; squadId: string }) {
+function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: string; activeSession?: any }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const deleteAgent = useDeleteAgent()
+  const createSession = useCreateSession()
+  const stopSession = useStopSession()
   const { addNotification } = useNotifications()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -340,6 +355,52 @@ function AgentRow({ agent, squadId }: { agent: Agent; squadId: string }) {
     offline: 'OFFLINE',
   }
 
+  const handleStartSession = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    try {
+      await createSession.mutateAsync({
+        agent_id: agent.id,
+        title: `Session for ${agent.name}`,
+      })
+      addNotification({
+        type: 'success',
+        title: 'Session Started',
+        message: `Session started for ${agent.name}.`
+      })
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Start Failed',
+        message: error instanceof Error ? error.message : 'Failed to start session'
+      })
+    }
+  }
+
+  const handleStopSession = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!activeSession) return
+    if (!confirm('Are you sure you want to terminate this session? The agent will stop working immediately.')) return
+
+    try {
+      await stopSession.mutateAsync({ session_id: activeSession.id })
+      addNotification({
+        type: 'success',
+        title: 'Session Terminated',
+        message: 'The agent session has been stopped successfully.'
+      })
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Action Failed',
+        message: error instanceof Error ? error.message : 'Failed to stop session'
+      })
+    }
+  }
+
   const handleDelete = async () => {
     if (!confirm(`Delete agent "${agent.name}"? This cannot be undone.`)) return
     
@@ -360,33 +421,63 @@ function AgentRow({ agent, squadId }: { agent: Agent; squadId: string }) {
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 pl-14 hover:bg-tui-dim/10 transition-colors group border-b border-tui-border/50 last:border-b-0">
-      <Link
-        to="/agent/$agentId"
-        params={{ agentId: agent.id }}
-        className="flex items-center gap-3 flex-1 min-w-0"
-      >
-        <div className="w-8 h-8 border border-tui-border flex items-center justify-center bg-tui-bg shrink-0 group-hover:border-tui-accent">
+    <div className="flex items-center gap-3 px-3 md:px-4 py-3 md:pl-14 pl-3 hover:bg-tui-dim/10 transition-colors group border-b border-tui-border/50 last:border-b-0">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-8 h-8 md:w-8 md:h-8 w-10 h-10 border border-tui-border flex items-center justify-center bg-tui-bg shrink-0 group-hover:border-tui-accent">
           <Cpu className="text-tui-text" size={14} />
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-bold uppercase truncate">{agent.name}</span>
-            <span className="text-xs text-tui-dim">({agent.slug})</span>
+          <div className="flex flex-col md:flex-row md:items-center gap-0 md:gap-2">
+            <span className="font-bold uppercase truncate text-sm md:text-base">{agent.name}</span>
+            <span className="text-xs text-tui-dim truncate">({agent.slug})</span>
           </div>
           {agent.model && (
-            <div className="text-xs text-tui-dim truncate">{agent.model}</div>
+            <div className="text-xs text-tui-dim truncate hidden md:block">{agent.model}</div>
           )}
         </div>
+      </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <div className={cn("text-xs font-bold tracking-widest", statusColors[agent.status])}>
-            {statusLabels[agent.status]}
-          </div>
-          <ChevronRight size={14} className="text-tui-dim group-hover:text-tui-accent" />
-        </div>
-      </Link>
+      <div className="flex items-center gap-3 shrink-0">
+        {activeSession ? (
+          <>
+            <div className="text-xs font-bold tracking-widest text-tui-accent animate-pulse hidden md:block">
+              ACTIVE
+            </div>
+            <Link
+              to="/agent/$agentId"
+              params={{ agentId: agent.id }}
+              className="p-1.5 md:p-1.5 p-2 text-tui-dim hover:text-tui-accent hover:bg-tui-dim/20 rounded focus:outline-none focus:ring-1 focus:ring-tui-accent z-10"
+              title="Open Chat"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MessageSquare size={16} className="md:w-4 md:h-4 w-5 h-5" />
+            </Link>
+            <button
+              onClick={handleStopSession}
+              disabled={stopSession.isPending}
+              className="p-1.5 md:p-1.5 p-2 text-ctp-red hover:bg-ctp-red/10 rounded focus:outline-none focus:ring-1 focus:ring-ctp-red"
+              title="Stop Session"
+            >
+              <StopCircle size={16} className="md:w-4 md:h-4 w-5 h-5" />
+            </button>
+          </>
+        ) : (
+          <>
+            <div className={cn("text-xs font-bold tracking-widest hidden md:block", statusColors[agent.status])}>
+              {statusLabels[agent.status]}
+            </div>
+            <button
+              onClick={handleStartSession}
+              disabled={createSession.isPending}
+              className="p-1.5 md:p-1.5 p-2 text-tui-accent hover:bg-tui-accent/10 rounded focus:outline-none focus:ring-1 focus:ring-tui-accent opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Start Session"
+            >
+              <Play size={16} className="md:w-4 md:h-4 w-5 h-5" />
+            </button>
+          </>
+        )}
+      </div>
 
       <div className="relative shrink-0">
         <button
@@ -416,6 +507,30 @@ function AgentRow({ agent, squadId }: { agent: Agent; squadId: string }) {
               role="menu"
               className="absolute right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg min-w-[120px]"
             >
+              <button
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMenuOpen(false)
+                  navigate({ to: '/agent/$agentId', params: { agentId: agent.id } })
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
+              >
+                <Eye size={14} aria-hidden="true" />
+                Details
+              </button>
+              <button
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMenuOpen(false)
+                  // TODO: Implement edit agent
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
+              >
+                <Pencil size={14} aria-hidden="true" />
+                Edit
+              </button>
               <button
                 role="menuitem"
                 onClick={(e) => {
