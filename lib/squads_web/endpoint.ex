@@ -15,9 +15,7 @@ defmodule SquadsWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
-  socket "/socket", SquadsWeb.EventSocket,
-    websocket: true,
-    longpoll: false
+  plug SquadsWeb.EventSocketPlug
 
   # Serve at "/" the static files from "priv/static" directory.
   #

@@ -1,24 +1,8 @@
 defmodule SquadsWeb.EventSocket do
-  @behaviour Phoenix.Socket.Transport
+  @behaviour WebSock
 
-  def child_spec(_opts) do
-    # We won't spawn any process, so this can return a dummy task
-    %{
-      id: __MODULE__,
-      start: {Task, :start_link, [fn -> :process.sleep(:infinity) end]},
-      type: :worker
-    }
-  end
-
-  def connect(map) do
-    # You can inspect query params here if needed
-    # %{params: %{"token" => token}} = map
+  def init(_args) do
     {:ok, %{project_id: nil}}
-  end
-
-  def init(state) do
-    # Send a welcome message
-    {:ok, state}
   end
 
   def handle_in({text, _opts}, state) do
@@ -27,8 +11,8 @@ defmodule SquadsWeb.EventSocket do
         # Subscribe to the project topic
         Phoenix.PubSub.subscribe(Squads.PubSub, "project:#{project_id}:events")
 
-        {:reply, :ok, {:text, Jason.encode!(%{type: "joined", project_id: project_id})},
-         Map.put(state, :project_id, project_id)}
+        reply = Jason.encode!(%{type: "joined", project_id: project_id})
+        {:reply, :text, reply, Map.put(state, :project_id, project_id)}
 
       _ ->
         {:ok, state}
@@ -48,7 +32,7 @@ defmodule SquadsWeb.EventSocket do
         }
       })
 
-    {:push, {:text, payload}, state}
+    {:push, :text, payload, state}
   end
 
   def handle_info(_, state), do: {:ok, state}
