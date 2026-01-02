@@ -6,7 +6,7 @@ defmodule SquadsWeb.EventSocketPlug do
   def call(conn, _opts) do
     if conn.request_path == "/socket/websocket" do
       conn
-      |> WebSockAdapter.upgrade(SquadsWeb.EventSocket, [], timeout: 60_000)
+      |> WebSockAdapter.upgrade(SquadsWeb.EventSocket, [], compress: false, timeout: 60_000)
       |> halt()
     else
       conn
