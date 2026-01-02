@@ -262,12 +262,10 @@ defmodule Squads.Tickets do
              worktree_name
            ])
          ) do
-      # If worktree exists, we might want to merge it. 
-      # For now, let's just ensure we close the ticket in Beads first.
+      # If worktree exists, we might want to merge it.
+      # We perform the close first to ensure state consistency, then handle worktree cleanup synchronously.
       case perform_close(ticket, path, reason) do
         {:ok, updated} ->
-          # Fire and forget worktree cleanup for now, or handle it synchronously?
-          # Best to handle it synchronously to ensure state consistency if possible.
           Squads.Worktrees.merge_and_cleanup(ticket.project_id, worktree_name)
           {:ok, updated}
 

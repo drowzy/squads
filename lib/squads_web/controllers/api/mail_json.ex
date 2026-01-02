@@ -23,10 +23,24 @@ defmodule SquadsWeb.API.MailJSON do
       sender: sender(message.sender),
       sender_name:
         message.author_name || if(message.sender, do: message.sender.name, else: "Unknown"),
+      to:
+        Enum.filter(message.recipients, &(&1.recipient_type == "to"))
+        |> Enum.map(&recipient_name/1),
+      cc:
+        Enum.filter(message.recipients, &(&1.recipient_type == "cc"))
+        |> Enum.map(&recipient_name/1),
       recipients: Enum.map(message.recipients, &recipient/1),
       inserted_at: message.inserted_at,
       updated_at: message.updated_at
     }
+  end
+
+  defp recipient_name(r) do
+    if Ecto.assoc_loaded?(r.agent) && r.agent do
+      r.agent.name
+    else
+      r.agent_id
+    end
   end
 
   defp sender(nil), do: nil
@@ -55,14 +69,21 @@ defmodule SquadsWeb.API.MailJSON do
         msgs = thread.messages
         count = length(msgs)
 
-        # For now we don't have per-user read state on threads easily available here without more context
-        # So we'll just placeholder unread_count or calculate it if we had a current user context
+        # Per-user read state on threads is not currently available in this context.
+        # Returning 0 as the unread count. Future implementation will calculate this based on user context.
         unread = 0
 
         parts =
           msgs
           |> Enum.flat_map(fn m ->
-            [m.sender_id] ++ Enum.map(m.recipients || [], & &1.agent_id)
+            sender_name = m.author_name || (m.sender && m.sender.name) || "Unknown"
+
+            recipients =
+              Enum.map(m.recipients || [], fn r ->
+                if Ecto.assoc_loaded?(r.agent) && r.agent, do: r.agent.name, else: "Unknown"
+              end)
+
+            [sender_name] ++ recipients
           end)
           |> Enum.uniq()
           |> Enum.reject(&is_nil/1)

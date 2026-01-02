@@ -6,12 +6,14 @@ defmodule SquadsWeb.API.MCPController do
   action_fallback SquadsWeb.FallbackController
 
   def index(conn, _params) do
-    # Placeholder for listing MCP servers and their status
+    # Returns an empty JSON object as the listing of MCP servers and their status
+    # is not yet implemented. Future implementation will query the `mcp_servers` table.
     json(conn, %{})
   end
 
   def create(conn, %{"name" => _name, "config" => _config}) do
-    # Placeholder for adding an MCP server
+    # Returns an empty JSON object as adding an MCP server is not yet implemented.
+    # Future implementation will insert a new record into the `mcp_servers` table.
     json(conn, %{})
   end
 
@@ -35,12 +37,14 @@ defmodule SquadsWeb.API.MCPController do
   end
 
   def auth(conn, _params) do
-    # Placeholder for MCP auth flow
+    # Returns a success status as the MCP auth flow is not yet implemented.
+    # Future implementation will handle the authentication handshake with the MCP server.
     json(conn, %{status: "ok"})
   end
 
   def auth_callback(conn, _params) do
-    # Placeholder for MCP auth callback
+    # Returns a success status as the MCP auth callback is not yet implemented.
+    # Future implementation will process the callback from the MCP server authentication.
     json(conn, %{status: "ok"})
   end
 end

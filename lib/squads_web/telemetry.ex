@@ -87,7 +87,7 @@ defmodule SquadsWeb.Telemetry do
     [
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
-      # {SquadsWeb, :count_users, []}
+      # Example: {SquadsWeb, :count_users, []}
     ]
   end
 end

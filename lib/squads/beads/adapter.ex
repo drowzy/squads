@@ -102,16 +102,15 @@ defmodule Squads.Beads.Adapter do
   end
 
   defp run_cmd(path, args) do
-    # Ensure .beads directory exists implicitly? 
-    # Actually, let's catch the "no beads database found" error and provide a better message
+    # Implicitly relies on the .beads directory existing or the command failing gracefully.
+    # Catches the "no beads database found" error to provide a specific error return.
     case System.cmd(@bd_path, args, cd: path, stderr_to_stdout: true) do
       {output, 0} ->
         {:ok, output}
 
       {output, _status} ->
         if String.contains?(output, "no beads database found") do
-          # We could optionally auto-init here if that's desired behavior, 
-          # but for now let's return a specific error
+          # We return a specific error here to allow the caller to decide on auto-initialization or other handling.
           {:error, :no_beads_db}
         else
           {:error, output}
