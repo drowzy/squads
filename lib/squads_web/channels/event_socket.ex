@@ -12,7 +12,7 @@ defmodule SquadsWeb.EventSocket do
         Phoenix.PubSub.subscribe(Squads.PubSub, "project:#{project_id}:events")
 
         reply = Jason.encode!(%{type: "joined", project_id: project_id})
-        {:reply, :text, reply, Map.put(state, :project_id, project_id)}
+        {:push, {:text, reply}, Map.put(state, :project_id, project_id)}
 
       _ ->
         {:ok, state}
@@ -32,7 +32,7 @@ defmodule SquadsWeb.EventSocket do
         }
       })
 
-    {:push, :text, payload, state}
+    {:push, {:text, payload}, state}
   end
 
   def handle_info(_, state), do: {:ok, state}
