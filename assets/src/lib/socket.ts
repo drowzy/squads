@@ -1,8 +1,4 @@
-import { Socket, Channel } from 'phoenix'
-import { useEffect, useState, useRef } from 'react'
-
-const socket = new Socket('/socket')
-socket.connect()
+import { useState, useEffect, useRef } from 'react'
 
 interface UseProjectEventsOptions {
   projectId?: string
@@ -10,38 +6,64 @@ interface UseProjectEventsOptions {
 }
 
 export function useProjectEvents({ projectId, onEvent }: UseProjectEventsOptions) {
-  const channelRef = useRef<Channel | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+  const socketRef = useRef<WebSocket | null>(null)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
     if (!projectId) return
 
-    // Create channel
-    const channel = socket.channel(`project:${projectId}:events`, {})
-    channelRef.current = channel
+    const connect = () => {
+      // Use wss for https, ws for http
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${protocol}//${window.location.host}/socket/websocket`
+      
+      const ws = new WebSocket(wsUrl)
+      socketRef.current = ws
 
-    // Setup event listener
-    const ref = channel.on('event', (payload) => {
-      onEvent?.(payload)
-    })
-
-    // Join channel
-    channel.join()
-      .receive('ok', () => {
+      ws.onopen = () => {
         setIsConnected(true)
-        console.log(`Joined project:${projectId}:events`)
-      })
-      .receive('error', (resp) => {
-        console.error('Unable to join', resp)
-        setIsConnected(false)
-      })
+        // Send join message
+        ws.send(JSON.stringify({
+          type: 'join',
+          project_id: projectId
+        }))
+      }
 
-    // Cleanup
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'event') {
+            onEvent?.(data.data)
+          } else if (data.type === 'joined') {
+            console.log(`Joined project ${data.project_id}`)
+          }
+        } catch (err) {
+          console.error('Failed to parse websocket message', err)
+        }
+      }
+
+      ws.onclose = () => {
+        setIsConnected(false)
+        // Try to reconnect in 3 seconds
+        reconnectTimeoutRef.current = setTimeout(connect, 3000)
+      }
+
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err)
+        ws.close()
+      }
+    }
+
+    connect()
+
     return () => {
-      channel.off('event', ref)
-      channel.leave()
-      channelRef.current = null
-      setIsConnected(false)
+      if (socketRef.current) {
+        socketRef.current.close()
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
     }
   }, [projectId, onEvent]) // Re-connect if projectId changes
 
