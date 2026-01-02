@@ -1,22 +1,29 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import {
-  Terminal,
-  Archive,
-  Pencil,
-  Send,
-  Loader2,
+import { 
+  Terminal, 
+  Archive, 
+  Pencil, 
+  Send, 
+  Loader2, 
   ChevronRight,
+  Zap,
+  FileText,
+  Command
 } from 'lucide-react'
 import {
   useSessionMessages,
   useSendSessionPrompt,
+  useExecuteSessionCommand,
+  useRunSessionShell,
+  useProjectFiles,
   type Session,
   type SessionMessageEntry,
   type SessionMessagePart,
+  type SessionMessageToolPart,
   type SessionMessageInfo,
 } from '../api/queries'
 import { useNotifications } from './Notifications'
@@ -38,7 +45,17 @@ interface SessionChatProps {
   showHeader?: boolean
   /** Custom header content */
   headerContent?: React.ReactNode
+  /** Callback when /new command is triggered */
+  onNewSession?: () => void
 }
+
+const COMMANDS = [
+  { id: '/new', label: 'New Session', description: 'Start a fresh session for the agent' },
+  { id: '/compact', label: 'Compact', description: 'Force history compaction' },
+  { id: '/help', label: 'Help', description: 'Show available commands' },
+  { id: '/sessions', label: 'Sessions', description: 'List session history' },
+  { id: '/reset', label: 'Reset', description: 'Reset agent state' },
+]
 
 export function SessionChat({
   session,
@@ -48,11 +65,37 @@ export function SessionChat({
   showModeToggle = true,
   showHeader = true,
   headerContent,
+  onNewSession,
 }: SessionChatProps) {
   const [chatInput, setChatInput] = useState('')
+  const [autocomplete, setAutocomplete] = useState<{
+    active: boolean
+    trigger: '/' | '@' | null
+    query: string
+    index: number
+    position: { top: number; left: number }
+  }>({
+    active: false,
+    trigger: null,
+    query: '',
+    index: 0,
+    position: { top: 0, left: 0 }
+  })
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const autocompleteRef = useRef<HTMLDivElement | null>(null)
+
   const sendPrompt = useSendSessionPrompt()
+  const executeCommand = useExecuteSessionCommand()
+  const runShell = useRunSessionShell()
   const { addNotification } = useNotifications()
+
+  const { data: fileData } = useProjectFiles(session.project_id)
+  const projectFiles = useMemo(() => {
+    console.log('File data updated:', fileData)
+    return fileData?.files || []
+  }, [fileData])
 
   const { data: sessionMessages = [], isLoading: isLoadingMessages } = useSessionMessages(
     session.id,
@@ -63,30 +106,170 @@ export function SessionChat({
     }
   )
 
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [session.id, sessionMessages.length])
 
+  // Reset chat input and autocomplete when session changes
+  useEffect(() => {
+    setChatInput('')
+    setAutocomplete(prev => ({ ...prev, active: false }))
+  }, [session.id])
+
+  // Autocomplete logic
+  const filteredSuggestions = useMemo(() => {
+    if (!autocomplete.active) return []
+    
+    if (autocomplete.trigger === '/') {
+      return COMMANDS.filter(cmd => cmd.id.startsWith('/' + autocomplete.query))
+    }
+    
+    if (autocomplete.trigger === '@') {
+      const q = autocomplete.query.toLowerCase()
+      console.log('Filtering project files:', { q, totalFiles: projectFiles.length, files: projectFiles.slice(0, 5) })
+      return projectFiles
+        .filter(f => f.toLowerCase().includes(q))
+        .slice(0, 10) // Limit to 10 for performance
+        .map(f => ({ id: f, label: f, description: '' }))
+    }
+    
+    return []
+  }, [autocomplete.active, autocomplete.trigger, autocomplete.query, projectFiles])
+
+  const handleAutocompleteSelect = (suggestion: { id: string }) => {
+    const beforeTrigger = chatInput.substring(0, chatInput.lastIndexOf(autocomplete.trigger!, textareaRef.current?.selectionStart || 0))
+    const afterTrigger = chatInput.substring(textareaRef.current?.selectionStart || 0)
+    
+    const newValue = beforeTrigger + suggestion.id + ' ' + afterTrigger
+    setChatInput(newValue)
+    setAutocomplete(prev => ({ ...prev, active: false }))
+    
+    // Set focus back to textarea
+    setTimeout(() => {
+      textareaRef.current?.focus()
+      const newPos = beforeTrigger.length + suggestion.id.length + 1
+      textareaRef.current?.setSelectionRange(newPos, newPos)
+    }, 0)
+  }
+
+  const handleChatInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setChatInput(value)
+
+    const cursorPosition = e.target.selectionStart
+    const textBeforeCursor = value.substring(0, cursorPosition)
+    
+    const lastWordMatch = textBeforeCursor.match(/([/@])(\w*)$/)
+    
+    if (lastWordMatch) {
+      const trigger = lastWordMatch[1] as '/' | '@'
+      const query = lastWordMatch[2]
+      
+      console.log('Autocomplete triggered:', { trigger, query })
+
+      // Calculate position based on textarea and cursor
+      const rect = e.target.getBoundingClientRect()
+      const containerRect = messagesContainerRef.current?.getBoundingClientRect()
+      
+      setAutocomplete({
+        active: true,
+        trigger,
+        query,
+        index: 0,
+        position: {
+          top: rect.top - (containerRect?.top || 0),
+          left: 0
+        }
+      })
+    } else if (autocomplete.active) {
+      setAutocomplete(prev => ({ ...prev, active: false }))
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (autocomplete.active && filteredSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setAutocomplete(prev => ({ ...prev, index: (prev.index + 1) % filteredSuggestions.length }))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setAutocomplete(prev => ({ ...prev, index: (prev.index - 1 + filteredSuggestions.length) % filteredSuggestions.length }))
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        handleAutocompleteSelect(filteredSuggestions[autocomplete.index])
+      } else if (e.key === 'Escape') {
+        setAutocomplete(prev => ({ ...prev, active: false }))
+      }
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendPrompt()
+    }
+  }
+
   const handleSendPrompt = async () => {
-    if (!chatInput.trim()) return
+    const input = chatInput.trim()
+    if (!input) return
 
     try {
-      await sendPrompt.mutateAsync({
-        session_id: session.id,
-        prompt: chatInput.trim(),
-        agent: mode, // Send with current mode
-      })
+      if (input === '/new' && onNewSession) {
+        onNewSession()
+        setChatInput('')
+        return
+      }
+
+        if (input.startsWith('/')) {
+          const parts = input.split(' ')
+          const command = parts[0]
+          const args = parts.slice(1).join(' ')
+          const res = await executeCommand.mutateAsync({
+            session_id: session.id,
+            command,
+            arguments: args || undefined,
+            agent: mode,
+          })
+          if (res.output) {
+            addNotification({
+              type: 'success',
+              title: `Command Executed: ${command}`,
+              message: res.output.slice(0, 100) + (res.output.length > 100 ? '...' : ''),
+            })
+          }
+        } else if (input.startsWith('!')) {
+          const command = input.slice(1).trim()
+          const res = await runShell.mutateAsync({
+            session_id: session.id,
+            command,
+            agent: mode,
+          })
+          if (res.output) {
+            addNotification({
+              type: 'success',
+              title: 'Shell Command Output',
+              message: res.output.slice(0, 100) + (res.output.length > 100 ? '...' : ''),
+            })
+          }
+        } else {
+        await sendPrompt.mutateAsync({
+          session_id: session.id,
+          prompt: input,
+          agent: mode, // Send with current mode
+        })
+      }
       setChatInput('')
     } catch (error) {
       addNotification({
         type: 'error',
-        title: 'Message Failed',
-        message: error instanceof Error ? error.message : 'Failed to send message',
+        title: 'Action Failed',
+        message: error instanceof Error ? error.message : 'Failed to process message',
       })
     }
   }
 
   const isActive = session.status === 'running' || session.status === 'pending'
+  const isReadOnly = !isActive
+  const isPending = sendPrompt.isPending || executeCommand.isPending || runShell.isPending
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
@@ -106,6 +289,11 @@ export function SessionChat({
             >
               {isActive ? 'LIVE' : 'OFFLINE'}
             </span>
+            {isReadOnly && (
+              <span className="px-2 py-0.5 border border-amber-900/50 text-amber-500/80 bg-amber-950/10">
+                READ_ONLY
+              </span>
+            )}
             <span className="text-tui-dim hidden sm:inline font-mono">
               session/{session.id.slice(0, 8)}
             </span>
@@ -114,7 +302,10 @@ export function SessionChat({
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-black/40 space-y-3">
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-3 md:p-4 bg-black/40 space-y-3 relative"
+      >
         {isLoadingMessages ? (
           <div className="flex items-center justify-center text-tui-dim text-xs uppercase tracking-widest">
             Loading chat...
@@ -136,20 +327,53 @@ export function SessionChat({
 
       {/* Composer */}
       {isActive && (
-        <div className="border-t border-tui-border p-3 md:p-4 bg-tui-bg/60 shrink-0">
+        <div className="border-t border-tui-border p-3 md:p-4 bg-tui-bg/60 shrink-0 relative">
           <div className="flex flex-col gap-2">
             {/* Mode Toggle */}
             {/* Moved into textarea footer for better proximity */}
             
+            {/* Autocomplete Menu */}
+            {autocomplete.active && filteredSuggestions.length > 0 && (
+              <div 
+                ref={autocompleteRef}
+                style={{ left: autocomplete.position.left }}
+                className="absolute bottom-full mb-1 w-64 max-h-[40vh] overflow-y-auto bg-tui-bg border border-tui-accent/40 shadow-xl z-50 font-mono text-xs"
+              >
+                <div className="p-1 border-b border-tui-border bg-tui-dim/10 text-[9px] uppercase tracking-widest text-tui-dim flex justify-between items-center">
+                  <span>Suggestions for {autocomplete.trigger}{autocomplete.query}</span>
+                  <span>{filteredSuggestions.length} found</span>
+                </div>
+                {filteredSuggestions.map((suggestion, idx) => (
+                  <button
+                    key={suggestion.id}
+                    onClick={() => handleAutocompleteSelect(suggestion)}
+                    className={cn(
+                      "w-full text-left px-3 py-2 flex flex-col gap-0.5 border-b border-tui-border/30 last:border-0",
+                      autocomplete.index === idx ? "bg-tui-accent text-tui-bg" : "hover:bg-tui-accent/10"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 font-bold">
+                      {autocomplete.trigger === '/' ? <Command size={10} /> : <FileText size={10} />}
+                      {suggestion.id}
+                    </div>
+                    {suggestion.description && (
+                      <div className={cn(
+                        "text-[10px] uppercase opacity-70",
+                        autocomplete.index === idx ? "text-tui-bg" : "text-tui-dim"
+                      )}>
+                        {suggestion.description}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <textarea
+              ref={textareaRef}
               value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSendPrompt()
-                }
-              }}
+              onChange={handleChatInputChange}
+              onKeyDown={handleKeyDown}
               placeholder="Type a message..."
               className="w-full min-h-[80px] bg-black/40 border border-tui-border p-3 text-sm focus:border-tui-accent outline-none font-mono resize-none"
             />
@@ -164,10 +388,10 @@ export function SessionChat({
               </div>
               <button
                 onClick={handleSendPrompt}
-                disabled={sendPrompt.isPending || !chatInput.trim()}
+                disabled={isPending || !chatInput.trim()}
                 className="bg-tui-text text-tui-bg px-4 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white transition-colors disabled:opacity-50"
               >
-                {sendPrompt.isPending ? (
+                {isPending ? (
                   <Loader2 size={14} className="animate-spin" />
                 ) : (
                   <Send size={14} />
@@ -300,18 +524,23 @@ export function ChatMessage({ message }: { message: SessionMessageEntry }) {
         {/* Reasoning (Collapsible) */}
         {parts.reasoning.length > 0 && (
           <div className="mt-3">
-            <details className="group border border-tui-border/40 bg-black/20 rounded-sm">
-              <summary className="cursor-pointer p-2 text-[10px] uppercase tracking-widest text-tui-dim hover:text-tui-text transition-colors flex items-center gap-2 select-none">
-                <ChevronRight
-                  size={12}
-                  className="transition-transform group-open:rotate-90"
-                />
-                <span>Reasoning Process</span>
-                {tokens?.reasoning ? (
-                  <span className="opacity-50">({tokens.reasoning} tokens)</span>
-                ) : null}
+            <details className="group border border-tui-accent/20 bg-tui-accent/5 rounded-sm">
+              <summary className="cursor-pointer p-2 text-[10px] uppercase tracking-widest text-tui-accent hover:text-white transition-colors flex items-center justify-between select-none">
+                <div className="flex items-center gap-2">
+                  <Zap size={12} className="animate-pulse" />
+                  <span>Neural_Link / Reasoning_HUD</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {tokens?.reasoning ? (
+                    <span className="opacity-50 font-mono text-[9px]">{tokens.reasoning} TKNS</span>
+                  ) : null}
+                  <ChevronRight
+                    size={12}
+                    className="transition-transform group-open:rotate-90 text-tui-dim"
+                  />
+                </div>
               </summary>
-              <div className="p-3 pt-0 text-[11px] text-tui-dim/80 font-mono whitespace-pre-wrap border-t border-tui-border/20 mt-1">
+              <div className="p-3 pt-1 text-[11px] text-tui-accent/90 font-mono whitespace-pre-wrap border-t border-tui-accent/10 mt-1 leading-relaxed bg-black/20">
                 {parts.reasoning.join('\n\n')}
               </div>
             </details>
@@ -322,7 +551,7 @@ export function ChatMessage({ message }: { message: SessionMessageEntry }) {
         {parts.tools.length > 0 && (
           <div className="mt-4 space-y-3">
             {parts.tools.map((tool, index) => (
-              <ToolPartBlock key={tool.id ?? `${tool.tool}-${index}`} part={tool} />
+              <ToolPartBlock key={tool.id ?? `${(tool as any).tool}-${index}`} part={tool} />
             ))}
           </div>
         )}
@@ -389,11 +618,12 @@ export function ChatMessage({ message }: { message: SessionMessageEntry }) {
 
 function MarkdownRenderer({ content }: { content: string }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        code(props) {
-          const { children, className, node, ...rest } = props
+    <div className="prose prose-invert prose-sm max-w-none break-words">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code(props) {
+          const { children, className, ...rest } = props
           const match = /language-(\w+)/.exec(className || '')
           return match ? (
             <SyntaxHighlighter
@@ -409,7 +639,7 @@ function MarkdownRenderer({ content }: { content: string }) {
               {String(children).replace(/\n$/, '')}
             </SyntaxHighlighter>
           ) : (
-            <code className="bg-tui-dim/20 px-1 rounded text-tui-accent font-mono" {...rest}>
+            <code className={cn("bg-tui-dim/20 px-1 rounded text-tui-accent font-mono", className)} {...rest}>
               {children}
             </code>
           )
@@ -455,21 +685,19 @@ function MarkdownRenderer({ content }: { content: string }) {
           )
         },
       }}
-      className="prose prose-invert prose-sm max-w-none break-words"
-    >
-      {content}
-    </ReactMarkdown>
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   )
 }
 
 function ToolPartBlock({ part }: { part: SessionMessagePart }) {
   if (part.type !== 'tool') return null
-  const toolPart = part as {
-    tool?: string
-    state?: { status?: string; title?: string; input?: Record<string, unknown>; output?: string; error?: string }
-  }
+  const toolPart = part as SessionMessageToolPart
+  const toolName = toolPart.tool
   const status = toolPart.state?.status || 'unknown'
-  const title = toolPart.state?.title || toolPart.tool || 'tool'
+  const title = toolPart.state?.title || toolName || 'tool'
   const input = toolPart.state?.input
   const output = toolPart.state?.output
   const error = toolPart.state?.error

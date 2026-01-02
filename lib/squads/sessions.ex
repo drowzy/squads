@@ -302,7 +302,7 @@ defmodule Squads.Sessions do
   @doc """
   Stops a running session by aborting it on OpenCode.
   """
-  def stop_session(session, exit_code \\ 0) do
+  def stop_session(session, exit_code \\ 0, opts \\ []) do
     cond do
       session.status not in ["running", "paused"] ->
         {:error, :not_running}
@@ -311,27 +311,51 @@ defmodule Squads.Sessions do
         # No OpenCode session, just update local state
         session
         |> Session.finish_changeset(exit_code)
+        |> add_termination_metadata(opts)
         |> Repo.update()
 
       true ->
-        opts = with_base_url(session, [])
+        opencode_opts = with_base_url(session, [])
 
         # Abort OpenCode session first
-        case OpenCodeClient.abort_session(session.opencode_session_id, opts) do
+        case OpenCodeClient.abort_session(session.opencode_session_id, opencode_opts) do
           {:ok, _} ->
             session
             |> Session.finish_changeset(exit_code)
+            |> add_termination_metadata(opts)
             |> Repo.update()
 
           {:error, {:not_found, _}} ->
             # Session already gone on OpenCode side
             session
             |> Session.finish_changeset(exit_code)
+            |> add_termination_metadata(opts)
             |> Repo.update()
 
           {:error, reason} ->
             {:error, {:opencode_error, reason}}
         end
+    end
+  end
+
+  defp add_termination_metadata(changeset, opts) do
+    terminated_by = opts[:terminated_by]
+    reason = opts[:reason]
+
+    if terminated_by || reason do
+      metadata = Ecto.Changeset.get_field(changeset, :metadata) || %{}
+
+      metadata =
+        metadata
+        |> Map.put("terminated_at", DateTime.utc_now() |> DateTime.to_iso8601())
+        |> then(fn m ->
+          if terminated_by, do: Map.put(m, "terminated_by", terminated_by), else: m
+        end)
+        |> then(fn m -> if reason, do: Map.put(m, "termination_reason", reason), else: m end)
+
+      Ecto.Changeset.put_change(changeset, :metadata, metadata)
+    else
+      changeset
     end
   end
 
@@ -372,6 +396,33 @@ defmodule Squads.Sessions do
     else
       {:error, :not_paused}
     end
+  end
+
+  @doc """
+  Ensures an agent has a fresh session.
+  If an active session exists, it stops it first.
+  """
+  def new_session_for_agent(agent_id, attrs \\ %{}) do
+    Repo.transaction(fn ->
+      # 1. Find and stop active session if exists
+      active_session =
+        Session
+        |> where([s], s.agent_id == ^agent_id and s.status in ["running", "paused"])
+        |> Repo.one()
+
+      if active_session do
+        case stop_session(active_session, 0, terminated_by: "user", reason: "Started new session") do
+          {:ok, _} -> :ok
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end
+
+      # 2. Start new session
+      case create_and_start_session(Map.put(attrs, :agent_id, agent_id)) do
+        {:ok, session} -> session
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
   # ============================================================================
@@ -531,6 +582,10 @@ defmodule Squads.Sessions do
         end
 
       _ ->
+        Logger.debug(
+          "Command not matched in squads context: #{command}. Dispatching to OpenCode."
+        )
+
         cond do
           is_nil(session.opencode_session_id) ->
             {:error, :no_opencode_session}
@@ -540,6 +595,10 @@ defmodule Squads.Sessions do
 
           true ->
             opts = with_base_url(session, Keyword.merge(params, opencode_opts))
+
+            Logger.debug(
+              "Executing command #{command} on session #{session.opencode_session_id} with opts: #{inspect(opts)}"
+            )
 
             OpenCodeClient.execute_command(
               session.opencode_session_id,
@@ -717,13 +776,18 @@ defmodule Squads.Sessions do
   defp map_opencode_status(%{"status" => "aborted"}), do: "cancelled"
 
   defp get_base_url_for_session(session) do
+    Logger.debug("Getting base URL for session #{session.id}")
+
     with agent_id when not is_nil(agent_id) <- session.agent_id,
          agent when not is_nil(agent) <- Repo.get(Agents.Agent, agent_id),
          squad when not is_nil(squad) <- Repo.get(Squads.Squads.Squad, agent.squad_id),
          {:ok, base_url} <- Squads.OpenCode.Server.get_url(squad.project_id) do
+      Logger.debug("Found base URL for project #{squad.project_id}: #{base_url}")
       base_url
     else
-      _ -> nil
+      err ->
+        Logger.error("Failed to get base URL for session #{session.id}: #{inspect(err)}")
+        nil
     end
   end
 

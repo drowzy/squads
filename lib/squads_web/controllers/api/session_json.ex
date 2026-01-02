@@ -20,9 +20,12 @@ defmodule SquadsWeb.API.SessionJSON do
   end
 
   defp data(%Session{} = session) do
+    session = Squads.Repo.preload(session, agent: [squad: :project])
+
     %{
       id: session.id,
       agent_id: session.agent_id,
+      project_id: get_project_id(session),
       opencode_session_id: session.opencode_session_id,
       ticket_key: session.ticket_key,
       status: session.status,
@@ -36,4 +39,7 @@ defmodule SquadsWeb.API.SessionJSON do
       updated_at: session.updated_at
     }
   end
+
+  defp get_project_id(%{agent: %{squad: %{project: %{id: id}}}}), do: id
+  defp get_project_id(_), do: nil
 end

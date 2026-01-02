@@ -30,6 +30,8 @@ defmodule Squads.Sessions.Session do
 
     belongs_to :agent, Agent
     belongs_to :ticket, Ticket
+    has_one :squad, through: [:agent, :squad]
+    has_one :project, through: [:agent, :squad, :project]
     has_many :events, Event
 
     timestamps(type: :utc_datetime)
