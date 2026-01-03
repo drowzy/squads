@@ -1,14 +1,16 @@
 import { createRootRouteWithContext, Link, Outlet, useLocation } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/router-devtools'
-import { Terminal, Users, LayoutDashboard, UserCircle, ClipboardList, Mail, Wifi, WifiOff, Menu, X, ChevronDown, Plus, FolderOpen, Play, Search } from 'lucide-react'
+import { Terminal, Users, LayoutDashboard, UserCircle, ClipboardList, Mail, Wifi, WifiOff, Menu, X, ChevronDown, Plus, FolderOpen, Play, Search, Network } from 'lucide-react'
 import type { QueryClient } from '@tanstack/react-query'
 import { useEffect, useState, createContext, useContext } from 'react'
-import { useProjects, type Project } from '../api/queries'
+import { useProjects, useDeleteProject, type Project } from '../api/queries'
+import { API_BASE } from '../api/client'
 import { NotificationProvider, useNotifications } from '../components/Notifications'
 import { ProjectCreateModal } from '../components/ProjectCreateModal'
 import { CommandPalette } from '../components/CommandPalette'
 import { TerminalPanel } from '../components/TerminalPanel'
 import { cn } from '../lib/cn'
+import { Trash2 } from 'lucide-react'
 
 interface MyRouterContext {
   queryClient: QueryClient
@@ -42,13 +44,18 @@ function AppShell() {
   const { queryClient } = Route.useRouteContext()
   const { addNotification } = useNotifications()
   const { data: projects, isLoading: projectsLoading } = useProjects()
+  const deleteProject = useDeleteProject()
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [sseStatus, setSseStatus] = useState<'connecting' | 'connected' | 'error'>('connecting')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [createProjectOpen, setCreateProjectOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [opsExpanded, setOpsExpanded] = useState(false)
+  const [statusOpen, setStatusOpen] = useState(false)
   const location = useLocation()
+  const operationsRoutes = ['/agent', '/review', '/events', '/nodes', '/fleet']
+  const isOperationsRoute = operationsRoutes.some((path) => location.pathname.startsWith(path))
 
   // Set first project as active when projects load
   useEffect(() => {
@@ -56,6 +63,12 @@ function AppShell() {
       setActiveProjectId(projects[0].id)
     }
   }, [projects, activeProjectId])
+
+  useEffect(() => {
+    if (isOperationsRoute) {
+      setOpsExpanded(true)
+    }
+  }, [isOperationsRoute])
 
   const activeProject = projects?.find(p => p.id === activeProjectId) ?? null
 
@@ -70,6 +83,7 @@ function AppShell() {
         setSidebarOpen(false)
         setProjectDropdownOpen(false)
         setCreateProjectOpen(false)
+        setStatusOpen(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -79,8 +93,7 @@ function AppShell() {
   useEffect(() => {
     if (!activeProjectId) return
 
-    const baseUrl = import.meta.env.VITE_API_URL || '/api'
-    const eventSource = new EventSource(`${baseUrl}/projects/${activeProjectId}/events/stream`)
+    const eventSource = new EventSource(`${API_BASE}/projects/${activeProjectId}/events/stream`)
 
     eventSource.onopen = () => {
       setSseStatus('connected')
@@ -89,10 +102,9 @@ function AppShell() {
     eventSource.onmessage = (event) => {
       const payload = JSON.parse(event.data)
       if (payload.data) {
-        // Invalidate relevant queries based on event kind
-        const kind = payload.data.kind
+        const rawKind = payload.data.kind
+        const kind = rawKind.replace(/^(\w+)\./, '$1:')
         
-        // Trigger notification
         addNotification({
           type: kind.includes('fail') || kind.includes('error') ? 'error' : 'success',
           title: kind.toUpperCase(),
@@ -100,18 +112,18 @@ function AppShell() {
           duration: 4000
         })
 
-        if (kind.startsWith('session.')) {
+        if (kind.startsWith('session:')) {
           queryClient.invalidateQueries({ queryKey: ['sessions'] })
         }
-        if (kind.startsWith('agent.')) {
+        if (kind.startsWith('agent:')) {
           queryClient.invalidateQueries({ queryKey: ['projects', activeProjectId, 'squads'] })
           queryClient.invalidateQueries({ queryKey: ['projects', activeProjectId, 'agents'] })
           queryClient.invalidateQueries({ queryKey: ['agents'] })
         }
-        if (kind.startsWith('ticket.')) {
-          queryClient.invalidateQueries({ queryKey: ['tickets'] })
+        if (kind.startsWith('ticket:')) {
+          queryClient.invalidateQueries({ queryKey: ['projects', activeProjectId, 'tickets'] })
         }
-        if (kind.startsWith('mail.')) {
+        if (kind.startsWith('mail:')) {
           queryClient.invalidateQueries({ queryKey: ['mail'] })
         }
       }
@@ -120,7 +132,6 @@ function AppShell() {
     eventSource.onerror = (err) => {
       console.error('SSE Error:', err)
       setSseStatus('error')
-      eventSource.close()
     }
 
     return () => {
@@ -237,6 +248,30 @@ function AppShell() {
                       <Plus size={14} aria-hidden="true" />
                       <span>New Project</span>
                     </button>
+                    {activeProject && (
+                      <button
+                        role="menuitem"
+                        onClick={() => {
+                          if (confirm(`Are you sure you want to delete project "${activeProject.name}"? This will remove all associated squads and agents.`)) {
+                            deleteProject.mutate(activeProject.id, {
+                              onSuccess: () => {
+                                setProjectDropdownOpen(false)
+                                setActiveProjectId(null)
+                                addNotification({
+                                  type: 'success',
+                                  title: 'Project Deleted',
+                                  message: `Project ${activeProject.name} has been removed.`,
+                                })
+                              }
+                            })
+                          }
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-ctp-red hover:bg-ctp-red/10 transition-colors focus:outline-none focus:bg-ctp-red/10"
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        <span>Delete Current Project</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </>
@@ -244,14 +279,41 @@ function AppShell() {
           </div>
         </div>
         
-        <nav className="flex-1 p-2 space-y-1">
-          <NavItem to="/" icon={<LayoutDashboard size={20} />} label="OVERVIEW" />
-          <NavItem to="/squad" icon={<Users size={20} />} label="SQUAD" />
-          <NavItem to="/sessions" icon={<Play size={20} />} label="SESSIONS" />
-          <NavItem to="/board" icon={<ClipboardList size={20} />} label="BOARD" />
-          <NavItem to="/agent" icon={<UserCircle size={20} />} label="AGENTS" />
-          <NavItem to="/review" icon={<ClipboardList size={20} />} label="REVIEW" />
-          <NavItem to="/mail" icon={<Mail size={20} />} label="MAIL" />
+        <nav className="flex-1 p-2 space-y-4">
+          <div className="space-y-1">
+            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.3em] text-tui-dim">
+              Primary
+            </div>
+            <NavItem to="/" icon={<LayoutDashboard size={20} />} label="OVERVIEW" />
+            <NavItem to="/sessions" icon={<Play size={20} />} label="SESSIONS" />
+            <NavItem to="/squad" icon={<Users size={20} />} label="SQUAD" />
+            <NavItem to="/board" icon={<ClipboardList size={20} />} label="BOARD" />
+            <NavItem to="/mail" icon={<Mail size={20} />} label="MAIL" />
+          </div>
+
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => setOpsExpanded((prev) => !prev)}
+              aria-expanded={opsExpanded}
+              className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-[0.3em] text-tui-dim hover:text-tui-text transition-colors"
+            >
+              <span>Operations</span>
+              <ChevronDown
+                size={14}
+                className={cn('transition-transform', opsExpanded && 'rotate-180')}
+              />
+            </button>
+            {opsExpanded && (
+              <div className="space-y-1">
+                <NavItem to="/agent" icon={<UserCircle size={20} />} label="AGENTS" />
+                <NavItem to="/review" icon={<ClipboardList size={20} />} label="REVIEW" />
+                <NavItem to="/events" icon={<Terminal size={20} />} label="EVENTS" />
+                <NavItem to="/nodes" icon={<Wifi size={20} />} label="NODES" />
+                <NavItem to="/fleet" icon={<Network size={20} />} label="FLEET" />
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className="p-4 border-t border-tui-border text-xs text-tui-dim">
@@ -271,9 +333,9 @@ function AppShell() {
             >
               <Menu size={24} aria-hidden="true" />
             </button>
-            <span className="text-tui-dim hidden sm:inline">PATH:</span>
-            <span className="text-tui-accent text-sm sm:text-base truncate max-w-[200px]">
-              {activeProject?.path || '~/workspace'}
+            <span className="text-tui-dim hidden sm:inline">PROJECT:</span>
+            <span className="text-tui-text text-sm sm:text-base truncate max-w-[200px]">
+              {activeProject?.name || 'No Project'}
             </span>
           </div>
           
@@ -292,9 +354,14 @@ function AppShell() {
              </button>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-6 text-[10px] font-bold tracking-widest uppercase">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <span className="text-tui-dim hidden sm:inline">UPLINK:</span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setStatusOpen((open) => !open)}
+              aria-expanded={statusOpen}
+              className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-tui-dim hover:text-tui-text transition-colors"
+            >
+              <span className="hidden sm:inline">Status</span>
               <div className={cn(
                 "flex items-center gap-1.5 px-2 py-1 border rounded-sm transition-colors",
                 sseStatus === 'connected' ? "border-ctp-green/30 text-ctp-green" :
@@ -310,11 +377,73 @@ function AppShell() {
                   <span className="w-1.5 h-1.5 rounded-full bg-ctp-green animate-pulse" />
                 )}
               </div>
-            </div>
-            <div className="hidden md:flex items-center gap-2 text-tui-dim">
-              <span className="text-ctp-mauve/20">|</span>
-              <span>NODE: {activeProjectId?.slice(0, 8) || 'OFFLINE'}</span>
-            </div>
+            </button>
+
+            {statusOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
+                <div className="absolute right-0 top-full mt-2 z-50 w-80 border border-tui-border bg-tui-bg shadow-lg">
+                  <div className="px-3 py-2 border-b border-tui-border text-[10px] font-bold uppercase tracking-widest text-tui-dim">
+                    System_Status
+                  </div>
+                  <div className="p-3 space-y-3 text-xs text-tui-dim">
+                    <div className="flex items-center justify-between">
+                      <span>Uplink</span>
+                      <span className={cn(
+                        "font-mono",
+                        sseStatus === 'connected' ? "text-ctp-green" :
+                        sseStatus === 'connecting' ? "text-ctp-peach" :
+                        "text-ctp-red"
+                      )}>
+                        {sseStatus === 'connected' ? 'CONNECTED' :
+                         sseStatus === 'connecting' ? 'CONNECTING' :
+                         'DISCONNECTED'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Node</span>
+                      <span className="font-mono text-tui-text">
+                        {activeProjectId?.slice(0, 8) || 'OFFLINE'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Path</span>
+                      <span
+                        className="font-mono text-tui-text truncate max-w-[180px]"
+                        title={activeProject?.path || '~/workspace'}
+                      >
+                        {activeProject?.path || '~/workspace'}
+                      </span>
+                    </div>
+                    {activeProject && (
+                      <div className="pt-2 mt-2 border-t border-tui-border">
+                        <button
+                          onClick={() => {
+                            if (confirm(`Are you sure you want to remove project "${activeProject.name}"? This will remove all associated squads and agents.`)) {
+                              deleteProject.mutate(activeProject.id, {
+                                onSuccess: () => {
+                                  setStatusOpen(false)
+                                  setActiveProjectId(null)
+                                  addNotification({
+                                    type: 'success',
+                                    title: 'Project Removed',
+                                    message: `Project ${activeProject.name} has been removed.`,
+                                  })
+                                }
+                              })
+                            }
+                          }}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-ctp-red hover:bg-ctp-red/10 transition-colors rounded"
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                          <span>Remove Project</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </header>
 

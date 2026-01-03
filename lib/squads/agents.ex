@@ -41,6 +41,17 @@ defmodule Squads.Agents do
   end
 
   @doc """
+  Fetches an agent by ID with a tuple result.
+  """
+  @spec fetch_agent(Ecto.UUID.t()) :: {:ok, Agent.t()} | {:error, :not_found}
+  def fetch_agent(id) do
+    case Repo.get(Agent, id) do
+      nil -> {:error, :not_found}
+      agent -> {:ok, agent}
+    end
+  end
+
+  @doc """
   Gets an agent by ID, raising if not found.
   """
   @spec get_agent!(Ecto.UUID.t()) :: Agent.t()
@@ -178,7 +189,7 @@ defmodule Squads.Agents do
   Gets a squad by ID.
   """
   def get_squad(id) do
-    case Repo.get(Squads.Agents.Squad, id) do
+    case Squads.Squads.get_squad(id) do
       nil -> {:error, :not_found}
       squad -> {:ok, squad}
     end

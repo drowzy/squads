@@ -12,6 +12,10 @@ defmodule SquadsWeb.Vite do
     else
       ~H"""
       <link rel="stylesheet" href="/assets/main.css" />
+      <script type="module" src="/assets/vendor.js">
+      </script>
+      <script type="module" src="/assets/syntax-highlighter.js">
+      </script>
       <script type="module" src="/assets/main.js">
       </script>
       """

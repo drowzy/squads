@@ -25,6 +25,7 @@ defmodule Squads.Events.Event do
     worktree.created worktree.deleted
     pr.created pr.merged pr.closed
     session.status_changed session.tool_started session.tool_completed
+    squad.connected squad.disconnected
   )
 
   schema "events" do

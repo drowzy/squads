@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { 
   GitPullRequest, 
   FileText, 
@@ -16,7 +16,9 @@ import {
   Navigation,
   ChevronUp,
   ChevronDown,
-  ArrowLeft
+  ArrowLeft,
+  ShieldCheck,
+  Search
 } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useReviews, useSubmitReview, Review } from '../api/queries'
@@ -146,8 +148,34 @@ function ReviewQueue() {
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             {reviews.length === 0 ? (
-              <div className="p-8 text-center text-tui-dim/40 italic text-xs">
-                Registry is empty. No work requires verification.
+              <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
+                <div className="relative">
+                  <ShieldCheck size={48} className="text-tui-dim/20" />
+                  <div className="absolute inset-0 border border-tui-dim/10 rounded-full scale-150 animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold text-tui-dim uppercase tracking-widest">NO_PENDING_REVIEWS</h3>
+                  <p className="text-[10px] text-tui-dim/60 italic max-w-[200px] leading-relaxed">
+                    System integrity verified. All agent deployments have been processed.
+                  </p>
+                </div>
+                <div className="pt-4 space-y-3">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 border border-tui-dim/20 text-[9px] text-tui-dim uppercase tracking-[0.2em] animate-pulse">
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                    Registry_Clean
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <Link
+                      to="/sessions"
+                      className="px-3 py-1 border border-tui-accent text-tui-accent text-[9px] font-bold uppercase tracking-[0.2em] hover:bg-tui-accent hover:text-tui-bg transition-colors"
+                    >
+                      View_Sessions
+                    </Link>
+                    <span className="text-[9px] text-tui-dim/60">
+                      Reviews appear after agents submit changes.
+                    </span>
+                  </div>
+                </div>
               </div>
             ) : (
               reviews.map((review) => (
@@ -289,6 +317,7 @@ function ReviewQueue() {
                                   <Hunk 
                                     key={hunk.content} 
                                     hunk={hunk} 
+                                    // @ts-ignore - gutterEvents is not typed in HunkProps but is supported
                                     gutterEvents={{
                                       onClick: ({ change }: { change: any }) => {
                                         const id = `${(file as any).newPath}:${change.newLineNumber || change.oldLineNumber}`
@@ -308,6 +337,7 @@ function ReviewQueue() {
                                           if (hunkWithLine) {
                                             const change = hunkWithLine.changes.find((c: any) => (c.newLineNumber || c.oldLineNumber) === lineNum)
                                             if (change) {
+                                              // @ts-ignore - lineNumber/oldLineNumber/newLineNumber type mismatch
                                               const key = `${change.type}-${change.lineNumber || change.oldLineNumber || change.newLineNumber}`
                                               acc[key] = (
                                                 <div className="bg-tui-accent/10 border-y border-tui-accent/30 p-3 space-y-2">
@@ -334,6 +364,7 @@ function ReviewQueue() {
                                         const change = (hunkWithLine as any)?.changes.find((c: any) => (c.newLineNumber || c.oldLineNumber) === lineNum)
                                         
                                         if (change) {
+                                          // @ts-ignore - lineNumber/oldLineNumber/newLineNumber type mismatch
                                           const key = `${change.type}-${change.lineNumber || change.oldLineNumber || change.newLineNumber}`
                                           return {
                                             [key]: (
@@ -454,11 +485,13 @@ function ReviewQueue() {
                   <div className="space-y-1 text-[8px] text-tui-dim">
                     <div className="flex justify-between uppercase">
                       <span>Additions:</span>
-                      <span className="text-green-500">+{files.reduce((a, f) => a + f.additions, 0)}</span>
+                      {/* @ts-ignore - additions property exists on File but not in types */}
+                      <span className="text-green-500">+{files.reduce((a, f) => a + (f as any).additions, 0)}</span>
                     </div>
                     <div className="flex justify-between uppercase">
                       <span>Deletions:</span>
-                      <span className="text-red-500">-{files.reduce((a, f) => a + f.deletions, 0)}</span>
+                      {/* @ts-ignore - deletions property exists on File but not in types */}
+                      <span className="text-red-500">-{files.reduce((a, f) => a + (f as any).deletions, 0)}</span>
                     </div>
                     <div className="flex justify-between uppercase">
                       <span>Comments:</span>
@@ -481,11 +514,11 @@ function ReviewQueue() {
                        </button>
                      ) : (
                        <>
-                         <button 
-                           onClick={() => handleAction('approved')}
-                           disabled={submitReview.isPending || selectedReview.status === 'approved'}
-                           className="flex-1 group relative overflow-hidden border border-ctp-green bg-ctp-green/10 text-ctp-green py-3 md:py-4 text-xs font-bold hover:bg-ctp-green hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 uppercase tracking-widest transition-all"
-                         >
+                          <button 
+                            onClick={() => handleAction('approved')}
+                            disabled={submitReview.isPending}
+                            className="flex-1 group relative overflow-hidden border border-ctp-green bg-ctp-green/10 text-ctp-green py-3 md:py-4 text-xs font-bold hover:bg-ctp-green hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 uppercase tracking-widest transition-all"
+                          >
                            <CheckSquare size={18} className="transition-transform group-hover:scale-110" />
                            {submitReview.isPending ? 'APPROVING...' : 'Approve'}
                          </button>
@@ -504,14 +537,29 @@ function ReviewQueue() {
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-tui-dim space-y-6">
-              <div className="relative">
-                <AlertCircle size={64} className="opacity-10 animate-pulse" />
-                <div className="absolute inset-0 border-2 border-tui-dim/10 rounded-full animate-ping" />
-              </div>
-              <div className="text-center space-y-2">
-                <p className="text-xs font-bold tracking-[0.3em] uppercase opacity-40">Awaiting_Selection</p>
-                <p className="text-[10px] italic opacity-20 uppercase tracking-widest">Registry_Monitor_Active</p>
-              </div>
+              {reviews.length === 0 ? (
+                <>
+                  <div className="relative">
+                    <Search size={64} className="opacity-10" />
+                    <div className="absolute inset-0 border border-tui-dim/5 rounded-full scale-150" />
+                  </div>
+                  <div className="text-center space-y-2">
+                    <p className="text-xs font-bold tracking-[0.3em] uppercase opacity-40">Scanning_For_Input</p>
+                    <p className="text-[10px] italic opacity-20 uppercase tracking-widest">No_Active_Signals_Detected</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="relative">
+                    <AlertCircle size={64} className="opacity-10 animate-pulse" />
+                    <div className="absolute inset-0 border-2 border-tui-dim/10 rounded-full animate-ping" />
+                  </div>
+                  <div className="text-center space-y-2">
+                    <p className="text-xs font-bold tracking-[0.3em] uppercase opacity-40">Awaiting_Selection</p>
+                    <p className="text-[10px] italic opacity-20 uppercase tracking-widest">Registry_Monitor_Active</p>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

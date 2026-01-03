@@ -9,7 +9,7 @@ export default defineConfig({
     TanStackRouterVite(),
   ],
   root: './',
-  base: '/assets/',
+  base: '/',
   build: {
     outDir: '../priv/static',
     emptyOutDir: false,
@@ -19,6 +19,10 @@ export default defineConfig({
         main: resolve(__dirname, 'src/main.tsx'),
       },
       output: {
+        manualChunks: {
+          'syntax-highlighter': ['react-syntax-highlighter', 'prismjs', 'highlight.js'],
+          'vendor': ['react', 'react-dom', 'react-markdown', '@tanstack/react-router', '@tanstack/react-query', 'lucide-react'],
+        },
         entryFileNames: `assets/[name].js`,
         chunkFileNames: `assets/[name].js`,
         assetFileNames: `assets/[name].[ext]`

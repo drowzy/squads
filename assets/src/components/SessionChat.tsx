@@ -12,7 +12,8 @@ import {
   ChevronRight,
   Zap,
   FileText,
-  Command
+  Command,
+  RefreshCw
 } from 'lucide-react'
 import {
   useSessionMessages,
@@ -28,9 +29,13 @@ import {
 } from '../api/queries'
 import { useNotifications } from './Notifications'
 import { cn } from '../lib/cn'
+import { useProjectEvents } from '../lib/socket'
+import { useQueryClient } from '@tanstack/react-query'
 
 // Mode type for plan/build toggle
 export type AgentMode = 'plan' | 'build'
+
+const normalizeEventKind = (kind: string) => kind.replace(/^(\w+)\./, '$1:')
 
 interface SessionChatProps {
   session: Session
@@ -91,10 +96,30 @@ export function SessionChat({
   const runShell = useRunSessionShell()
   const { addNotification } = useNotifications()
 
+  const queryClient = useQueryClient()
+
+  // Subscribe to real-time events for this project
+  useProjectEvents({
+    projectId: session.project_id,
+    onEvent: (event) => {
+      const kind = normalizeEventKind(event.kind)
+      // If a message was created or status changed for THIS session, invalidate queries
+      if (
+        (kind === 'session:status_changed' && event.session_id === session.id) ||
+        (kind === 'message:created' && event.session_id === session.id)
+      ) {
+        console.log('Session event received, invalidating queries:', kind)
+        queryClient.invalidateQueries({ queryKey: ['sessions', session.id, 'messages'] })
+        queryClient.invalidateQueries({ queryKey: ['sessions', session.id] })
+      }
+    }
+  })
+
   const { data: fileData } = useProjectFiles(session.project_id)
   const projectFiles = useMemo(() => {
-    console.log('File data updated:', fileData)
-    return fileData?.files || []
+    // Return empty if fileData or fileData.files is undefined/null
+    if (!fileData || !fileData.files) return []
+    return fileData.files
   }, [fileData])
 
   const { data: sessionMessages = [], isLoading: isLoadingMessages } = useSessionMessages(
@@ -139,17 +164,25 @@ export function SessionChat({
   }, [autocomplete.active, autocomplete.trigger, autocomplete.query, projectFiles])
 
   const handleAutocompleteSelect = (suggestion: { id: string }) => {
-    const beforeTrigger = chatInput.substring(0, chatInput.lastIndexOf(autocomplete.trigger!, textareaRef.current?.selectionStart || 0))
-    const afterTrigger = chatInput.substring(textareaRef.current?.selectionStart || 0)
+    const cursorPosition = textareaRef.current?.selectionStart || 0
+    const textBeforeCursor = chatInput.substring(0, cursorPosition)
+    const textAfterCursor = chatInput.substring(cursorPosition)
     
-    const newValue = beforeTrigger + suggestion.id + ' ' + afterTrigger
+    const lastWordMatch = textBeforeCursor.match(/([/@])(\w*)$/)
+    if (!lastWordMatch) return
+
+    const matchStart = lastWordMatch.index!
+    
+    const beforeMatch = textBeforeCursor.substring(0, matchStart)
+    const newValue = beforeMatch + suggestion.id + ' ' + textAfterCursor
+    
     setChatInput(newValue)
     setAutocomplete(prev => ({ ...prev, active: false }))
     
     // Set focus back to textarea
     setTimeout(() => {
       textareaRef.current?.focus()
-      const newPos = beforeTrigger.length + suggestion.id.length + 1
+      const newPos = beforeMatch.length + suggestion.id.length + 1
       textareaRef.current?.setSelectionRange(newPos, newPos)
     }, 0)
   }
@@ -219,37 +252,29 @@ export function SessionChat({
         return
       }
 
+      // If session is read-only (completed/failed/cancelled), sending a message should effectively "reactivate" it
+      // In Squads, this currently means the backend will try to ensure it's running before sending the message
+      // and we rely on the backend to handle the state transition or error if it's truly locked.
+
         if (input.startsWith('/')) {
           const parts = input.split(' ')
           const command = parts[0]
           const args = parts.slice(1).join(' ')
-          const res = await executeCommand.mutateAsync({
+          await executeCommand.mutateAsync({
             session_id: session.id,
             command,
             arguments: args || undefined,
             agent: mode,
+            model: session.model,
           })
-          if (res.output) {
-            addNotification({
-              type: 'success',
-              title: `Command Executed: ${command}`,
-              message: res.output.slice(0, 100) + (res.output.length > 100 ? '...' : ''),
-            })
-          }
         } else if (input.startsWith('!')) {
           const command = input.slice(1).trim()
-          const res = await runShell.mutateAsync({
+          await runShell.mutateAsync({
             session_id: session.id,
             command,
             agent: mode,
+            model: session.model,
           })
-          if (res.output) {
-            addNotification({
-              type: 'success',
-              title: 'Shell Command Output',
-              message: res.output.slice(0, 100) + (res.output.length > 100 ? '...' : ''),
-            })
-          }
         } else {
         await sendPrompt.mutateAsync({
           session_id: session.id,
@@ -259,6 +284,11 @@ export function SessionChat({
       }
       setChatInput('')
     } catch (error) {
+      console.error('SessionChat action failed', {
+        input,
+        sessionId: session.id,
+        error,
+      })
       addNotification({
         type: 'error',
         title: 'Action Failed',
@@ -267,8 +297,8 @@ export function SessionChat({
     }
   }
 
-  const isActive = session.status === 'running' || session.status === 'pending'
-  const isReadOnly = !isActive
+  const isActive = (['running', 'pending', 'paused', 'starting'] as string[]).includes(session.status)
+  const isHistory = (['completed', 'failed', 'cancelled'] as string[]).includes(session.status)
   const isPending = sendPrompt.isPending || executeCommand.isPending || runShell.isPending
 
   return (
@@ -284,16 +314,11 @@ export function SessionChat({
             <span
               className={cn(
                 'px-2 py-0.5 border',
-                isActive ? 'border-ctp-green/30 text-ctp-green' : 'border-tui-border text-tui-dim'
+                isActive ? 'border-ctp-green/30 text-ctp-green' : isHistory ? 'border-tui-dim/30 text-tui-dim' : 'border-tui-accent/30 text-tui-accent'
               )}
             >
-              {isActive ? 'LIVE' : 'OFFLINE'}
+              {isActive ? 'LIVE' : isHistory ? 'HISTORY' : session.status}
             </span>
-            {isReadOnly && (
-              <span className="px-2 py-0.5 border border-amber-900/50 text-amber-500/80 bg-amber-950/10">
-                READ_ONLY
-              </span>
-            )}
             <span className="text-tui-dim hidden sm:inline font-mono">
               session/{session.id.slice(0, 8)}
             </span>
@@ -323,85 +348,92 @@ export function SessionChat({
           ))
         )}
         <div ref={messagesEndRef} />
+        {isHistory && !sessionMessages.length && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-tui-bg/80 backdrop-blur-sm z-10 pointer-events-none">
+            <div className="text-tui-dim text-xs uppercase tracking-widest mb-4">No active session</div>
+            {/* Start New Session button removed in favor of command/sidebar controls */}
+          </div>
+        )}
       </div>
 
       {/* Composer */}
-      {isActive && (
-        <div className="border-t border-tui-border p-3 md:p-4 bg-tui-bg/60 shrink-0 relative">
-          <div className="flex flex-col gap-2">
-            {/* Mode Toggle */}
-            {/* Moved into textarea footer for better proximity */}
-            
-            {/* Autocomplete Menu */}
-            {autocomplete.active && filteredSuggestions.length > 0 && (
-              <div 
-                ref={autocompleteRef}
-                style={{ left: autocomplete.position.left }}
-                className="absolute bottom-full mb-1 w-64 max-h-[40vh] overflow-y-auto bg-tui-bg border border-tui-accent/40 shadow-xl z-50 font-mono text-xs"
-              >
-                <div className="p-1 border-b border-tui-border bg-tui-dim/10 text-[9px] uppercase tracking-widest text-tui-dim flex justify-between items-center">
-                  <span>Suggestions for {autocomplete.trigger}{autocomplete.query}</span>
-                  <span>{filteredSuggestions.length} found</span>
-                </div>
-                {filteredSuggestions.map((suggestion, idx) => (
-                  <button
-                    key={suggestion.id}
-                    onClick={() => handleAutocompleteSelect(suggestion)}
-                    className={cn(
-                      "w-full text-left px-3 py-2 flex flex-col gap-0.5 border-b border-tui-border/30 last:border-0",
-                      autocomplete.index === idx ? "bg-tui-accent text-tui-bg" : "hover:bg-tui-accent/10"
-                    )}
-                  >
-                    <div className="flex items-center gap-2 font-bold">
-                      {autocomplete.trigger === '/' ? <Command size={10} /> : <FileText size={10} />}
-                      {suggestion.id}
+      <div className="border-t border-tui-border p-3 md:p-4 bg-tui-bg/60 shrink-0 relative">
+        <div className="flex flex-col gap-2">
+          {/* Autocomplete Menu */}
+          {autocomplete.active && filteredSuggestions.length > 0 && (
+            <div 
+              ref={autocompleteRef}
+              style={{ left: autocomplete.position.left }}
+              className="absolute bottom-full mb-1 w-64 max-h-[40vh] overflow-y-auto bg-tui-bg border border-tui-accent/40 shadow-xl z-50 font-mono text-xs"
+            >
+              <div className="p-1 border-b border-tui-border bg-tui-dim/10 text-[9px] uppercase tracking-widest text-tui-dim flex justify-between items-center">
+                <span>Suggestions for {autocomplete.trigger}{autocomplete.query}</span>
+                <span>{filteredSuggestions.length} found</span>
+              </div>
+              {filteredSuggestions.map((suggestion, idx) => (
+                <button
+                  key={suggestion.id}
+                  onClick={() => handleAutocompleteSelect(suggestion)}
+                  className={cn(
+                    "w-full text-left px-3 py-2 flex flex-col gap-0.5 border-b border-tui-border/30 last:border-0",
+                    autocomplete.index === idx ? "bg-tui-accent text-tui-bg" : "hover:bg-tui-accent/10"
+                  )}
+                >
+                  <div className="flex items-center gap-2 font-bold">
+                    {autocomplete.trigger === '/' ? <Command size={10} /> : <FileText size={10} />}
+                    {suggestion.id}
+                  </div>
+                  {suggestion.description && (
+                    <div className={cn(
+                      "text-[10px] uppercase opacity-70",
+                      autocomplete.index === idx ? "text-tui-bg" : "text-tui-dim"
+                    )}>
+                      {suggestion.description}
                     </div>
-                    {suggestion.description && (
-                      <div className={cn(
-                        "text-[10px] uppercase opacity-70",
-                        autocomplete.index === idx ? "text-tui-bg" : "text-tui-dim"
-                      )}>
-                        {suggestion.description}
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <textarea
-              ref={textareaRef}
-              value={chatInput}
-              onChange={handleChatInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
-              className="w-full min-h-[80px] bg-black/40 border border-tui-border p-3 text-sm focus:border-tui-accent outline-none font-mono resize-none"
-            />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {showModeToggle && (
-                  <ModeToggle mode={mode} onChange={onModeChange} />
-                )}
-                <span className="text-[10px] text-tui-dim uppercase hidden sm:inline">
-                  Enter to send - Shift+Enter for newline
-                </span>
-              </div>
-              <button
-                onClick={handleSendPrompt}
-                disabled={isPending || !chatInput.trim()}
-                className="bg-tui-text text-tui-bg px-4 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white transition-colors disabled:opacity-50"
-              >
-                {isPending ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Send size={14} />
-                )}
-                Send
-              </button>
+                  )}
+                </button>
+              ))}
             </div>
+          )}
+
+          <textarea
+            ref={textareaRef}
+            value={chatInput}
+            onChange={handleChatInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={isHistory ? "Type to reactivate session..." : "Type a message..."}
+            className="w-full min-h-[80px] bg-black/40 border border-tui-border p-3 text-sm focus:border-tui-accent outline-none font-mono resize-none"
+          />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {showModeToggle && (
+                <ModeToggle mode={mode} onChange={onModeChange} />
+              )}
+              {isHistory && (
+                <div className="text-[10px] text-tui-accent uppercase font-bold flex items-center gap-1">
+                  <RefreshCw size={10} />
+                  Resumption_Enabled
+                </div>
+              )}
+              <span className="text-[10px] text-tui-dim uppercase hidden sm:inline">
+                Enter to send - Shift+Enter for newline
+              </span>
+            </div>
+            <button
+              onClick={handleSendPrompt}
+              disabled={isPending || !chatInput.trim()}
+              className="bg-tui-text text-tui-bg px-4 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white transition-colors disabled:opacity-50"
+            >
+              {isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+              Send
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

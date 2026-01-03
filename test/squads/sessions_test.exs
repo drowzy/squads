@@ -277,7 +277,7 @@ defmodule Squads.SessionsTest do
       %{agent: agent} = create_test_agent()
       {:ok, session} = Sessions.create_session(%{agent_id: agent.id, status: "running"})
 
-      assert {:error, :no_opencode_session} = Sessions.execute_command(session, "/help")
+      assert {:error, :no_opencode_session} = Sessions.execute_command(session, "/compact")
     end
 
     test "returns error when session is not running" do
@@ -287,10 +287,10 @@ defmodule Squads.SessionsTest do
         Sessions.create_session(%{
           agent_id: agent.id,
           status: "pending",
-          opencode_session_id: "oc-123"
+          opencode_session_id: "ses_123"
         })
 
-      assert {:error, :session_not_active} = Sessions.execute_command(session, "/help")
+      assert {:error, :session_not_active} = Sessions.execute_command(session, "/compact")
     end
   end
 
@@ -309,7 +309,7 @@ defmodule Squads.SessionsTest do
         Sessions.create_session(%{
           agent_id: agent.id,
           status: "completed",
-          opencode_session_id: "oc-123"
+          opencode_session_id: "ses_123"
         })
 
       assert {:error, :session_not_active} = Sessions.run_shell(session, "mix test")
@@ -321,14 +321,14 @@ defmodule Squads.SessionsTest do
       %{agent: agent} = create_test_agent()
       {:ok, session} = Sessions.create_session(%{agent_id: agent.id, status: "pending"})
 
-      assert {:error, :session_not_active} = Sessions.send_prompt(session, "Hello")
+      assert {:error, :no_opencode_session} = Sessions.send_prompt(session, "Hello")
     end
 
     test "returns error when session has no opencode_session_id" do
       %{agent: agent} = create_test_agent()
       {:ok, session} = Sessions.create_session(%{agent_id: agent.id, status: "running"})
 
-      assert {:error, :session_not_active} = Sessions.send_prompt(session, "Hello")
+      assert {:error, :no_opencode_session} = Sessions.send_prompt(session, "Hello")
     end
   end
 
@@ -337,7 +337,7 @@ defmodule Squads.SessionsTest do
       %{agent: agent} = create_test_agent()
       {:ok, session} = Sessions.create_session(%{agent_id: agent.id, status: "pending"})
 
-      assert {:error, :session_not_active} = Sessions.send_prompt_async(session, "Hello")
+      assert {:error, :no_opencode_session} = Sessions.send_prompt_async(session, "Hello")
     end
   end
 

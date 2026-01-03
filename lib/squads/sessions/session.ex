@@ -55,7 +55,7 @@ defmodule Squads.Sessions.Session do
   """
   def start_changeset(session, attrs \\ %{}) do
     session
-    |> cast(attrs, [:opencode_session_id, :worktree_path, :branch])
+    |> cast(attrs, [:opencode_session_id, :worktree_path, :branch, :metadata])
     |> put_change(:status, "running")
     |> put_change(:started_at, DateTime.utc_now() |> DateTime.truncate(:second))
   end

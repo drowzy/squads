@@ -12,10 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SquadRouteImport } from './routes/squad'
 import { Route as SessionsRouteImport } from './routes/sessions'
 import { Route as ReviewRouteImport } from './routes/review'
+import { Route as NodesRouteImport } from './routes/nodes'
 import { Route as MailRouteImport } from './routes/mail'
+import { Route as EventsRouteImport } from './routes/events'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AgentRouteImport } from './routes/agent'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as FleetIndexRouteImport } from './routes/fleet/index'
+import { Route as AgentIndexRouteImport } from './routes/agent.index'
 import { Route as AgentAgentIdRouteImport } from './routes/agent.$agentId'
 
 const SquadRoute = SquadRouteImport.update({
@@ -33,9 +37,19 @@ const ReviewRoute = ReviewRouteImport.update({
   path: '/review',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NodesRoute = NodesRouteImport.update({
+  id: '/nodes',
+  path: '/nodes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MailRoute = MailRouteImport.update({
   id: '/mail',
   path: '/mail',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsRoute = EventsRouteImport.update({
+  id: '/events',
+  path: '/events',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BoardRoute = BoardRouteImport.update({
@@ -53,6 +67,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FleetIndexRoute = FleetIndexRouteImport.update({
+  id: '/fleet/',
+  path: '/fleet/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentIndexRoute = AgentIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AgentRoute,
+} as any)
 const AgentAgentIdRoute = AgentAgentIdRouteImport.update({
   id: '/$agentId',
   path: '/$agentId',
@@ -63,32 +87,43 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent': typeof AgentRouteWithChildren
   '/board': typeof BoardRoute
+  '/events': typeof EventsRoute
   '/mail': typeof MailRoute
+  '/nodes': typeof NodesRoute
   '/review': typeof ReviewRoute
   '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
+  '/agent/': typeof AgentIndexRoute
+  '/fleet': typeof FleetIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/agent': typeof AgentRouteWithChildren
   '/board': typeof BoardRoute
+  '/events': typeof EventsRoute
   '/mail': typeof MailRoute
+  '/nodes': typeof NodesRoute
   '/review': typeof ReviewRoute
   '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
+  '/agent': typeof AgentIndexRoute
+  '/fleet': typeof FleetIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agent': typeof AgentRouteWithChildren
   '/board': typeof BoardRoute
+  '/events': typeof EventsRoute
   '/mail': typeof MailRoute
+  '/nodes': typeof NodesRoute
   '/review': typeof ReviewRoute
   '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
+  '/agent/': typeof AgentIndexRoute
+  '/fleet/': typeof FleetIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -96,41 +131,55 @@ export interface FileRouteTypes {
     | '/'
     | '/agent'
     | '/board'
+    | '/events'
     | '/mail'
+    | '/nodes'
     | '/review'
     | '/sessions'
     | '/squad'
     | '/agent/$agentId'
+    | '/agent/'
+    | '/fleet'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/agent'
     | '/board'
+    | '/events'
     | '/mail'
+    | '/nodes'
     | '/review'
     | '/sessions'
     | '/squad'
     | '/agent/$agentId'
+    | '/agent'
+    | '/fleet'
   id:
     | '__root__'
     | '/'
     | '/agent'
     | '/board'
+    | '/events'
     | '/mail'
+    | '/nodes'
     | '/review'
     | '/sessions'
     | '/squad'
     | '/agent/$agentId'
+    | '/agent/'
+    | '/fleet/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentRoute: typeof AgentRouteWithChildren
   BoardRoute: typeof BoardRoute
+  EventsRoute: typeof EventsRoute
   MailRoute: typeof MailRoute
+  NodesRoute: typeof NodesRoute
   ReviewRoute: typeof ReviewRoute
   SessionsRoute: typeof SessionsRoute
   SquadRoute: typeof SquadRoute
+  FleetIndexRoute: typeof FleetIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -156,11 +205,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/nodes': {
+      id: '/nodes'
+      path: '/nodes'
+      fullPath: '/nodes'
+      preLoaderRoute: typeof NodesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mail': {
       id: '/mail'
       path: '/mail'
       fullPath: '/mail'
       preLoaderRoute: typeof MailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events': {
+      id: '/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof EventsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/board': {
@@ -184,6 +247,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fleet/': {
+      id: '/fleet/'
+      path: '/fleet'
+      fullPath: '/fleet'
+      preLoaderRoute: typeof FleetIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agent/': {
+      id: '/agent/'
+      path: '/'
+      fullPath: '/agent/'
+      preLoaderRoute: typeof AgentIndexRouteImport
+      parentRoute: typeof AgentRoute
+    }
     '/agent/$agentId': {
       id: '/agent/$agentId'
       path: '/$agentId'
@@ -196,10 +273,12 @@ declare module '@tanstack/react-router' {
 
 interface AgentRouteChildren {
   AgentAgentIdRoute: typeof AgentAgentIdRoute
+  AgentIndexRoute: typeof AgentIndexRoute
 }
 
 const AgentRouteChildren: AgentRouteChildren = {
   AgentAgentIdRoute: AgentAgentIdRoute,
+  AgentIndexRoute: AgentIndexRoute,
 }
 
 const AgentRouteWithChildren = AgentRoute._addFileChildren(AgentRouteChildren)
@@ -208,10 +287,13 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentRoute: AgentRouteWithChildren,
   BoardRoute: BoardRoute,
+  EventsRoute: EventsRoute,
   MailRoute: MailRoute,
+  NodesRoute: NodesRoute,
   ReviewRoute: ReviewRoute,
   SessionsRoute: SessionsRoute,
   SquadRoute: SquadRoute,
+  FleetIndexRoute: FleetIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

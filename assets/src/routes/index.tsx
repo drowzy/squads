@@ -1,18 +1,54 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useSessions } from '../api/queries'
+import { useNavigate } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
+import { Play, ClipboardList, Mail } from 'lucide-react'
+import { useSessions, useEvents } from '../api/queries'
 import { useActiveProject } from './__root'
 import { cn } from '../lib/cn'
+import { EventTimeline } from '../components/events/EventTimeline'
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
 })
 
 function Dashboard() {
+  const { activeProject, projects, isLoading: projectsLoading } = useActiveProject()
+  const navigate = useNavigate()
   const { data: sessions, isLoading: sessionsLoading } = useSessions()
-  const { projects, isLoading: projectsLoading } = useActiveProject()
+  const { data: events = [], isLoading: eventsLoading } = useEvents({ 
+    project_id: activeProject?.id,
+    limit: 10 
+  })
 
   const activeSessions = sessions?.filter(s => s.status === 'running').length ?? 0
   const totalProjects = projects?.length ?? 0
+  const actionsDisabled = !activeProject
+  const actions = [
+    {
+      label: 'Start Session',
+      description: activeProject
+        ? `Spin up a new session in ${activeProject.name}`
+        : 'Select a project to start a session',
+      icon: <Play size={18} className="text-tui-accent" />,
+      onClick: () => navigate({ to: '/sessions' }),
+    },
+    {
+      label: 'New Ticket',
+      description: activeProject
+        ? `Log work for ${activeProject.name}`
+        : 'Select a project to create tickets',
+      icon: <ClipboardList size={18} className="text-ctp-blue" />,
+      onClick: () => navigate({ to: '/board' }),
+    },
+    {
+      label: 'Compose Message',
+      description: activeProject
+        ? 'Send a message to your squad'
+        : 'Select a project to message agents',
+      icon: <Mail size={18} className="text-ctp-mauve" />,
+      onClick: () => navigate({ to: '/mail' }),
+    },
+  ]
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -24,6 +60,19 @@ function Dashboard() {
         <div className="text-left sm:text-right text-xs text-tui-dim font-mono">
           LAST_SYNC: {new Date().toLocaleTimeString()}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {actions.map((action) => (
+          <ActionCard
+            key={action.label}
+            label={action.label}
+            description={action.description}
+            icon={action.icon}
+            onClick={action.onClick}
+            disabled={actionsDisabled}
+          />
+        ))}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -45,13 +94,50 @@ function Dashboard() {
           <span className="w-2 h-2 bg-tui-accent" />
           <h3 className="font-bold uppercase tracking-widest text-xs">Recent_Activity</h3>
         </div>
-        <div className="space-y-2 font-mono text-sm">
-          <ActivityItem timestamp="14:04:22" message="Integration service initialized" />
-          <ActivityItem timestamp="14:02:10" message="System bind to 0.0.0.0 successful" />
-          <ActivityItem timestamp="13:58:45" message="Vite HMR client connected" />
-        </div>
+        <EventTimeline events={events} isLoading={eventsLoading} />
       </div>
     </div>
+  )
+}
+
+function ActionCard({
+  label,
+  description,
+  icon,
+  onClick,
+  disabled,
+}: {
+  label: string
+  description: string
+  icon: ReactNode
+  onClick: () => void
+  disabled: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "border border-tui-border p-4 bg-tui-bg flex items-start justify-between gap-4 text-left transition-colors",
+        disabled
+          ? "opacity-50 cursor-not-allowed"
+          : "hover:border-tui-accent hover:bg-tui-dim/10"
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5">{icon}</div>
+        <div>
+          <div className="text-xs font-bold uppercase tracking-widest">
+            {label.replace(/\s+/g, '_')}
+          </div>
+          <div className="text-[11px] text-tui-dim mt-1">{description}</div>
+        </div>
+      </div>
+      <span className="text-[10px] font-bold uppercase tracking-widest text-tui-dim">
+        {disabled ? 'Select project' : 'Open'}
+      </span>
+    </button>
   )
 }
 
@@ -63,13 +149,3 @@ function StatCard({ label, value, color }: { label: string; value: string; color
     </div>
   )
 }
-
-function ActivityItem({ timestamp, message }: { timestamp: string; message: string }) {
-  return (
-    <div className="flex flex-col sm:flex-row gap-1 sm:gap-4">
-      <span className="text-tui-dim text-xs sm:text-sm">[{timestamp}]</span>
-      <span className="text-tui-text text-sm">{message}</span>
-    </div>
-  )
-}
-

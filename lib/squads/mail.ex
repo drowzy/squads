@@ -32,7 +32,7 @@ defmodule Squads.Mail do
       if urgent_only, do: where(query, [m, r], m.importance in ["high", "urgent"]), else: query
 
     query
-    |> preload([:sender, :thread, :recipients])
+    |> preload([:sender, :thread, recipients: :agent])
     |> Repo.all()
   end
 
@@ -50,14 +50,14 @@ defmodule Squads.Mail do
 
     query
     |> Repo.all()
-    |> Repo.preload(messages: [:sender, :recipients])
+    |> Repo.preload(messages: [:sender, recipients: :agent])
   end
 
   @doc """
   Gets a message by ID.
   """
   def get_message!(id),
-    do: Repo.get!(Message, id) |> Repo.preload([:sender, :thread, :recipients])
+    do: Repo.get!(Message, id) |> Repo.preload([:sender, :thread, recipients: :agent])
 
   @doc """
   Lists all messages in a thread.
@@ -66,7 +66,7 @@ defmodule Squads.Mail do
     Message
     |> where(thread_id: ^thread_id)
     |> order_by(asc: :inserted_at)
-    |> preload([:sender, :recipients, :attachments])
+    |> preload([:sender, :attachments, recipients: :agent])
     |> Repo.all()
   end
 
@@ -79,11 +79,10 @@ defmodule Squads.Mail do
   """
   def send_message(attrs) do
     Repo.transaction(fn ->
-      # 1. Create or find thread
-      project_id = attrs[:project_id] || attrs["project_id"]
-      ticket_id = attrs[:ticket_id] || attrs["ticket_id"]
-      subject = attrs[:subject] || attrs["subject"]
-      thread_id = attrs[:thread_id] || attrs["thread_id"]
+      project_id = get_attr(attrs, :project_id)
+      ticket_id = get_attr(attrs, :ticket_id)
+      subject = get_attr(attrs, :subject)
+      thread_id = get_attr(attrs, :thread_id)
 
       if !subject || subject == "" do
         Repo.rollback(:missing_subject)
@@ -105,75 +104,68 @@ defmodule Squads.Mail do
           nil ->
             %Thread{}
             |> Thread.changeset(thread_attrs)
-            |> Repo.insert!()
+            |> Repo.insert()
 
           id ->
-            Repo.get!(Thread, id)
-            |> Thread.changeset(%{last_message_at: thread_attrs.last_message_at})
-            |> Repo.update!()
+            case Repo.get(Thread, id) do
+              nil ->
+                {:error, :not_found}
+
+              thread ->
+                thread
+                |> Thread.changeset(%{last_message_at: thread_attrs.last_message_at})
+                |> Repo.update()
+            end
+        end
+        |> case do
+          {:ok, thread} -> thread
+          {:error, reason} -> Repo.rollback(reason)
         end
 
-      # 2. Create message
       message_attrs =
         attrs
-        |> Enum.map(fn {k, v} ->
-          {if(is_binary(k), do: String.to_existing_atom(k), else: k), v}
-        end)
-        |> Map.new()
-        |> Map.take([
-          :subject,
-          :body_md,
-          :importance,
-          :ack_required,
-          :kind,
-          :sender_id,
-          :author_name
-        ])
+        |> extract_message_attrs()
         |> Map.put(:thread_id, thread.id)
 
       message =
         %Message{}
         |> Message.changeset(message_attrs)
-        |> Repo.insert!()
+        |> Repo.insert()
+        |> case do
+          {:ok, message} -> message
+          {:error, reason} -> Repo.rollback(reason)
+        end
 
-      # 3. Create recipients
-      to = attrs[:to] || attrs["to"] || []
-      cc = attrs[:cc] || attrs["cc"] || []
-      bcc = attrs[:bcc] || attrs["bcc"] || []
+      to = get_attr(attrs, :to) || []
+      cc = get_attr(attrs, :cc) || []
+      bcc = get_attr(attrs, :bcc) || []
+      attachments = get_attr(attrs, :attachments)
 
-      create_recipients(to, "to", message.id)
-      create_recipients(cc, "cc", message.id)
-      create_recipients(bcc, "bcc", message.id)
+      with :ok <- create_recipients(to, "to", message.id),
+           :ok <- create_recipients(cc, "cc", message.id),
+           :ok <- create_recipients(bcc, "bcc", message.id),
+           :ok <- create_attachments(attachments, message.id) do
+        message = message |> Repo.preload([:sender, :thread, :recipients, :attachments])
 
-      # 4. Handle attachments (simplified)
-      attachments = attrs[:attachments] || attrs["attachments"]
+        Squads.Events.create_event(%{
+          project_id: project_id,
+          # Can be nil if human
+          agent_id: message.sender_id,
+          kind: "mail.sent",
+          occurred_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          payload: %{
+            message_id: message.id,
+            subject: message.subject,
+            thread_id: message.thread_id,
+            recipients: Enum.map(message.recipients, & &1.agent_id),
+            author_name: message.author_name
+          }
+        })
 
-      if attachments do
-        Enum.each(attachments, fn attach_attrs ->
-          %Attachment{}
-          |> Attachment.changeset(Map.put(attach_attrs, :message_id, message.id))
-          |> Repo.insert!()
-        end)
+        message
+      else
+        {:error, reason} -> Repo.rollback(reason)
       end
-
-      message = message |> Repo.preload([:sender, :thread, :recipients, :attachments])
-
-      Squads.Events.create_event(%{
-        project_id: project_id,
-        # Can be nil if human
-        agent_id: message.sender_id,
-        kind: "mail.sent",
-        occurred_at: DateTime.utc_now() |> DateTime.truncate(:second),
-        payload: %{
-          message_id: message.id,
-          subject: message.subject,
-          thread_id: message.thread_id,
-          recipients: Enum.map(message.recipients, & &1.agent_id),
-          author_name: message.author_name
-        }
-      })
-
-      message
     end)
   end
 
@@ -268,21 +260,72 @@ defmodule Squads.Mail do
   # Internal Helpers
   # ============================================================================
 
+  defp get_attr(attrs, key) do
+    Map.get(attrs, key, Map.get(attrs, Atom.to_string(key)))
+  end
+
+  defp extract_message_attrs(attrs) do
+    allowed_keys = [
+      :subject,
+      :body_md,
+      :importance,
+      :ack_required,
+      :kind,
+      :sender_id,
+      :author_name
+    ]
+
+    Enum.reduce(allowed_keys, %{}, fn key, acc ->
+      case get_attr(attrs, key) do
+        nil -> acc
+        value -> Map.put(acc, key, value)
+      end
+    end)
+  end
+
   defp create_recipients(list, type, message_id) do
-    Enum.each(list, fn recipient_data ->
+    Enum.reduce_while(list, :ok, fn recipient_data, :ok ->
       recipient_attrs =
         case recipient_data do
           id when is_binary(id) ->
-            %{agent_id: id, message_id: message_id, recipient_type: type}
+            {:ok, %{agent_id: id, message_id: message_id, recipient_type: type}}
 
           map when is_map(map) ->
-            map |> Map.put(:message_id, message_id) |> Map.put_new(:recipient_type, type)
+            {:ok, map |> Map.put(:message_id, message_id) |> Map.put_new(:recipient_type, type)}
+
+          _ ->
+            {:error, :invalid_recipient}
         end
 
-      %Recipient{}
-      |> Recipient.changeset(recipient_attrs)
-      |> Repo.insert!()
+      with {:ok, attrs} <- recipient_attrs,
+           {:ok, _recipient} <-
+             %Recipient{}
+             |> Recipient.changeset(attrs)
+             |> Repo.insert() do
+        {:cont, :ok}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
     end)
+  end
+
+  defp create_attachments(nil, _message_id), do: :ok
+  defp create_attachments([], _message_id), do: :ok
+
+  defp create_attachments(attachments, message_id) when is_list(attachments) do
+    Enum.reduce_while(attachments, :ok, fn attach_attrs, :ok ->
+      %Attachment{}
+      |> Attachment.changeset(Map.put(attach_attrs, :message_id, message_id))
+      |> Repo.insert()
+      |> case do
+        {:ok, _attachment} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp create_attachments(_attachments, _message_id) do
+    {:error, :invalid_attachments}
   end
 
   @doc """

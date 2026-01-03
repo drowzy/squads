@@ -1,3 +1,6 @@
+# Stored for historical reference
+# This file was previously at the repository root and has been moved to history/
+
 defmodule Squads.Sessions do
   @moduledoc """
   The Sessions context manages OpenCode session lifecycle.

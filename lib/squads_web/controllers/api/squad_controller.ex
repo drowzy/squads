@@ -52,6 +52,8 @@ defmodule SquadsWeb.API.SquadController do
 
       case SquadsContext.create_squad(attrs) do
         {:ok, squad} ->
+          squad = SquadsContext.get_squad_with_agents(squad.id) || squad
+
           conn
           |> put_status(:created)
           |> render(:show, squad: squad)
@@ -81,6 +83,7 @@ defmodule SquadsWeb.API.SquadController do
 
         case SquadsContext.update_squad(squad, attrs) do
           {:ok, updated_squad} ->
+            updated_squad = SquadsContext.get_squad_with_agents(updated_squad.id) || updated_squad
             render(conn, :show, squad: updated_squad)
 
           {:error, changeset} ->
@@ -123,6 +126,74 @@ defmodule SquadsWeb.API.SquadController do
       _squad ->
         agents = Agents.list_agents_for_squad(squad_id)
         render(conn, :agents, agents: agents)
+    end
+  end
+
+  @doc """
+  Send a message to a connected squad.
+
+  POST /api/squads/:id/message
+  Body: {
+    "to_squad_id": "uuid",
+    "subject": "Hello",
+    "body": "Message content",
+    "sender_name": "Optional sender name"
+  }
+  """
+  def message(conn, %{"squad_id" => sender_squad_id, "to_squad_id" => target_squad_id} = params) do
+    # 1. Verify connection
+    connections = SquadsContext.list_connections_for_squad(sender_squad_id)
+
+    is_connected =
+      Enum.any?(connections, fn c ->
+        (c.from_squad_id == sender_squad_id && c.to_squad_id == target_squad_id) ||
+          (c.from_squad_id == target_squad_id && c.to_squad_id == sender_squad_id)
+      end)
+
+    if !is_connected do
+      conn
+      |> put_status(:forbidden)
+      |> json(%{error: "not_connected", message: "Squads are not connected"})
+    else
+      # 2. Get target squad details (for project_id)
+      target_squad = SquadsContext.get_squad!(target_squad_id)
+      sender_squad = SquadsContext.get_squad!(sender_squad_id)
+
+      # 3. Get target agents
+      target_agents = Agents.list_agents_for_squad(target_squad_id)
+      recipient_ids = Enum.map(target_agents, & &1.id)
+
+      if recipient_ids == [] do
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "no_recipients", message: "Target squad has no agents"})
+      else
+        # 4. Send message
+        # We create the thread in the TARGET squad's project context
+        sender_name = params["sender_name"] || "Squad #{sender_squad.name}"
+
+        mail_params = %{
+          project_id: target_squad.project_id,
+          subject: params["subject"],
+          body_md: params["body"],
+          to: recipient_ids,
+          author_name: sender_name,
+          importance: "normal",
+          kind: "text"
+        }
+
+        case Squads.Mail.send_message(mail_params) do
+          {:ok, message} ->
+            conn
+            |> put_status(:created)
+            |> render(:message_sent, message: message)
+
+          {:error, _reason} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{error: "send_failed", message: "Failed to send message"})
+        end
+      end
     end
   end
 

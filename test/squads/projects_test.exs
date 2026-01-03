@@ -28,9 +28,25 @@ defmodule Squads.ProjectsTest do
     end
 
     @tag :tmp_dir
-    test "fails for already initialized project", %{tmp_dir: tmp_dir} do
+    test "re-initializes an already existing project on disk", %{tmp_dir: tmp_dir} do
+      # Create .squads/config.json manually
+      dir = Path.join(tmp_dir, ".squads")
+      File.mkdir_p!(dir)
+
+      File.write!(
+        Path.join(dir, "config.json"),
+        Jason.encode!(%{"name" => "existing", "version" => 1})
+      )
+
+      assert {:ok, %Project{} = project} = Projects.init(tmp_dir, "test-project")
+      assert project.path == tmp_dir
+      assert project.name == "test-project"
+    end
+
+    @tag :tmp_dir
+    test "fails if project already exists in database", %{tmp_dir: tmp_dir} do
       assert {:ok, _} = Projects.init(tmp_dir, "test")
-      assert {:error, "project already initialized at " <> _} = Projects.init(tmp_dir, "test2")
+      assert {:error, %Ecto.Changeset{}} = Projects.init(tmp_dir, "test2")
     end
 
     test "fails for non-existent path" do
@@ -115,6 +131,33 @@ defmodule Squads.ProjectsTest do
       # Sync and verify
       {:ok, synced} = Projects.sync_config(project)
       assert synced.name == "updated"
+    end
+  end
+
+  describe "delete_project/1" do
+    @tag :tmp_dir
+    test "deletes a project and associated records", %{tmp_dir: tmp_dir} do
+      {:ok, project} = Projects.init(tmp_dir, "to-be-deleted")
+
+      # Create associated squad
+      {:ok, squad} = Squads.Squads.create_squad(%{name: "Test Squad", project_id: project.id})
+
+      # Create associated agent
+      {:ok, agent} =
+        Squads.Agents.create_agent(%{
+          name: "TestAgent",
+          slug: "test-agent",
+          squad_id: squad.id,
+          role: "fullstack_engineer",
+          level: "senior"
+        })
+
+      assert {:ok, _} = Projects.delete_project(project)
+      assert Projects.get_project(project.id) == nil
+
+      # Verify cascade deletion
+      assert Squads.Repo.get(Squads.Squads.Squad, squad.id) == nil
+      assert Squads.Repo.get(Squads.Agents.Agent, agent.id) == nil
     end
   end
 end

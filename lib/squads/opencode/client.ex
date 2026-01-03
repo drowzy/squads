@@ -313,9 +313,12 @@ defmodule Squads.OpenCode.Client do
   """
   @spec execute_command(String.t(), String.t(), keyword()) :: response()
   def execute_command(session_id, command, params \\ []) do
-    body = %{command: command}
-    body = if params[:arguments], do: Map.put(body, :arguments, params[:arguments]), else: body
-    body = if params[:agent], do: Map.put(body, :agent, params[:agent]), else: body
+    body = %{
+      command: command,
+      arguments: params[:arguments] || "",
+      agent: params[:agent] || "default"
+    }
+
     body = if params[:model], do: Map.put(body, :model, params[:model]), else: body
 
     post(
@@ -505,10 +508,12 @@ defmodule Squads.OpenCode.Client do
   end
 
   defp handle_response({:ok, %Req.Response{status: 500, body: body}}) do
+    Logger.error("OpenCode server returned 500: #{inspect(body)}")
     {:error, {:server_error, body}}
   end
 
   defp handle_response({:ok, %Req.Response{status: status, body: body}}) do
+    Logger.error("OpenCode server returned unexpected status #{status}: #{inspect(body)}")
     {:error, {:http_error, status, body}}
   end
 

@@ -27,7 +27,7 @@ defmodule SquadsWeb.Router do
     # Filesystem browser for project selection (must be before resources)
     get "/projects/browse", ProjectController, :browse
 
-    resources "/projects", ProjectController, only: [:index, :show, :create] do
+    resources "/projects", ProjectController, only: [:index, :show, :create, :delete] do
       # Squad endpoints nested under projects
       resources "/squads", SquadController, only: [:index, :create]
       get "/events/stream", EventController, :stream
@@ -57,6 +57,9 @@ defmodule SquadsWeb.Router do
 
       # Worktree endpoints nested under projects
       resources "/worktrees", WorktreeController, only: [:index, :create, :delete]
+
+      # Autocomplete endpoints
+      get "/files", ProjectController, :files
     end
 
     # Standalone provider endpoint
@@ -74,6 +77,7 @@ defmodule SquadsWeb.Router do
     resources "/squads", SquadController, only: [:show, :update, :delete] do
       # Agent endpoints nested under squads
       resources "/agents", AgentController, only: [:index, :create]
+      post "/message", SquadController, :message
     end
 
     # Standalone agent endpoints
@@ -81,6 +85,7 @@ defmodule SquadsWeb.Router do
 
     resources "/agents", AgentController, only: [:show, :update, :delete] do
       patch "/status", AgentController, :update_status
+      post "/sessions/new", SessionController, :new_session
     end
 
     post "/sessions/start", SessionController, :start
@@ -100,6 +105,15 @@ defmodule SquadsWeb.Router do
 
     get "/events", EventController, :index
 
+    # External Node endpoints
+    get "/external_nodes", ExternalNodeController, :index
+    post "/external_nodes/probe", ExternalNodeController, :probe
+
+    # Squad Connections
+    get "/fleet/connections", SquadConnectionController, :index
+    post "/fleet/connections", SquadConnectionController, :create
+    delete "/fleet/connections/:id", SquadConnectionController, :delete
+
     # Mail endpoints
     get "/mail", MailController, :index
     get "/mail/search", MailController, :search
@@ -113,7 +127,10 @@ defmodule SquadsWeb.Router do
 
     # MCP endpoints
     get "/mcp", MCPController, :index
+    get "/mcp/catalog", MCPController, :catalog
+    get "/mcp/cli", MCPController, :cli
     post "/mcp", MCPController, :create
+    patch "/mcp/:name", MCPController, :update
     post "/mcp/:name/connect", MCPController, :connect
     post "/mcp/:name/disconnect", MCPController, :disconnect
     get "/mcp/:name/auth", MCPController, :auth

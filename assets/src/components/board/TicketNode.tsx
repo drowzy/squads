@@ -9,8 +9,12 @@ const statusIcons = {
   closed: <CheckCircle2 size={12} className="text-tui-text" />,
 }
 
+const getAssigneeName = (ticket: Ticket) =>
+  ticket.assignee_name || ticket.assignee || ''
+
 export function TicketNode({ data }: NodeProps) {
   const ticket = data.ticket as Ticket
+  const assigneeName = getAssigneeName(ticket)
   const isEpic = ticket.issue_type === 'epic'
   
   return (
@@ -39,12 +43,12 @@ export function TicketNode({ data }: NodeProps) {
         <span className="text-[8px] border border-tui-border px-1 uppercase text-tui-dim">
           {ticket.issue_type}
         </span>
-        {ticket.assignee && (
+        {assigneeName && (
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 border border-tui-border flex items-center justify-center bg-tui-dim/20">
-              <span className="text-[6px] font-bold">{ticket.assignee[0].toUpperCase()}</span>
+              <span className="text-[6px] font-bold">{assigneeName[0].toUpperCase()}</span>
             </div>
-            <span className="text-[8px] text-tui-dim">{ticket.assignee}</span>
+            <span className="text-[8px] text-tui-dim">{assigneeName}</span>
           </div>
         )}
       </div>

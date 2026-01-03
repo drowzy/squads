@@ -10,7 +10,13 @@ import {
   useReactFlow
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Ticket, useUpdateTicket, useAgents } from '../../api/queries'
+import {
+  Ticket,
+  useUpdateTicketStatus,
+  useClaimTicket,
+  useUnclaimTicket,
+  useAgents,
+} from '../../api/queries'
 import { TicketNode } from './TicketNode'
 import { useEffect, useMemo, useState } from 'react'
 import ELK from 'elkjs/lib/elk.bundled.js'
@@ -45,11 +51,26 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
   const { activeProject } = useActiveProject()
   const { data: agents = [] } = useAgents(activeProject?.id)
 
-  const updateTicket = useUpdateTicket()
+  const updateTicketStatus = useUpdateTicketStatus(activeProject?.id)
+  const claimTicket = useClaimTicket(activeProject?.id)
+  const unclaimTicket = useUnclaimTicket(activeProject?.id)
 
   const selectedTicket = useMemo(() => 
     tickets.find(t => t.id === selectedTicketId) || null,
   [tickets, selectedTicketId])
+
+  const currentAssigneeId = useMemo(() => {
+    if (!selectedTicket) return ''
+    if (selectedTicket.assignee_id) return selectedTicket.assignee_id
+    const name = selectedTicket.assignee_name || selectedTicket.assignee
+    if (!name) return ''
+    return agents.find((agent) => agent.name === name)?.id || ''
+  }, [selectedTicket, agents])
+
+  const isSyncing =
+    updateTicketStatus.isPending ||
+    claimTicket.isPending ||
+    unclaimTicket.isPending
 
   useEffect(() => {
     const elkNodes: any[] = []
@@ -150,14 +171,29 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
 
   const handleUpdateStatus = (status: Ticket['status']) => {
     if (selectedTicket) {
-      updateTicket.mutate({ id: selectedTicket.id, status, project_id: activeProject?.id })
+      updateTicketStatus.mutate({
+        id: selectedTicket.id,
+        status,
+        project_id: activeProject?.id,
+      })
     }
   }
 
-  const handleUpdateAssignee = (assignee: string) => {
-    if (selectedTicket) {
-      updateTicket.mutate({ id: selectedTicket.id, status: selectedTicket.status, assignee, project_id: activeProject?.id })
+  const handleUpdateAssignee = (agentId: string) => {
+    if (!selectedTicket) return
+
+    if (!agentId) {
+      unclaimTicket.mutate({ id: selectedTicket.id, project_id: activeProject?.id })
+      return
     }
+
+    const agent = agents.find((entry) => entry.id === agentId)
+    claimTicket.mutate({
+      id: selectedTicket.id,
+      agent_id: agentId,
+      agent_name: agent?.name,
+      project_id: activeProject?.id,
+    })
   }
 
   return (
@@ -246,13 +282,13 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
                 </span>
                 <div className="relative group">
                   <select 
-                    value={selectedTicket.assignee || ''}
+                    value={currentAssigneeId}
                     onChange={(e) => handleUpdateAssignee(e.target.value)}
                     className="w-full appearance-none bg-tui-bg border border-tui-border px-2 py-1 text-xs uppercase cursor-pointer hover:border-tui-accent focus:outline-none focus:border-tui-accent pr-6"
                   >
                     <option value="">Unassigned</option>
-                    {agents.map(agent => (
-                      <option key={agent.id} value={agent.name}>{agent.name}</option>
+                    {agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>{agent.name}</option>
                     ))}
                   </select>
                   <ChevronDown size={10} className="absolute right-2 top-2 pointer-events-none text-tui-dim group-hover:text-tui-accent" />
@@ -273,7 +309,7 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
           <div className="p-3 border-t border-tui-border bg-tui-accent/5 flex flex-col gap-2 shrink-0">
              <div className="flex items-center justify-between text-xs font-bold text-tui-dim uppercase mb-1">
                <span>Quick_Actions</span>
-               {updateTicket.isPending && <span className="animate-pulse text-tui-accent">Syncing...</span>}
+               {isSyncing && <span className="animate-pulse text-tui-accent">Syncing...</span>}
              </div>
             <div className="flex gap-2">
               <button 

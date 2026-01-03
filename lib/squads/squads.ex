@@ -7,6 +7,10 @@ defmodule Squads.Squads do
 
   alias Squads.Repo
   alias Squads.Squads.Squad
+  alias Squads.Squads.SquadConnection
+  alias Squads.Events
+  alias Squads.OpenCode.Status
+  alias Squads.Projects
 
   @doc """
   Lists all squads for a project.
@@ -38,7 +42,7 @@ defmodule Squads.Squads do
   Lists all squads for a project with agents preloaded.
   """
   def list_squads_with_agents(project_id) do
-    list_squads_for_project(project_id) |> Repo.preload(:agents)
+    list_squads_for_project(project_id) |> Repo.preload([:agents, :project])
   end
 
   @doc """
@@ -47,7 +51,7 @@ defmodule Squads.Squads do
   def get_squad_with_agents(id) do
     case get_squad(id) do
       nil -> nil
-      squad -> Repo.preload(squad, :agents)
+      squad -> Repo.preload(squad, [:agents, :project])
     end
   end
 
@@ -59,6 +63,27 @@ defmodule Squads.Squads do
     %Squad{}
     |> Squad.changeset(attrs)
     |> Repo.insert()
+    |> case do
+      {:ok, squad} = result ->
+        maybe_set_provisioning_status(squad.project_id)
+        result
+
+      error ->
+        error
+    end
+  end
+
+  defp maybe_set_provisioning_status(project_id) do
+    case Projects.get_project(project_id) do
+      %Projects.Project{path: path} ->
+        case Status.fetch(path) do
+          :error -> Status.set(path, :provisioning)
+          {:ok, _status} -> :ok
+        end
+
+      _ ->
+        :ok
+    end
   end
 
   @doc """
@@ -77,5 +102,148 @@ defmodule Squads.Squads do
   @spec delete_squad(Squad.t()) :: {:ok, Squad.t()} | {:error, Ecto.Changeset.t()}
   def delete_squad(%Squad{} = squad) do
     Repo.delete(squad)
+  end
+
+  # Squad Connections
+
+  @doc """
+  Lists connections for a given squad.
+  """
+  @spec list_connections_for_squad(Ecto.UUID.t()) :: [SquadConnection.t()]
+  def list_connections_for_squad(squad_id) do
+    SquadConnection
+    |> where([c], c.from_squad_id == ^squad_id or c.to_squad_id == ^squad_id)
+    |> Repo.all()
+    |> Repo.preload([:from_squad, :to_squad])
+  end
+
+  @doc """
+  Lists connections for a project (connections where at least one squad belongs to the project).
+  """
+  @spec list_connections_for_project(Ecto.UUID.t()) :: [SquadConnection.t()]
+  def list_connections_for_project(project_id) do
+    squad_ids =
+      Squad
+      |> select([s], s.id)
+      |> where([s], s.project_id == ^project_id)
+
+    SquadConnection
+    |> where([c], c.from_squad_id in subquery(squad_ids) or c.to_squad_id in subquery(squad_ids))
+    |> Repo.all()
+    |> Repo.preload([:from_squad, :to_squad])
+  end
+
+  @doc """
+  Creates a connection between two squads.
+  """
+  @spec create_connection(map()) :: {:ok, SquadConnection.t()} | {:error, Ecto.Changeset.t()}
+  def create_connection(attrs) do
+    result =
+      %SquadConnection{}
+      |> SquadConnection.changeset(attrs)
+      |> Repo.insert()
+
+    case result do
+      {:ok, connection} ->
+        # Load squads to get project IDs for events
+        connection = Repo.preload(connection, [:from_squad, :to_squad])
+
+        # Emit events for both squads' projects
+        if connection.from_squad do
+          Events.create_event(%{
+            kind: "squad.connected",
+            project_id: connection.from_squad.project_id,
+            payload: %{
+              connection_id: connection.id,
+              from_squad_id: connection.from_squad_id,
+              to_squad_id: connection.to_squad_id,
+              status: connection.status
+            }
+          })
+        end
+
+        if connection.to_squad &&
+             connection.to_squad.project_id != connection.from_squad.project_id do
+          Events.create_event(%{
+            kind: "squad.connected",
+            project_id: connection.to_squad.project_id,
+            payload: %{
+              connection_id: connection.id,
+              from_squad_id: connection.from_squad_id,
+              to_squad_id: connection.to_squad_id,
+              status: connection.status
+            }
+          })
+        end
+
+        {:ok, connection}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Gets a squad connection by ID.
+  """
+  @spec get_connection(Ecto.UUID.t()) :: SquadConnection.t() | nil
+  def get_connection(id) do
+    Repo.get(SquadConnection, id)
+  end
+
+  @doc """
+  Updates a squad connection.
+  """
+  @spec update_connection(SquadConnection.t(), map()) ::
+          {:ok, SquadConnection.t()} | {:error, Ecto.Changeset.t()}
+  def update_connection(%SquadConnection{} = connection, attrs) do
+    connection
+    |> SquadConnection.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes a squad connection.
+  """
+  @spec delete_connection(SquadConnection.t()) ::
+          {:ok, SquadConnection.t()} | {:error, Ecto.Changeset.t()}
+  def delete_connection(%SquadConnection{} = connection) do
+    connection = Repo.preload(connection, [:from_squad, :to_squad])
+
+    result = Repo.delete(connection)
+
+    case result do
+      {:ok, _deleted} ->
+        # Emit events for both squads' projects
+        if connection.from_squad do
+          Events.create_event(%{
+            kind: "squad.disconnected",
+            project_id: connection.from_squad.project_id,
+            payload: %{
+              connection_id: connection.id,
+              from_squad_id: connection.from_squad_id,
+              to_squad_id: connection.to_squad_id
+            }
+          })
+        end
+
+        if connection.to_squad &&
+             connection.to_squad.project_id != connection.from_squad.project_id do
+          Events.create_event(%{
+            kind: "squad.disconnected",
+            project_id: connection.to_squad.project_id,
+            payload: %{
+              connection_id: connection.id,
+              from_squad_id: connection.from_squad_id,
+              to_squad_id: connection.to_squad_id
+            }
+          })
+        end
+
+        result
+
+      error ->
+        error
+    end
   end
 end

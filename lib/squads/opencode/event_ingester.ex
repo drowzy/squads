@@ -234,11 +234,10 @@ defmodule Squads.OpenCode.EventIngester do
     end
   end
 
-  @impl true
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
-    # Handle process monitor messages
-    {:noreply, state}
-  end
+  # Removed handle_info for :DOWN since we don't monitor anything explicitly here anymore.
+  # Task.Supervisor handles its own children.
+  # And Req monitors its connections internally but delivers messages as {:error, ...} or :done usually.
+  # If we need to monitor pids, we should add back a meaningful handler.
 
   @impl true
   def handle_info(:reconnect, state) do
@@ -274,8 +273,6 @@ defmodule Squads.OpenCode.EventIngester do
       {:error, reason} ->
         {:error, reason}
     end
-  rescue
-    e -> {:error, e}
   end
 
   defp cancel_stream(_ref) do
@@ -394,25 +391,26 @@ defmodule Squads.OpenCode.EventIngester do
   end
 
   defp persist_event(kind, payload, state) do
-    # Validate kind is in allowed list before persisting
+    # Decouple persistence by spawning a task under the supervisor
+    # This prevents blocking the ingester (SSE stream) if DB is slow
+    # and prevents crashing the ingester if DB write fails.
+
+    # Validate that the event kind is supported before attempting persistence.
+    # This prevents crashes if OpenCode sends an event we haven't mapped/allowed.
     if kind in Squads.Events.Event.kinds() do
-      attrs = %{
-        kind: kind,
-        payload: payload,
-        project_id: state.project_id
-      }
+      # Using Task.Supervisor.start_child instead of async_nolink because we don't need to wait for the result
+      # We just want to fire and forget. 
+      # NOTE: In a real high-throughput system we might want a bounded queue (GenStage/Broadway)
+      # but for now Task.Supervisor provides supervision and isolation.
 
-      case Events.create_event(attrs) do
-        {:ok, _event} ->
-          :ok
-
-        {:error, changeset} ->
-          Logger.warning("Failed to persist event: #{inspect(changeset.errors)}")
-          :error
-      end
+      Task.Supervisor.start_child(
+        Squads.OpenCode.TaskSupervisor,
+        Squads.OpenCode.Ingestion.Persister,
+        :run,
+        [{kind, payload, state.project_id}]
+      )
     else
-      Logger.debug("Skipping unmapped event kind: #{kind}")
-      :ok
+      Logger.warning("Ignored unmapped or invalid event kind: #{kind}")
     end
   end
 

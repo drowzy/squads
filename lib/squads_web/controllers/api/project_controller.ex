@@ -86,8 +86,38 @@ defmodule SquadsWeb.API.ProjectController do
         {:error, :not_found}
 
       project ->
-        squads = Squads.list_squads_for_project(project.id)
+        squads = Squads.list_squads_with_agents(project.id)
         render(conn, :squads, squads: squads)
+    end
+  end
+
+  @doc """
+  Search/List all files in a project for autocomplete.
+  """
+  def files(conn, %{"project_id" => project_id}) do
+    with {:ok, uuid} <- Ecto.UUID.cast(project_id),
+         %Projects.Project{} = project <- Projects.get_project(uuid),
+         {:ok, files} <- Filesystem.list_all_files(project.path) do
+      json(conn, %{files: files})
+    else
+      :error -> {:error, :not_found}
+      nil -> {:error, :not_found}
+      {:error, reason} -> {:error, {:filesystem_error, reason}}
+    end
+  end
+
+  @doc """
+  Deletes a project.
+  """
+  def delete(conn, %{"id" => id}) do
+    with {:ok, uuid} <- Ecto.UUID.cast(id),
+         project when not is_nil(project) <- Projects.get_project(uuid),
+         {:ok, _project} <- Projects.delete_project(project) do
+      send_resp(conn, :no_content, "")
+    else
+      :error -> {:error, :not_found}
+      nil -> {:error, :not_found}
+      {:error, changeset} -> {:error, changeset}
     end
   end
 end

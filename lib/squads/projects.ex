@@ -24,7 +24,6 @@ defmodule Squads.Projects do
   @spec init(String.t(), String.t(), map()) :: {:ok, Project.t()} | {:error, term()}
   def init(path, name, config_overrides \\ %{}) do
     with :ok <- validate_path(path),
-         :ok <- ensure_not_initialized(path),
          config <- ProjectConfig.new(name, config_overrides),
          :ok <- ProjectConfig.save(path, config),
          {:ok, _} <- OpenCodeConfig.init(path),
@@ -138,14 +137,6 @@ defmodule Squads.Projects do
 
       true ->
         :ok
-    end
-  end
-
-  defp ensure_not_initialized(path) do
-    if initialized?(path) do
-      {:error, "project already initialized at #{path}"}
-    else
-      :ok
     end
   end
 end

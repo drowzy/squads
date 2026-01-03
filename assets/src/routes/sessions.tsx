@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useQueries } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
 import {
   Terminal,
@@ -8,66 +9,59 @@ import {
   Play,
   Pause,
   Clock,
+  StopCircle,
 } from 'lucide-react'
 import {
   useSessions,
   useProjects,
-  useSquads,
+  useStopSession,
   type Session,
   type Squad,
   type Agent,
 } from '../api/queries'
+import { fetcher } from '../api/client'
 import { cn } from '../lib/cn'
 import { SessionChatFlyout } from '../components/SessionChatFlyout'
+import { useNotifications } from '../components/Notifications'
 
 export const Route = createFileRoute('/sessions')({
   component: SessionsPage,
 })
 
 // Status filter options
-const STATUS_FILTERS = ['running', 'pending', 'paused'] as const
+const STATUS_FILTERS = ['running', 'starting', 'pending', 'paused', 'completed', 'failed', 'cancelled'] as const
 type StatusFilter = (typeof STATUS_FILTERS)[number]
 
 function SessionsPage() {
-  const { data: sessions = [], isLoading: sessionsLoading } = useSessions()
+  const [filter, setFilter] = useState<'active' | 'history' | 'all'>('active')
+  const { data: sessions = [], isLoading: sessionsLoading } = useSessions(
+    filter === 'active' ? { status: 'running,starting,pending,paused' } : 
+    filter === 'history' ? { status: 'completed,failed,cancelled' } : 
+    undefined
+  )
   const { data: projects = [], isLoading: projectsLoading } = useProjects()
 
-  // Fetch squads for all projects
-  const projectSquadsQueries = projects.map((p) => ({
-    projectId: p.id,
-    projectName: p.name,
-  }))
+  const squadQueries = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ['projects', project.id, 'squads'],
+      queryFn: () => fetcher<Squad[]>(`/projects/${project.id}/squads`),
+      enabled: !!project.id,
+    })),
+  })
 
-  // We'll aggregate all squads and agents from all projects
-  const [allSquads, setAllSquads] = useState<
-    (Squad & { projectName: string; projectId: string })[]
-  >([])
-  const [squadsLoaded, setSquadsLoaded] = useState(false)
+  const allSquads = useMemo(() => {
+    return squadQueries.flatMap((query, index) => {
+      const project = projects[index]
+      if (!project || !query.data) return []
+      return query.data.map((squad) => ({
+        ...squad,
+        projectName: project.name,
+        projectId: project.id,
+      }))
+    })
+  }, [projects, squadQueries])
 
-  // Fetch squads for each project
-  const SquadsFetcher = () => {
-    const results: (Squad & { projectName: string; projectId: string })[] = []
-    let allLoaded = true
-
-    for (const { projectId, projectName } of projectSquadsQueries) {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
-      const { data: squads, isLoading } = useSquads(projectId)
-      if (isLoading) {
-        allLoaded = false
-      } else if (squads) {
-        results.push(
-          ...squads.map((s) => ({ ...s, projectName, projectId }))
-        )
-      }
-    }
-
-    if (allLoaded && !squadsLoaded && projectSquadsQueries.length > 0) {
-      setAllSquads(results)
-      setSquadsLoaded(true)
-    }
-
-    return null
-  }
+  const squadsLoading = squadQueries.some((query) => query.isLoading)
 
   // Flyout state
   const [flyoutSession, setFlyoutSession] = useState<Session | null>(null)
@@ -90,12 +84,15 @@ function SessionsPage() {
     return lookup
   }, [allSquads])
 
-  // Filter sessions by status
-  const filteredSessions = useMemo(() => {
-    return sessions.filter((s) =>
-      STATUS_FILTERS.includes(s.status as StatusFilter)
-    )
-  }, [sessions])
+  // flyoutSession re-lookup to get fresh data
+  const currentFlyoutSession = useMemo(() => {
+    if (!flyoutSession) return null
+    return sessions.find(s => s.id === flyoutSession.id) || flyoutSession
+  }, [sessions, flyoutSession])
+
+  const filteredSessions = sessions // backend already filtered
+
+  // ...
 
   // Group sessions by squad
   const groupedSessions = useMemo(() => {
@@ -148,31 +145,41 @@ function SessionsPage() {
     return sortedGroups
   }, [filteredSessions, agentLookup])
 
-  // We are loading if essential data is loading.
-  // We can't strictly depend on squadsLoaded here because if there are no projects,
-  // squadsLoaded will never be true but isLoading should resolve.
-  const isLoading = sessionsLoading || projectsLoading || (projects.length > 0 && !squadsLoaded)
+  const isLoading = sessionsLoading || projectsLoading || squadsLoading
 
   return (
     <div className="space-y-6">
-      {/* Render the squads fetcher (hidden, just for loading) */}
-      {projects.length > 0 && !squadsLoaded && <SquadsFetcher />}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-tui-border pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tighter uppercase flex items-center gap-3">
             <Terminal className="text-tui-accent" size={24} />
-            ACTIVE_SESSIONS
+            {filter === 'active' ? 'ACTIVE_SESSIONS' : filter === 'history' ? 'SESSION_HISTORY' : 'ALL_SESSIONS'}
           </h1>
           <p className="text-xs text-tui-dim mt-1 uppercase tracking-widest">
-            Running, pending, and paused sessions across all projects
+            {filter === 'active' ? 'Running, pending, and paused sessions across all projects' : 
+             filter === 'history' ? 'Completed, failed, and cancelled sessions' :
+             'All recorded sessions across all projects'}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-tui-dim uppercase tracking-widest">
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-1 border border-tui-border p-1 bg-tui-bg">
+            {(['active', 'history', 'all'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={cn(
+                  "px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                  filter === f ? "bg-tui-accent text-tui-bg" : "text-tui-dim hover:text-tui-text"
+                )}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          <div className="text-[10px] text-tui-dim uppercase tracking-widest">
             Total: {filteredSessions.length}
-          </span>
+          </div>
         </div>
       </div>
 
@@ -184,17 +191,28 @@ function SessionsPage() {
       )}
 
       {/* Empty State */}
-      {!isLoading && filteredSessions.length === 0 && (
-        <div className="text-center py-20 border border-tui-border bg-black/20">
-          <Terminal className="mx-auto text-tui-dim mb-4" size={48} />
-          <h3 className="text-lg font-bold uppercase tracking-widest mb-2">
-            NO_ACTIVE_SESSIONS
-          </h3>
-          <p className="text-sm text-tui-dim">
-            No running, pending, or paused sessions found.
-          </p>
-        </div>
-      )}
+       {!isLoading && filteredSessions.length === 0 && (
+         <div className="text-center py-20 border border-tui-border bg-black/20">
+           <Terminal className="mx-auto text-tui-dim mb-4" size={48} />
+           <h3 className="text-lg font-bold uppercase tracking-widest mb-2">
+             {filter === 'active' ? 'NO_ACTIVE_SESSIONS' : filter === 'history' ? 'NO_SESSION_HISTORY' : 'NO_SESSIONS_FOUND'}
+           </h3>
+           <p className="text-sm text-tui-dim">
+             {filter === 'active' ? 'No running, pending, or paused sessions found.' : 
+              filter === 'history' ? 'No completed, failed, or cancelled sessions found.' :
+              'No sessions found in the system.'}
+           </p>
+           <div className="mt-6 flex justify-center">
+             <Link
+               to="/agent"
+               className="px-4 py-2 border border-tui-accent text-tui-accent text-xs font-bold uppercase tracking-widest hover:bg-tui-accent hover:text-tui-bg transition-colors"
+             >
+               Start_New_Session
+             </Link>
+           </div>
+         </div>
+       )}
+
 
       {/* Sessions grouped by squad */}
       {!isLoading && groupedSessions.length > 0 && (
@@ -242,10 +260,10 @@ function SessionsPage() {
       )}
 
       {/* Chat Flyout */}
-      {flyoutSession && (
+      {currentFlyoutSession && (
         <SessionChatFlyout
-          session={flyoutSession}
-          agent={agentLookup[flyoutSession.agent_id]?.agent}
+          session={currentFlyoutSession}
+          agent={agentLookup[currentFlyoutSession.agent_id]?.agent}
           onClose={() => setFlyoutSession(null)}
         />
       )}
@@ -260,11 +278,19 @@ interface SessionRowProps {
 }
 
 function SessionRow({ session, agent, onOpenChat }: SessionRowProps) {
+  const stopSession = useStopSession()
+  const { addNotification } = useNotifications()
+
   const statusConfig = {
     running: {
       icon: Play,
       color: 'text-green-400 border-green-500/30',
       bg: 'bg-green-500/10',
+    },
+    starting: {
+      icon: Clock,
+      color: 'text-yellow-400 border-yellow-500/30',
+      bg: 'bg-yellow-500/10',
     },
     pending: {
       icon: Clock,
@@ -276,6 +302,21 @@ function SessionRow({ session, agent, onOpenChat }: SessionRowProps) {
       color: 'text-blue-400 border-blue-500/30',
       bg: 'bg-blue-500/10',
     },
+    completed: {
+      icon: Clock,
+      color: 'text-ctp-green border-ctp-green/30',
+      bg: 'bg-ctp-green/5',
+    },
+    failed: {
+      icon: StopCircle,
+      color: 'text-ctp-red border-ctp-red/30',
+      bg: 'bg-ctp-red/5',
+    },
+    cancelled: {
+      icon: StopCircle,
+      color: 'text-tui-dim border-tui-dim/30',
+      bg: 'bg-tui-dim/5',
+    },
   }
 
   const config = statusConfig[session.status as keyof typeof statusConfig] || {
@@ -285,6 +326,28 @@ function SessionRow({ session, agent, onOpenChat }: SessionRowProps) {
   }
 
   const StatusIcon = config.icon
+
+  const handleStopSession = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!confirm('Are you sure you want to terminate this session? The agent will stop working immediately.')) return
+
+    try {
+      await stopSession.mutateAsync({ session_id: session.id })
+      addNotification({
+        type: 'success',
+        title: 'Session Terminated',
+        message: 'The agent session has been stopped successfully.'
+      })
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Action Failed',
+        message: error instanceof Error ? error.message : 'Failed to stop session'
+      })
+    }
+  }
 
   return (
     <div className="p-3 hover:bg-tui-dim/5 transition-colors flex items-center gap-4">
@@ -356,14 +419,26 @@ function SessionRow({ session, agent, onOpenChat }: SessionRowProps) {
         }
       </div>
 
-      {/* Chat Button */}
-      <button
-        onClick={onOpenChat}
-        className="p-2 border border-tui-border hover:border-tui-accent hover:text-tui-accent transition-colors shrink-0"
-        title="Open chat"
-      >
-        <MessageSquare size={16} />
-      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        {session.status === 'running' && (
+          <button
+            onClick={handleStopSession}
+            disabled={stopSession.isPending}
+            className="p-2 border border-tui-border hover:border-ctp-red hover:text-ctp-red transition-colors shrink-0 rounded"
+            title="Terminate Session"
+          >
+            <StopCircle size={16} />
+          </button>
+        )}
+        {/* Chat Button */}
+        <button
+          onClick={onOpenChat}
+          className="p-2 border border-tui-border hover:border-tui-accent hover:text-tui-accent transition-colors shrink-0 rounded"
+          title="Open chat"
+        >
+          <MessageSquare size={16} />
+        </button>
+      </div>
     </div>
   )
 }

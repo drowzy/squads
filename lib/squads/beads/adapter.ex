@@ -9,50 +9,35 @@ defmodule Squads.Beads.Adapter do
   Lists all issues in JSON format.
   """
   def list_issues(path) do
-    case run_cmd(path, ["list", "--json"]) do
-      {:ok, json} -> {:ok, Jason.decode!(json)}
-      error -> error
-    end
+    run_json_cmd(path, ["list", "--json"])
   end
 
   @doc """
   Lists ready issues in JSON format.
   """
   def ready_issues(path) do
-    case run_cmd(path, ["ready", "--json"]) do
-      {:ok, json} -> {:ok, Jason.decode!(json)}
-      error -> error
-    end
+    run_json_cmd(path, ["ready", "--json"])
   end
 
   @doc """
   Shows details for a specific issue.
   """
   def show_issue(path, id) do
-    case run_cmd(path, ["show", id, "--json"]) do
-      {:ok, json} -> {:ok, Jason.decode!(json)}
-      error -> error
-    end
+    run_json_cmd(path, ["show", id, "--json"])
   end
 
   @doc """
   Updates an issue's status.
   """
   def update_status(path, id, status) do
-    case run_cmd(path, ["update", id, "--status", to_string(status), "--json"]) do
-      {:ok, json} -> {:ok, Jason.decode!(json)}
-      error -> error
-    end
+    run_json_cmd(path, ["update", id, "--status", to_string(status), "--json"])
   end
 
   @doc """
   Updates an issue's assignee.
   """
   def update_assignee(path, id, assignee) do
-    case run_cmd(path, ["update", id, "--assignee", to_string(assignee), "--json"]) do
-      {:ok, json} -> {:ok, Jason.decode!(json)}
-      error -> error
-    end
+    run_json_cmd(path, ["update", id, "--assignee", to_string(assignee), "--json"])
   end
 
   @doc """
@@ -67,10 +52,7 @@ defmodule Squads.Beads.Adapter do
 
     args = if priority = opts[:priority], do: args ++ ["-p", to_string(priority)], else: args
 
-    case run_cmd(path, args) do
-      {:ok, json} -> {:ok, Jason.decode!(json)}
-      error -> error
-    end
+    run_json_cmd(path, args)
   end
 
   @doc """
@@ -80,10 +62,7 @@ defmodule Squads.Beads.Adapter do
     args = ["close", id, "--json"]
     args = if reason, do: args ++ ["--reason", reason], else: args
 
-    case run_cmd(path, args) do
-      {:ok, json} -> {:ok, Jason.decode!(json)}
-      error -> error
-    end
+    run_json_cmd(path, args)
   end
 
   @doc """
@@ -95,9 +74,20 @@ defmodule Squads.Beads.Adapter do
     args = if priority = opts[:priority], do: args ++ ["-p", to_string(priority)], else: args
     args = if parent = opts[:parent], do: args ++ ["--parent", parent], else: args
 
+    run_json_cmd(path, args)
+  end
+
+  defp run_json_cmd(path, args) do
     case run_cmd(path, args) do
-      {:ok, json} -> {:ok, Jason.decode!(json)}
+      {:ok, output} -> decode_json(output)
       error -> error
+    end
+  end
+
+  defp decode_json(output) do
+    case Jason.decode(output) do
+      {:ok, decoded} -> {:ok, decoded}
+      {:error, _reason} -> {:error, {:invalid_json, output}}
     end
   end
 

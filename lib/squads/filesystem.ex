@@ -98,6 +98,61 @@ defmodule Squads.Filesystem do
     end
   end
 
+  @doc """
+  Recursively list all files in a directory.
+  If it's a git repository, uses `git ls-files` for efficiency and .gitignore respect.
+  """
+  @spec list_all_files(String.t()) :: {:ok, [String.t()]} | {:error, term()}
+  def list_all_files(path) do
+    abs_path = normalize_path(path)
+
+    if git_repo?(abs_path) do
+      case System.cmd("git", ["ls-files"], cd: abs_path) do
+        {output, 0} ->
+          files = String.split(output, "\n", trim: true)
+          {:ok, files}
+
+        {_output, _} ->
+          # Fallback to manual if git fails for some reason
+          manual_recursive_list(abs_path)
+      end
+    else
+      manual_recursive_list(abs_path)
+    end
+  end
+
+  @ignored_dirs ~w(.git node_modules _build deps .elixir_ls .terrapin)
+
+  defp manual_recursive_list(path) do
+    try do
+      files =
+        path
+        |> File.ls!()
+        |> Enum.flat_map(fn entry ->
+          full_path = Path.join(path, entry)
+
+          cond do
+            entry in @ignored_dirs ->
+              []
+
+            File.dir?(full_path) ->
+              manual_recursive_list(full_path)
+              |> case do
+                {:ok, sub_files} -> Enum.map(sub_files, &Path.join(entry, &1))
+                _ -> []
+              end
+
+            true ->
+              [entry]
+          end
+        end)
+
+      {:ok, files}
+    rescue
+      e -> {:error, e}
+    end
+  end
+
   # Private functions
 
   defp normalize_path(nil), do: home_directory()

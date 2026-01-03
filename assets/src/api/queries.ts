@@ -74,6 +74,7 @@ export interface Squad {
   name: string
   description: string | null
   project_id: string
+  opencode_status?: 'idle' | 'provisioning' | 'running' | 'error'
   agents?: Agent[]
   inserted_at: string
   updated_at: string
@@ -207,6 +208,14 @@ export interface Event {
   agent_id?: string
 }
 
+export interface ExternalNode {
+  base_url: string
+  healthy: boolean
+  version?: string
+  source: 'local_lsof' | 'config' | 'manual'
+  last_seen_at: string
+}
+
 export interface Ticket {
   id: string
   title: string
@@ -241,6 +250,12 @@ export interface MailMessage {
   thread_id: string
   importance: 'low' | 'normal' | 'high' | 'urgent'
   ack_required: boolean
+  recipients?: {
+    agent_id: string
+    recipient_type: string
+    read_at?: string
+    acknowledged_at?: string
+  }[]
 }
 
 export interface MailThread {
@@ -261,6 +276,57 @@ export interface Review {
   author_name: string
   project_id: string
   inserted_at: string
+}
+
+export interface SquadConnection {
+  id: string
+  from_squad_id: string
+  to_squad_id: string
+  status: 'pending' | 'active' | 'disabled'
+  notes?: string
+  inserted_at: string
+  from_squad?: Squad
+  to_squad?: Squad
+}
+
+export interface McpServer {
+  id: string
+  squad_id: string
+  name: string
+  source: 'builtin' | 'registry' | 'custom'
+  type: 'remote' | 'container'
+  image?: string | null
+  url?: string | null
+  command?: string | null
+  args?: Record<string, unknown>
+  headers?: Record<string, unknown>
+  enabled: boolean
+  status: string
+  last_error?: string | null
+  catalog_meta?: Record<string, unknown>
+  tools?: Record<string, unknown>
+  inserted_at: string
+  updated_at: string
+}
+
+export interface McpCatalogEntry {
+  name: string
+  title?: string
+  icon?: string
+  category?: string
+  tags?: string[]
+  image?: string
+  secrets?: unknown[]
+  oauth?: unknown[]
+  run_env?: Record<string, unknown>
+  source?: Record<string, unknown>
+  tools?: unknown[]
+  raw?: Record<string, unknown>
+}
+
+export interface McpCliStatus {
+  available: boolean
+  message?: string
 }
 
 // --- Queries ---
@@ -292,6 +358,13 @@ export function useSquads(projectId: string) {
     queryKey: ['projects', projectId, 'squads'],
     queryFn: () => fetcher<Squad[]>(`/projects/${projectId}/squads`),
     enabled: !!projectId,
+    refetchInterval: (query) => {
+      const data = query.state.data as Squad[] | undefined
+      if (data?.some((squad) => squad.opencode_status === 'provisioning')) {
+        return 2000
+      }
+      return false
+    },
   })
 }
 
@@ -323,10 +396,123 @@ export function useSyncProviders() {
   })
 }
 
-export function useSessions() {
+export function useSessions(params?: { project_id?: string; agent_id?: string; status?: string }) {
+  const queryKey = params ? ['sessions', params] : ['sessions']
   return useQuery({
-    queryKey: ['sessions'],
-    queryFn: () => fetcher<Session[]>('/sessions'),
+    queryKey,
+    queryFn: () => {
+      const searchParams = new URLSearchParams()
+      if (params?.project_id) searchParams.append('project_id', params.project_id)
+      if (params?.agent_id) searchParams.append('agent_id', params.agent_id)
+      if (params?.status && params.status !== 'all') searchParams.append('status', params.status)
+      const url = searchParams.toString() ? `/sessions?${searchParams.toString()}` : '/sessions'
+      return fetcher<Session[]>(url)
+    },
+  })
+}
+
+export function useSquadConnections(params?: { project_id?: string; squad_id?: string }) {
+  const queryKey = params ? ['fleet', 'connections', params] : ['fleet', 'connections']
+  return useQuery({
+    queryKey,
+    queryFn: () => {
+      const searchParams = new URLSearchParams()
+      if (params?.project_id) searchParams.append('project_id', params.project_id)
+      if (params?.squad_id) searchParams.append('squad_id', params.squad_id)
+      const url = searchParams.toString() ? `/fleet/connections?${searchParams.toString()}` : '/fleet/connections'
+      return fetcher<SquadConnection[]>(url)
+    },
+  })
+}
+
+// --- MCP Queries ---
+
+export function useMcpServers(squadId: string) {
+  return useQuery({
+    queryKey: ['mcp', 'servers', squadId],
+    queryFn: () => fetcher<McpServer[]>(`/mcp?squad_id=${squadId}`),
+    enabled: !!squadId,
+  })
+}
+
+export function useMcpCatalog(filters?: { query?: string; category?: string; tag?: string }) {
+  const queryKey = filters ? ['mcp', 'catalog', filters] : ['mcp', 'catalog']
+
+  return useQuery({
+    queryKey,
+    queryFn: () => {
+      const searchParams = new URLSearchParams()
+      if (filters?.query) searchParams.append('query', filters.query)
+      if (filters?.category) searchParams.append('category', filters.category)
+      if (filters?.tag) searchParams.append('tag', filters.tag)
+      const url = searchParams.toString() ? `/mcp/catalog?${searchParams.toString()}` : '/mcp/catalog'
+      return fetcher<McpCatalogEntry[]>(url)
+    },
+  })
+}
+
+export function useMcpCliStatus() {
+  return useQuery({
+    queryKey: ['mcp', 'cli'],
+    queryFn: () => fetcher<McpCliStatus>('/mcp/cli'),
+    staleTime: 30000,
+  })
+}
+
+// --- Mutations ---
+
+export function useCreateSquadConnection() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { from_squad_id: string; to_squad_id: string; notes?: string }) =>
+      fetcher<SquadConnection>('/fleet/connections', {
+        method: 'POST',
+        body: JSON.stringify({ squad_connection: data }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'connections'] })
+    },
+  })
+}
+
+export function useDeleteSquadConnection() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetcher<void>(`/fleet/connections/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'connections'] })
+    },
+  })
+}
+
+export function useMessageSquad() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { from_squad_id: string; to_squad_id: string; subject: string; body: string; sender_name?: string }) =>
+      fetcher<{ id: string; subject: string; recipient_count: number }>(`/squads/${data.from_squad_id}/message`, {
+        method: 'POST',
+        body: JSON.stringify({
+          to_squad_id: data.to_squad_id,
+          subject: data.subject,
+          body: data.body,
+          sender_name: data.sender_name,
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mail'] })
+    },
+  })
+}
+
+export function useProjectFiles(projectId: string) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'files'],
+    queryFn: () => fetcher<{ files: string[] }>(`/projects/${projectId}/files`),
+    enabled: !!projectId,
+    staleTime: 60000, // Cache for 1 minute
   })
 }
 
@@ -427,6 +613,27 @@ export function useEvents(params: { project_id?: string; session_id?: string; ag
   })
 }
 
+export function useExternalNodes() {
+  return useQuery({
+    queryKey: ['external-nodes'],
+    queryFn: () => fetcher<ExternalNode[]>('/external_nodes'),
+    refetchInterval: 30000, // Refresh every 30 seconds
+  })
+}
+
+export function useProbeExternalNode() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (url: string) => fetcher<ExternalNode>('/external_nodes/probe', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['external-nodes'] })
+    },
+  })
+}
+
 export function useSession(id: string) {
   return useQuery({
     queryKey: ['sessions', id],
@@ -448,6 +655,22 @@ export function useSessionMessages(
   })
 }
 
+export function useSessionTodos(sessionId: string) {
+  return useQuery({
+    queryKey: ['sessions', sessionId, 'todos'],
+    queryFn: () => fetcher<any[]>(`/sessions/${sessionId}/todos`),
+    enabled: !!sessionId,
+  })
+}
+
+export function useSessionDiff(sessionId: string) {
+  return useQuery({
+    queryKey: ['sessions', sessionId, 'diff'],
+    queryFn: () => fetcher<string>(`/sessions/${sessionId}/diff`),
+    enabled: !!sessionId,
+  })
+}
+
 export function useSendSessionPrompt() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -458,6 +681,38 @@ export function useSendSessionPrompt() {
         method: 'POST',
         body: JSON.stringify(payload),
         timeout: 120000 // 2 minutes
+      })
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id, 'messages'] })
+    },
+  })
+}
+
+export function useExecuteSessionCommand() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { session_id: string; command: string; arguments?: string; agent?: string; model?: string }) => {
+      const { session_id, ...payload } = data
+      return fetcher<{ ok?: boolean; output?: string }>(`/sessions/${session_id}/command`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id, 'messages'] })
+    },
+  })
+}
+
+export function useRunSessionShell() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { session_id: string; command: string; agent?: string; model?: string }) => {
+      const { session_id, ...payload } = data
+      return fetcher<{ ok?: boolean; output?: string }>(`/sessions/${session_id}/shell`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
       })
     },
     onSuccess: (_, variables) => {
@@ -481,7 +736,29 @@ export function useReview(id: string) {
   })
 }
 
-// --- Mutations ---
+export function useNewSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      agent_id: string
+      ticket_key?: string
+      title?: string
+      worktree_path?: string
+      branch?: string
+      metadata?: Record<string, unknown>
+    }) => {
+      const { agent_id, ...payload } = data
+      return fetcher<Session>(`/agents/${agent_id}/sessions/new`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    },
+  })
+}
 
 export function useCreateSession() {
   const queryClient = useQueryClient()
@@ -507,51 +784,73 @@ export function useCreateSession() {
 export function useStopSession() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: { session_id: string }) =>
-      fetcher<void>('/sessions/stop', {
+    mutationFn: (data: { session_id: string; reason?: string }) =>
+      fetcher<void>(`/sessions/${data.session_id}/stop`, {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data.reason ? JSON.stringify({ reason: data.reason }) : undefined,
       }),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id] })
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       queryClient.invalidateQueries({ queryKey: ['projects'] })
     },
   })
 }
 
-export function useUpdateTicket(projectId?: string) {
+const invalidateTicketQueries = (queryClient: ReturnType<typeof useQueryClient>, projectId?: string) => {
+  if (projectId) {
+    queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tickets'] })
+    return
+  }
+  queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey
+      return Array.isArray(key) && key[0] === 'projects' && key[2] === 'tickets'
+    },
+  })
+}
+
+export function useUpdateTicketStatus(projectId?: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: { id: string; status: Ticket['status']; assignee?: string; project_id?: string }) => {
-      const actualProjectId = data.project_id || projectId
-      const url = `/tickets/${data.id}`
-      // We use the status endpoint for status updates and claim/unclaim for assignments
-      // But for simplicity in this hook, we'll assume we can patch properties or use specific endpoints
-      // Let's stick to status updates for now or assume a generic update if available
-      
-      // If we're updating status:
-      if (data.status) {
-         return fetcher<Ticket>(`${url}/status`, {
-          method: 'PATCH',
-          body: JSON.stringify({ status: data.status }),
-        })
-      }
-      
-      // If we're updating assignee (claiming):
-      if (data.assignee) {
-        return fetcher<Ticket>(`${url}/claim`, {
-          method: 'POST',
-          body: JSON.stringify({ agent_id: 'current-user-or-agent', agent_name: data.assignee }),
-        })
-      }
-      
-       // Fallback to a generic patch if we had one, but we don't seem to expose a generic update on TicketController
-       // So we might need to rely on the specific actions.
-       throw new Error("Update not fully supported via single endpoint yet")
+    mutationFn: (data: { id: string; status: Ticket['status']; project_id?: string }) =>
+      fetcher<Ticket>(`/tickets/${data.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: data.status }),
+      }),
+    onSuccess: (_, variables) => {
+      const actualProjectId = variables.project_id || projectId
+      invalidateTicketQueries(queryClient, actualProjectId)
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tickets'] })
+  })
+}
+
+export function useClaimTicket(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { id: string; agent_id: string; agent_name?: string; project_id?: string }) =>
+      fetcher<Ticket>(`/tickets/${data.id}/claim`, {
+        method: 'POST',
+        body: JSON.stringify({ agent_id: data.agent_id, agent_name: data.agent_name }),
+      }),
+    onSuccess: (_, variables) => {
+      const actualProjectId = variables.project_id || projectId
+      invalidateTicketQueries(queryClient, actualProjectId)
+    },
+  })
+}
+
+export function useUnclaimTicket(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { id: string; project_id?: string }) =>
+      fetcher<Ticket>(`/tickets/${data.id}/unclaim`, {
+        method: 'POST',
+      }),
+    onSuccess: (_, variables) => {
+      const actualProjectId = variables.project_id || projectId
+      invalidateTicketQueries(queryClient, actualProjectId)
     },
   })
 }
@@ -565,8 +864,7 @@ export function useCreateTicket() {
         body: JSON.stringify(data),
       }),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['projects', variables.project_id, 'tickets'] })
-      queryClient.invalidateQueries({ queryKey: ['tickets'] })
+      invalidateTicketQueries(queryClient, variables.project_id)
     },
   })
 }
@@ -581,7 +879,7 @@ export function useSubmitReview() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews'] })
-      queryClient.invalidateQueries({ queryKey: ['tickets'] })
+      invalidateTicketQueries(queryClient)
     },
   })
 }
@@ -595,6 +893,19 @@ export function useCreateProject() {
       fetcher<Project>('/projects', {
         method: 'POST',
         body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
+export function useDeleteProject() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetcher<void>(`/projects/${id}`, {
+        method: 'DELETE',
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
@@ -650,6 +961,91 @@ export function useDeleteSquad() {
       }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projects', variables.project_id, 'squads'] })
+    },
+  })
+}
+
+// --- MCP Mutations ---
+
+export function useCreateMcpServer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      squad_id: string
+      name: string
+      source: McpServer['source']
+      type: McpServer['type']
+      image?: string
+      url?: string
+      command?: string
+      args?: Record<string, unknown>
+      headers?: Record<string, unknown>
+      catalog_meta?: Record<string, unknown>
+    }) =>
+      fetcher<McpServer>(`/mcp?squad_id=${data.squad_id}`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['mcp', 'servers', variables.squad_id] })
+    },
+  })
+}
+
+export function useUpdateMcpServer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      squad_id: string
+      name: string
+      image?: string
+      url?: string
+      command?: string
+      args?: Record<string, unknown>
+      headers?: Record<string, unknown>
+      enabled?: boolean
+      status?: string
+      last_error?: string | null
+      catalog_meta?: Record<string, unknown>
+    }) =>
+      fetcher<McpServer>(`/mcp/${encodeURIComponent(data.name)}?squad_id=${data.squad_id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['mcp', 'servers', variables.squad_id] })
+    },
+  })
+}
+
+export function useEnableMcpServer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { squad_id: string; name: string }) =>
+      fetcher<McpServer>(
+        `/mcp/${encodeURIComponent(data.name)}/connect?squad_id=${data.squad_id}`,
+        {
+          method: 'POST',
+        }
+      ),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['mcp', 'servers', variables.squad_id] })
+    },
+  })
+}
+
+export function useDisableMcpServer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { squad_id: string; name: string }) =>
+      fetcher<McpServer>(
+        `/mcp/${encodeURIComponent(data.name)}/disconnect?squad_id=${data.squad_id}`,
+        {
+          method: 'POST',
+        }
+      ),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['mcp', 'servers', variables.squad_id] })
     },
   })
 }

@@ -244,7 +244,7 @@ defmodule Squads.OpenCode.Config do
       "mcp" => %{
         "agent_mail" => %{
           "type" => "remote",
-          "url" => "http://127.0.0.1:8765/mcp/agent_mail",
+          "url" => "http://127.0.0.1:4000/api/mcp/agent_mail/connect",
           "enabled" => true,
           "headers" => %{
             "Authorization" => "Bearer {env:AGENT_MAIL_API_KEY}"

@@ -15,6 +15,9 @@ defmodule Squads.Application do
       {DNSCluster, query: Application.get_env(:squads, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Squads.PubSub},
       {Registry, keys: :unique, name: Squads.OpenCode.ServerRegistry},
+      {DynamicSupervisor, strategy: :one_for_one, name: Squads.OpenCode.ProjectSupervisor},
+      {Task.Supervisor, name: Squads.OpenCode.TaskSupervisor},
+      {Squads.OpenCode.Status, []},
       {Squads.OpenCode.Server, []},
       # Start a worker by calling: Squads.Worker.start_link(arg)
       # {Squads.Worker, arg},

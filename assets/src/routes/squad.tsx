@@ -1,5 +1,5 @@
 import { useNavigate, createFileRoute, Link } from '@tanstack/react-router'
-import { Users, Shield, Cpu, Activity, ChevronRight, ChevronDown, Plus, MoreVertical, Pencil, Trash2, UserPlus, Play, StopCircle, MessageSquare, Eye } from 'lucide-react'
+import { Users, Shield, Cpu, Activity, ChevronRight, ChevronDown, Plus, MoreVertical, Pencil, Trash2, UserPlus, Play, StopCircle, MessageSquare, Eye, Radio, Server, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   useSquads,
@@ -13,8 +13,19 @@ import {
   useSessions,
   useCreateSession,
   useStopSession,
+  useSquadConnections,
+  useMessageSquad,
+  useMcpServers,
+  useMcpCatalog,
+  useMcpCliStatus,
+  useCreateMcpServer,
+  useEnableMcpServer,
+  useDisableMcpServer,
   type Squad,
   type Agent,
+  type SquadConnection,
+  type McpServer,
+  type McpCatalogEntry,
 } from '../api/queries'
 import { useActiveProject } from './__root'
 import { Modal, FormField, Input, Button } from '../components/Modal'
@@ -125,6 +136,7 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
   const [expanded, setExpanded] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [createAgentModalOpen, setCreateAgentModalOpen] = useState(false)
+  const [messageModalOpen, setMessageModalOpen] = useState(false)
   const deleteSquad = useDeleteSquad()
   const { addNotification } = useNotifications()
 
@@ -143,6 +155,21 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
   const agents = squad.agents ?? []
   const activeAgents = agents.filter(a => a.status !== 'offline')
   const workingAgents = agents.filter(a => a.status === 'working')
+  const opencodeStatus = squad.opencode_status ?? 'provisioning'
+  const opencodeLabel =
+    {
+      idle: 'Idle',
+      provisioning: 'Provisioning',
+      running: 'OpenCode Online',
+      error: 'OpenCode Error',
+    }[opencodeStatus] ?? 'Provisioning'
+  const opencodeTone =
+    {
+      idle: 'border-tui-border text-tui-dim',
+      provisioning: 'border-ctp-peach text-ctp-peach',
+      running: 'border-ctp-green text-ctp-green',
+      error: 'border-ctp-red text-ctp-red',
+    }[opencodeStatus] ?? 'border-ctp-peach text-ctp-peach'
 
   const handleDelete = async () => {
     if (!confirm(`Delete squad "${squad.name}"? This cannot be undone.`)) return
@@ -192,6 +219,9 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
             <span className="text-xs px-2 py-0.5 border border-tui-border text-tui-dim">
               {agents.length} agent{agents.length !== 1 ? 's' : ''}
             </span>
+            <span className={cn("text-[10px] px-2 py-0.5 border uppercase tracking-widest", opencodeTone)}>
+              {opencodeLabel}
+            </span>
           </div>
           {squad.description && (
             <p className="text-xs text-tui-dim mt-0.5 truncate">{squad.description}</p>
@@ -209,6 +239,18 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
               </div>
             )}
           </div>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setMessageModalOpen(true)
+            }}
+            className="p-2 text-tui-dim hover:text-tui-accent hover:bg-tui-dim/20 rounded focus:outline-none focus:ring-1 focus:ring-tui-accent"
+            title="Message Connected Squads"
+            aria-label={`Message squads connected to ${squad.name}`}
+          >
+            <Radio size={16} aria-hidden="true" />
+          </button>
 
           <button
             onClick={(e) => {
@@ -250,25 +292,36 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
                   role="menu"
                   className="absolute right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg min-w-[140px]"
                 >
-                  <button
-                    role="menuitem"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setMenuOpen(false)
-                      // TODO: Open edit modal
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
-                  >
-                    <Pencil size={14} aria-hidden="true" />
-                    Edit
-                  </button>
-                  <button
-                    role="menuitem"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setMenuOpen(false)
-                      handleDelete()
-                    }}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen(false)
+                // TODO: Open edit modal
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
+            >
+              <Pencil size={14} aria-hidden="true" />
+              Edit
+            </button>
+            <button
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen(false)
+                setMessageModalOpen(true)
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
+            >
+              <MessageSquare size={14} aria-hidden="true" />
+              Message Squad
+            </button>
+            <button
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen(false)
+                handleDelete()
+              }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-ctp-red hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
                   >
                     <Trash2 size={14} aria-hidden="true" />
@@ -307,6 +360,7 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
               </button>
             </div>
           )}
+          <SquadMcpPanel squadId={squad.id} />
         </div>
       )}
 
@@ -314,6 +368,13 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
         isOpen={createAgentModalOpen}
         onClose={() => setCreateAgentModalOpen(false)}
         projectId={projectId}
+        squadId={squad.id}
+        squadName={squad.name}
+      />
+
+      <MessageSquadModal
+        isOpen={messageModalOpen}
+        onClose={() => setMessageModalOpen(false)}
         squadId={squad.id}
         squadName={squad.name}
       />
@@ -548,6 +609,533 @@ function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: st
         )}
       </div>
     </div>
+  )
+}
+
+
+interface MessageSquadModalProps {
+  isOpen: boolean
+  onClose: () => void
+  squadId: string
+  squadName: string
+}
+
+function MessageSquadModal({ isOpen, onClose, squadId, squadName }: MessageSquadModalProps) {
+  const [toSquadId, setToSquadId] = useState('')
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [errors, setErrors] = useState<{ toSquadId?: string; subject?: string; body?: string }>({})
+
+  const { data: connections = [] } = useSquadConnections({ squad_id: squadId })
+  const messageSquad = useMessageSquad()
+  const { addNotification } = useNotifications()
+
+  // Filter for valid target squads
+  const targetSquads = connections
+    .map(c => {
+      // Determine which squad is the "other" one
+      if (c.from_squad_id === squadId) return c.to_squad
+      if (c.to_squad_id === squadId) return c.from_squad
+      return null
+    })
+    .filter((s): s is Squad => s !== null && s !== undefined)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    const newErrors: typeof errors = {}
+    if (!toSquadId) newErrors.toSquadId = 'Recipient squad is required'
+    if (!subject.trim()) newErrors.subject = 'Subject is required'
+    if (!body.trim()) newErrors.body = 'Message body is required'
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+
+    try {
+      await messageSquad.mutateAsync({
+        from_squad_id: squadId,
+        to_squad_id: toSquadId,
+        subject: subject.trim(),
+        body: body.trim(),
+        sender_name: `Squad ${squadName}`
+      })
+      
+      addNotification({
+        type: 'success',
+        title: 'Message Sent',
+        message: `Message sent to squad.`
+      })
+      handleClose()
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'Send Failed',
+        message: err instanceof Error ? err.message : 'Failed to send message'
+      })
+    }
+  }
+
+  const handleClose = () => {
+    setToSquadId('')
+    setSubject('')
+    setBody('')
+    setErrors({})
+    onClose()
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={handleClose} title="Message Squad" size="lg">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="text-xs text-tui-dim">
+          Sending from <span className="text-tui-accent font-bold">{squadName}</span>
+        </div>
+
+        <FormField label="To Squad" error={errors.toSquadId}>
+           <select
+            value={toSquadId}
+            onChange={(e) => {
+              setToSquadId(e.target.value)
+              setErrors(prev => ({ ...prev, toSquadId: undefined }))
+            }}
+            className="w-full px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+            disabled={targetSquads.length === 0}
+          >
+            <option value="">Select recipient...</option>
+            {targetSquads.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {targetSquads.length === 0 && (
+             <div className="text-xs text-ctp-peach mt-1">No connected squads found. Connect squads in Fleet Command first.</div>
+          )}
+        </FormField>
+
+        <FormField label="Subject" error={errors.subject}>
+          <Input
+            value={subject}
+            onChange={(e) => {
+              setSubject(e.target.value)
+              setErrors(prev => ({ ...prev, subject: undefined }))
+            }}
+            placeholder="Regarding deployment..."
+            error={!!errors.subject}
+          />
+        </FormField>
+
+        <FormField label="Message Body" hint="Markdown supported" error={errors.body}>
+          <textarea
+            value={body}
+            onChange={(e) => {
+              setBody(e.target.value)
+              setErrors(prev => ({ ...prev, body: undefined }))
+            }}
+            rows={8}
+            className="w-full px-3 py-2 bg-tui-bg border border-tui-border rounded text-sm text-tui-text focus:border-tui-accent focus:outline-none font-mono"
+            placeholder="Write your message here..."
+          />
+        </FormField>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="secondary" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button 
+            type="submit" 
+            variant="primary"
+            disabled={messageSquad.isPending || targetSquads.length === 0}
+          >
+            {messageSquad.isPending ? 'Sending...' : 'Send Message'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function SquadMcpPanel({ squadId }: { squadId: string }) {
+  const { data: servers = [], isLoading } = useMcpServers(squadId)
+  const { data: cliStatus } = useMcpCliStatus()
+  const createMcpServer = useCreateMcpServer()
+  const enableMcpServer = useEnableMcpServer()
+  const disableMcpServer = useDisableMcpServer()
+  const { addNotification } = useNotifications()
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [pendingName, setPendingName] = useState<string | null>(null)
+
+  const cliAvailable = cliStatus?.available ?? true
+  const cliMessage = cliStatus?.message
+
+  const existingNames = new Set(servers.map(server => server.name))
+
+  const handleAdd = async (entry: McpCatalogEntry) => {
+    try {
+      await createMcpServer.mutateAsync({
+        squad_id: squadId,
+        name: entry.name,
+        source: 'registry',
+        type: 'container',
+        image: entry.image,
+        catalog_meta: entry as Record<string, unknown>,
+      })
+      addNotification({
+        type: 'success',
+        title: 'MCP Added',
+        message: `${entry.title || entry.name} has been added to the squad.`,
+      })
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'Add Failed',
+        message: err instanceof Error ? err.message : 'Failed to add MCP server',
+      })
+    }
+  }
+
+  const handleToggle = async (server: McpServer) => {
+    if (!cliAvailable) {
+      addNotification({
+        type: 'error',
+        title: 'Docker MCP Unavailable',
+        message: cliMessage || 'Install Docker MCP Toolkit to enable MCP servers.',
+      })
+      return
+    }
+
+    setPendingName(server.name)
+
+    try {
+      if (server.enabled) {
+        await disableMcpServer.mutateAsync({ squad_id: squadId, name: server.name })
+        addNotification({
+          type: 'success',
+          title: 'MCP Disabled',
+          message: `${server.name} has been disabled.`,
+        })
+      } else {
+        await enableMcpServer.mutateAsync({ squad_id: squadId, name: server.name })
+        addNotification({
+          type: 'success',
+          title: 'MCP Enabled',
+          message: `${server.name} has been enabled.`,
+        })
+      }
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'MCP Action Failed',
+        message: err instanceof Error ? err.message : 'Failed to update MCP server',
+      })
+    } finally {
+      setPendingName(null)
+    }
+  }
+
+  return (
+    <div className="border-t border-tui-border/50">
+      <div className="flex items-center justify-between px-3 md:px-4 py-3 bg-tui-dim/10">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-tui-dim">
+          <Server size={14} aria-hidden="true" />
+          MCP Servers
+        </div>
+        <button
+          onClick={() => setCatalogOpen(true)}
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 text-xs font-bold tracking-widest uppercase",
+            "border border-tui-border text-tui-text",
+            "hover:bg-tui-dim/20 transition-colors"
+          )}
+        >
+          <Plus size={12} aria-hidden="true" />
+          Add MCP
+        </button>
+      </div>
+
+      {!cliAvailable && (
+        <div className="px-3 md:px-4 py-2 text-xs text-ctp-peach border-t border-ctp-peach/40 bg-ctp-peach/10">
+          Docker MCP Toolkit not detected. Enable/disable actions are disabled.
+          {cliMessage ? ` ${cliMessage}` : ''}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="p-4 text-xs text-tui-dim uppercase tracking-widest">Loading MCP status...</div>
+      ) : servers.length > 0 ? (
+        <div>
+          {servers.map(server => {
+            const meta = server.catalog_meta as {
+              title?: string
+              icon?: string
+              tags?: string[]
+              category?: string
+              secrets?: unknown[]
+              oauth?: unknown[]
+              raw?: {
+                oauth?: unknown[]
+                config?: { secrets?: unknown[] }
+              }
+            } | null
+            const displayTitle = meta?.title || server.name
+            const iconUrl = meta?.icon
+            const tags = Array.isArray(meta?.tags) ? meta?.tags.slice(0, 3) : []
+            const oauth = Array.isArray(meta?.oauth)
+              ? meta?.oauth
+              : Array.isArray(meta?.raw?.oauth)
+                ? meta?.raw?.oauth
+                : []
+            const secrets = Array.isArray(meta?.secrets)
+              ? meta?.secrets
+              : Array.isArray(meta?.raw?.config?.secrets)
+                ? meta?.raw?.config?.secrets
+                : []
+            const authBadges = [oauth.length > 0 ? 'OAUTH' : null, secrets.length > 0 ? 'SECRET' : null]
+              .filter(Boolean) as string[]
+            const statusLabel = (server.status || 'unknown').toUpperCase()
+
+            return (
+              <div
+                key={server.id}
+                className="flex items-center gap-3 px-3 md:px-4 py-3 border-t border-tui-border/50"
+              >
+                <div className="w-9 h-9 border border-tui-border flex items-center justify-center bg-tui-bg shrink-0">
+                  {iconUrl ? (
+                    <img
+                      src={iconUrl}
+                      alt={`${displayTitle} icon`}
+                      className="w-5 h-5 object-contain"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <Server size={14} className="text-tui-text" />
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold uppercase text-sm truncate">{displayTitle}</span>
+                    {meta?.category && (
+                      <span className="text-xs text-tui-dim">{meta.category}</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-tui-dim truncate">ID: {server.name}</div>
+                  <div className="flex items-center gap-2 text-xs text-tui-dim mt-1">
+                    <span className={server.enabled ? 'text-tui-accent' : 'text-tui-dim'}>
+                      {server.enabled ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                    <span className="text-tui-border">•</span>
+                    <span>STATUS: {statusLabel}</span>
+                  </div>
+                  {(tags.length > 0 || authBadges.length > 0) && (
+                    <div className="flex items-center flex-wrap gap-2 mt-2">
+                      {authBadges.map(badge => (
+                        <span
+                          key={badge}
+                          className="text-[10px] uppercase tracking-widest px-2 py-0.5 border border-ctp-peach text-ctp-peach"
+                        >
+                          {badge}
+                        </span>
+                      ))}
+                      {tags.map(tag => (
+                        <span
+                          key={tag}
+                          className="text-[10px] uppercase tracking-widest px-2 py-0.5 border border-tui-border text-tui-dim"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {server.last_error && (
+                    <div className="text-xs text-ctp-red mt-2 truncate">
+                      Last error: {server.last_error}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => handleToggle(server)}
+                  disabled={!cliAvailable || pendingName === server.name}
+                  title={
+                    !cliAvailable
+                      ? cliMessage || 'Docker MCP Toolkit not detected.'
+                      : undefined
+                  }
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 text-xs font-bold tracking-widest uppercase",
+                    "border border-tui-border",
+                    server.enabled
+                      ? "text-ctp-red hover:bg-ctp-red/10"
+                      : "text-tui-accent hover:bg-tui-accent/10",
+                    (!cliAvailable || pendingName === server.name) && "opacity-60 cursor-not-allowed"
+                  )}
+                >
+                  {server.enabled ? (
+                    <StopCircle size={12} aria-hidden="true" />
+                  ) : (
+                    <Play size={12} aria-hidden="true" />
+                  )}
+                  {server.enabled ? 'Disable' : 'Enable'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="p-4 text-center text-xs text-tui-dim space-y-2">
+          <div className="uppercase tracking-widest">No MCP servers configured</div>
+          <button
+            onClick={() => setCatalogOpen(true)}
+            className="text-tui-accent hover:underline"
+          >
+            Add MCP from catalog
+          </button>
+        </div>
+      )}
+
+      <McpCatalogModal
+        isOpen={catalogOpen}
+        onClose={() => setCatalogOpen(false)}
+        existingNames={existingNames}
+        onAdd={handleAdd}
+      />
+    </div>
+  )
+}
+
+interface McpCatalogModalProps {
+  isOpen: boolean
+  onClose: () => void
+  existingNames: Set<string>
+  onAdd: (entry: McpCatalogEntry) => Promise<void>
+}
+
+function McpCatalogModal({ isOpen, onClose, existingNames, onAdd }: McpCatalogModalProps) {
+  const [query, setQuery] = useState('')
+  const [addingName, setAddingName] = useState<string | null>(null)
+  const filters = query.trim() ? { query: query.trim() } : undefined
+  const { data: entries = [], isLoading } = useMcpCatalog(filters)
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery('')
+    }
+  }, [isOpen])
+
+  const handleAdd = async (entry: McpCatalogEntry) => {
+    setAddingName(entry.name)
+    try {
+      await onAdd(entry)
+    } catch {
+      // Errors are surfaced via notifications in the parent.
+    } finally {
+      setAddingName(null)
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Docker MCP Catalog" size="lg">
+      <div className="space-y-4">
+        <FormField label="Search Catalog" hint="Search by name or title">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-3 text-tui-dim" aria-hidden="true" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="notion, github, slack..."
+              className="pl-8"
+            />
+          </div>
+        </FormField>
+
+        {isLoading ? (
+          <div className="text-xs text-tui-dim uppercase tracking-widest">Loading catalog...</div>
+        ) : entries.length > 0 ? (
+          <div className="max-h-[380px] overflow-y-auto space-y-2">
+            {entries.map(entry => {
+              const isAdded = existingNames.has(entry.name)
+              const displayTitle = entry.title || entry.name
+              const tags = Array.isArray(entry.tags) ? entry.tags.slice(0, 3) : []
+              const oauth = Array.isArray(entry.oauth)
+                ? entry.oauth
+                : Array.isArray((entry.raw as { oauth?: unknown[] } | undefined)?.oauth)
+                  ? (entry.raw as { oauth?: unknown[] }).oauth
+                  : []
+              const secrets = Array.isArray(entry.secrets)
+                ? entry.secrets
+                : Array.isArray((entry.raw as { config?: { secrets?: unknown[] } } | undefined)?.config?.secrets)
+                  ? (entry.raw as { config?: { secrets?: unknown[] } }).config?.secrets
+                  : []
+              const authBadges = [oauth.length > 0 ? 'OAUTH' : null, secrets.length > 0 ? 'SECRET' : null]
+                .filter(Boolean) as string[]
+
+              return (
+                <div key={entry.name} className="border border-tui-border bg-tui-dim/5">
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="w-10 h-10 border border-tui-border bg-tui-bg flex items-center justify-center shrink-0">
+                      {entry.icon ? (
+                        <img
+                          src={entry.icon}
+                          alt={`${displayTitle} icon`}
+                          className="w-6 h-6 object-contain"
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <Server size={16} className="text-tui-text" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold uppercase text-sm truncate">{displayTitle}</span>
+                        {entry.category && (
+                          <span className="text-xs text-tui-dim">{entry.category}</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-tui-dim truncate">{entry.name}</div>
+                      {(tags.length > 0 || authBadges.length > 0) && (
+                        <div className="flex items-center flex-wrap gap-2 mt-2">
+                          {authBadges.map(badge => (
+                            <span
+                              key={badge}
+                              className="text-[10px] uppercase tracking-widest px-2 py-0.5 border border-ctp-peach text-ctp-peach"
+                            >
+                              {badge}
+                            </span>
+                          ))}
+                          {tags.map(tag => (
+                            <span
+                              key={tag}
+                              className="text-[10px] uppercase tracking-widest px-2 py-0.5 border border-tui-border text-tui-dim"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={isAdded || addingName === entry.name}
+                      onClick={() => handleAdd(entry)}
+                    >
+                      {isAdded ? 'Added' : addingName === entry.name ? 'Adding...' : 'Add'}
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="text-xs text-tui-dim uppercase tracking-widest">No catalog entries found.</div>
+        )}
+      </div>
+    </Modal>
   )
 }
 

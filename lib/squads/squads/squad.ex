@@ -14,6 +14,17 @@ defmodule Squads.Squads.Squad do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
+  @type t :: %__MODULE__{
+          id: Ecto.UUID.t(),
+          name: String.t(),
+          description: String.t() | nil,
+          project_id: Ecto.UUID.t(),
+          project: Project.t() | Ecto.Association.NotLoaded.t(),
+          agents: [Agent.t()] | Ecto.Association.NotLoaded.t(),
+          inserted_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
+
   schema "squads" do
     field :name, :string
     field :description, :string

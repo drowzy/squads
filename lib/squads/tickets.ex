@@ -384,18 +384,22 @@ defmodule Squads.Tickets do
   def sync_from_beads(project_id) do
     path = get_project_path(project_id)
 
-    with {:ok, issues} <- Beads.list_issues(path) do
-      results =
-        issues
-        |> Enum.map(&sync_single_ticket(project_id, &1))
-        |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    case Beads.list_issues(path) do
+      {:ok, issues} ->
+        results =
+          issues
+          |> Enum.map(&sync_single_ticket(project_id, &1))
+          |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
 
-      {:ok,
-       %{
-         created: length(Map.get(results, :created, [])),
-         updated: length(Map.get(results, :updated, [])),
-         errors: Map.get(results, :error, [])
-       }}
+        {:ok,
+         %{
+           created: length(Map.get(results, :created, [])),
+           updated: length(Map.get(results, :updated, [])),
+           errors: Map.get(results, :error, [])
+         }}
+
+      error ->
+        wrap_beads_error(error)
     end
   end
 
@@ -405,8 +409,12 @@ defmodule Squads.Tickets do
   def sync_ticket(project_id, beads_id) do
     path = get_project_path(project_id)
 
-    with {:ok, data} <- Beads.show_issue(path, beads_id) do
-      sync_single_ticket(project_id, data)
+    case Beads.show_issue(path, beads_id) do
+      {:ok, data} ->
+        sync_single_ticket(project_id, data)
+
+      error ->
+        wrap_beads_error(error)
     end
   end
 
@@ -438,14 +446,18 @@ defmodule Squads.Tickets do
   def sync_dependencies(project_id) do
     path = get_project_path(project_id)
 
-    with {:ok, issues} <- Beads.list_issues(path) do
-      results =
-        issues
-        |> Enum.flat_map(&extract_dependencies(project_id, &1))
-        |> Enum.map(&create_dependency_if_missing/1)
-        |> Enum.count(&match?({:ok, _}, &1))
+    case Beads.list_issues(path) do
+      {:ok, issues} ->
+        results =
+          issues
+          |> Enum.flat_map(&extract_dependencies(project_id, &1))
+          |> Enum.map(&create_dependency_if_missing/1)
+          |> Enum.count(&match?({:ok, _}, &1))
 
-      {:ok, %{synced: results}}
+        {:ok, %{synced: results}}
+
+      error ->
+        wrap_beads_error(error)
     end
   end
 
@@ -457,26 +469,30 @@ defmodule Squads.Tickets do
   def sync_parents(project_id) do
     path = get_project_path(project_id)
 
-    with {:ok, issues} <- Beads.list_issues(path) do
-      results =
-        issues
-        |> Enum.filter(fn issue -> issue["parent"] end)
-        |> Enum.map(fn issue ->
-          child_beads_id = issue["id"]
-          parent_beads_id = issue["parent"]
+    case Beads.list_issues(path) do
+      {:ok, issues} ->
+        results =
+          issues
+          |> Enum.filter(fn issue -> issue["parent"] end)
+          |> Enum.map(fn issue ->
+            child_beads_id = issue["id"]
+            parent_beads_id = issue["parent"]
 
-          child = get_ticket_by_beads_id(project_id, child_beads_id)
-          parent = get_ticket_by_beads_id(project_id, parent_beads_id)
+            child = get_ticket_by_beads_id(project_id, child_beads_id)
+            parent = get_ticket_by_beads_id(project_id, parent_beads_id)
 
-          if child && parent do
-            update_ticket(child, %{parent_id: parent.id})
-          else
-            {:ignore, :missing_relation}
-          end
-        end)
-        |> Enum.count(&match?({:ok, _}, &1))
+            if child && parent do
+              update_ticket(child, %{parent_id: parent.id})
+            else
+              {:ignore, :missing_relation}
+            end
+          end)
+          |> Enum.count(&match?({:ok, _}, &1))
 
-      {:ok, %{synced: results}}
+        {:ok, %{synced: results}}
+
+      error ->
+        wrap_beads_error(error)
     end
   end
 
@@ -565,6 +581,9 @@ defmodule Squads.Tickets do
   # ============================================================================
   # Private Helpers
   # ============================================================================
+
+  defp wrap_beads_error({:error, reason}), do: {:error, {:beads_error, reason}}
+  defp wrap_beads_error(other), do: other
 
   defp apply_filters(query, opts) do
     Enum.reduce(opts, query, fn

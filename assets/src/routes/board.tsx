@@ -11,6 +11,9 @@ export const Route = createFileRoute('/board')({
   component: TicketBoardWrapper,
 })
 
+const getAssigneeName = (ticket: Ticket) =>
+  ticket.assignee_name || ticket.assignee || ''
+
 function TicketBoardWrapper() {
   return (
     <ReactFlowProvider>
@@ -29,15 +32,18 @@ function TicketBoard() {
 
   const assignees = useMemo(() => {
     const set = new Set<string>()
-    tickets.forEach(t => t.assignee && set.add(t.assignee))
+    tickets.forEach((ticket) => {
+      const name = getAssigneeName(ticket)
+      if (name) set.add(name)
+    })
     return Array.from(set).sort()
   }, [tickets])
 
   const filteredTickets = useMemo(() => {
-    return tickets.filter(t => {
-      const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           t.id.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesAssignee = !assigneeFilter || t.assignee === assigneeFilter
+    return tickets.filter((ticket) => {
+      const matchesSearch = ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                           ticket.id.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesAssignee = !assigneeFilter || getAssigneeName(ticket) === assigneeFilter
       return matchesSearch && matchesAssignee
     })
   }, [tickets, searchQuery, assigneeFilter])
@@ -142,6 +148,23 @@ function TicketBoard() {
         </div>
       </div>
 
+      {tickets.length === 0 && (
+        <div className="border border-tui-border bg-black/20 p-8 text-center">
+          <div className="text-xs font-bold uppercase tracking-widest text-tui-dim">No tickets yet</div>
+          <p className="text-[11px] text-tui-dim/70 mt-2">
+            Create your first ticket to kick off the board.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase tracking-widest hover:bg-tui-accent/90 transition-colors"
+            >
+              Create_First_Ticket
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 min-h-0">
         {viewMode === 'kanban' ? (
           <div className="h-full flex flex-col md:flex-row gap-4 md:gap-6 overflow-y-auto md:overflow-y-hidden md:overflow-x-auto pb-4 custom-scrollbar">
@@ -189,6 +212,8 @@ function TicketBoard() {
 }
 
 function TicketCard({ ticket }: { ticket: Ticket }) {
+  const assigneeName = getAssigneeName(ticket)
+
   return (
     <div className="border border-tui-border p-3 bg-tui-bg hover:border-tui-accent transition-colors group cursor-pointer">
       <div className="flex justify-between items-start gap-2 mb-2">
@@ -206,12 +231,12 @@ function TicketCard({ ticket }: { ticket: Ticket }) {
         {ticket.title}
       </h4>
 
-      {ticket.assignee && (
+      {assigneeName && (
         <div className="flex items-center gap-2 mt-auto">
           <div className="w-5 h-5 md:w-4 md:h-4 border border-tui-border flex items-center justify-center bg-tui-dim/20">
-            <span className="text-[10px] font-bold">{ticket.assignee[0].toUpperCase()}</span>
+            <span className="text-[10px] font-bold">{assigneeName[0].toUpperCase()}</span>
           </div>
-          <span className="text-xs text-tui-dim">{ticket.assignee}</span>
+          <span className="text-xs text-tui-dim">{assigneeName}</span>
         </div>
       )}
     </div>
