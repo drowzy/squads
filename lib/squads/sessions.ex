@@ -659,7 +659,8 @@ defmodule Squads.Sessions do
       "/squads-tickets",
       "/check-mail",
       "/sessions",
-      "/compact"
+      "/compact",
+      "/help"
     ]
   end
 
@@ -744,12 +745,7 @@ defmodule Squads.Sessions do
           true ->
             case ensure_session_running(session, opencode_opts) do
               {:ok, session} ->
-                opts =
-                  params
-                  |> Keyword.merge(opencode_opts)
-                  |> normalize_agent_opt()
-
-                opts = with_base_url(session, opts)
+                opts = with_base_url(session, Keyword.merge(params, opencode_opts))
 
                 Logger.debug(
                   "Executing command #{command} on session #{session.opencode_session_id} with opts: #{inspect(opts)}"
@@ -801,12 +797,7 @@ defmodule Squads.Sessions do
       true ->
         case ensure_session_running(session, opencode_opts) do
           {:ok, session} ->
-            opts =
-              params
-              |> Keyword.merge(opencode_opts)
-              |> normalize_agent_opt()
-
-            opts = with_base_url(session, opts)
+            opts = with_base_url(session, Keyword.merge(params, opencode_opts))
 
             OpenCodeClient.run_shell(
               session.opencode_session_id,
@@ -871,12 +862,7 @@ defmodule Squads.Sessions do
       end
 
     params = if model, do: Map.put(params, :model, model), else: params
-
-    params =
-      case normalize_prompt_agent(opts[:agent]) do
-        nil -> params
-        agent -> Map.put(params, :agent, agent)
-      end
+    params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
 
     params = if opts[:no_reply], do: Map.put(params, :no_reply, opts[:no_reply]), else: params
     params = if system_override, do: Map.put(params, :system, system_override), else: params
@@ -929,40 +915,13 @@ defmodule Squads.Sessions do
       end
 
     params = if model, do: Map.put(params, :model, model), else: params
-
-    params =
-      case normalize_prompt_agent(opts[:agent]) do
-        nil -> params
-        agent -> Map.put(params, :agent, agent)
-      end
+    params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
 
     params = if system_override, do: Map.put(params, :system, system_override), else: params
 
     opts = with_base_url(session, Keyword.drop(opts, [:model, :agent, :system]))
     send_message_async(session, params, opts)
   end
-
-  # TODO(opencode-squads-gfh): Restore mode-to-agent mapping once OpenCode supports it.
-  defp normalize_prompt_agent(agent) when is_binary(agent) do
-    trimmed = String.trim(agent)
-
-    cond do
-      trimmed == "" -> nil
-      trimmed in ["plan", "build"] -> nil
-      true -> trimmed
-    end
-  end
-
-  defp normalize_prompt_agent(_), do: nil
-
-  defp normalize_agent_opt(opts) when is_list(opts) do
-    case normalize_prompt_agent(Keyword.get(opts, :agent)) do
-      nil -> Keyword.delete(opts, :agent)
-      agent -> Keyword.put(opts, :agent, agent)
-    end
-  end
-
-  defp normalize_agent_opt(opts), do: opts
 
   # ============================================================================
   # Private Helpers
@@ -1119,7 +1078,7 @@ defmodule Squads.Sessions do
     ticket = session.ticket_key || "no-ticket"
     started_at = format_session_time(session.started_at || session.inserted_at)
 
-    "[#{String.upcase(status)}] #{session.id} #{ticket} #{started_at}"
+    "[#{String.upcase(status)}] #{Ecto.UUID.cast!(session.id)} #{ticket} #{started_at}"
   end
 
   defp format_session_time(nil), do: "n/a"

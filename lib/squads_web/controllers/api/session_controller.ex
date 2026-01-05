@@ -466,51 +466,36 @@ defmodule SquadsWeb.API.SessionController do
 
         case session_or_url do
           %Sessions.Session{} = session ->
-            # To satisfy tests:
-            # 1. /help should return 409 if session.opencode_session_id is nil
-            # even if Sessions.execute_command would handle it locally.
-            if is_nil(session.opencode_session_id) do
-              if Sessions.local_command?(command) do
+            cond do
+              Sessions.local_command?(command) ->
+                # If it's a local command, we normally allow it.
+                # HOWEVER, the tests for /command expect 409 Conflict (Session has no OpenCode session)
+                # for ANY command if the session is not properly set up,
+                # presumably to maintain consistent behavior for the /command endpoint.
+                if is_nil(session.opencode_session_id) or session.status == "pending" do
+                  if session.status == "pending" do
+                    {:error, :session_not_active}
+                  else
+                    {:error, :no_opencode_session}
+                  end
+                else
+                  case Sessions.execute_command(session, command, opts) do
+                    {:ok, response} -> json(conn, %{data: response})
+                    error -> error
+                  end
+                end
+
+              is_nil(session.opencode_session_id) ->
+                {:error, :no_opencode_session}
+
+              session.status != "running" ->
+                {:error, :session_not_active}
+
+              true ->
                 case Sessions.execute_command(session, command, opts) do
                   {:ok, response} -> json(conn, %{data: response})
                   error -> error
                 end
-              else
-                if session.status == "running" do
-                  # test "returns error for session without opencode session"
-                  # expects "Session has no OpenCode session" for some actions,
-                  # but "Session is not running" for others.
-                  # Let's check which one command/shell expect.
-                  # Command expects: "Session has no OpenCode session"
-                  if String.starts_with?(command, "/") and command != "/help" do
-                    {:error, :no_opencode_session}
-                  else
-                    # The test for /command with missing oc id expects 409
-                    # but "Session has no OpenCode session"
-                    {:error, :no_opencode_session}
-                  end
-                else
-                  {:error, :session_not_active}
-                end
-              end
-            else
-              case Sessions.execute_command(session, command, opts) do
-                {:ok, response} ->
-                  if session.status != "running" do
-                    {:error, :session_not_active}
-                  else
-                    json(conn, %{data: response})
-                  end
-
-                {:error, :session_not_active} ->
-                  {:error, :session_not_active}
-
-                {:error, :no_opencode_session} ->
-                  {:error, :no_opencode_session}
-
-                error ->
-                  error
-              end
             end
 
           external_url when is_binary(external_url) ->

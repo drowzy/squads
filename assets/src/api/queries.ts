@@ -576,16 +576,14 @@ export function useSendMessage(projectId?: string) {
     onSuccess: (_result, variables) => {
       const actualProjectId = variables.project_id || projectId
       if (actualProjectId) {
-        queryClient.invalidateQueries({ queryKey: ['projects', actualProjectId, 'mail', 'threads'] })
-      } else {
-        queryClient.invalidateQueries({ queryKey: ['mail', 'threads'] })
+        queryClient.invalidateQueries({ queryKey: ['projects', actualProjectId, 'mail'] })
       }
       queryClient.invalidateQueries({ queryKey: ['mail'] })
     },
   })
 }
 
-export function useReplyMessage() {
+export function useReplyMessage(projectId?: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (data: { thread_id: string; body_md: string; project_id?: string }) => {
@@ -598,8 +596,12 @@ export function useReplyMessage() {
       })
     },
     onSuccess: (_, variables) => {
+      const actualProjectId = variables.project_id || projectId
       queryClient.invalidateQueries({ queryKey: ['mail', 'threads', variables.thread_id] })
-      queryClient.invalidateQueries({ queryKey: ['mail', 'threads'] })
+      if (actualProjectId) {
+        queryClient.invalidateQueries({ queryKey: ['projects', actualProjectId, 'mail'] })
+      }
+      queryClient.invalidateQueries({ queryKey: ['mail'] })
     },
   })
 }

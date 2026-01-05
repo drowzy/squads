@@ -1,5 +1,4 @@
 import { createRootRouteWithContext, Link, Outlet, useLocation } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/router-devtools'
 import { Terminal, Users, LayoutDashboard, UserCircle, ClipboardList, Mail, Wifi, WifiOff, Menu, X, ChevronDown, Plus, FolderOpen, Play, Search, Network } from 'lucide-react'
 import type { QueryClient } from '@tanstack/react-query'
 import { useEffect, useState, createContext, useContext } from 'react'
@@ -125,6 +124,9 @@ function AppShell() {
         }
         if (kind.startsWith('mail:')) {
           queryClient.invalidateQueries({ queryKey: ['mail'] })
+          if (activeProjectId) {
+            queryClient.invalidateQueries({ queryKey: ['projects', activeProjectId, 'mail'] })
+          }
         }
       }
     }
@@ -476,7 +478,6 @@ function AppShell() {
         activeProjectId={activeProjectId}
       />
       {activeProjectId && <TerminalPanel projectId={activeProjectId} />}
-      <TanStackRouterDevtools position="bottom-left" initialIsOpen={false} />
     </div>
     </ProjectContext.Provider>
   )
