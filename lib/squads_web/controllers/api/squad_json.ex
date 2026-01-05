@@ -35,6 +35,11 @@ defmodule SquadsWeb.API.SquadJSON do
       name: squad.name,
       description: squad.description,
       project_id: squad.project_id,
+      project_name:
+        if(Ecto.assoc_loaded?(squad.project) && squad.project,
+          do: squad.project.name,
+          else: nil
+        ),
       opencode_status: opencode_status(squad),
       inserted_at: squad.inserted_at,
       updated_at: squad.updated_at

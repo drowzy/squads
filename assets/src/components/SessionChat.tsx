@@ -113,7 +113,9 @@ export function SessionChat({
         (kind === 'session:status_changed' && event.session_id === session.id) ||
         (kind === 'message:created' && event.session_id === session.id)
       ) {
-        console.log('Session event received, invalidating queries:', kind)
+        if (import.meta.env.DEV) {
+          console.log('Session event received, invalidating queries:', kind)
+        }
         queryClient.invalidateQueries({ queryKey: ['sessions', session.id, 'messages'] })
         queryClient.invalidateQueries({ queryKey: ['sessions', session.id] })
       }
@@ -175,7 +177,9 @@ export function SessionChat({
     
     if (autocomplete.trigger === '@') {
       const q = autocomplete.query.toLowerCase()
-      console.log('Filtering project files:', { q, totalFiles: projectFiles.length, files: projectFiles.slice(0, 5) })
+      if (import.meta.env.DEV) {
+        console.log('Filtering project files:', { q, totalFiles: projectFiles.length, files: projectFiles.slice(0, 5) })
+      }
       return projectFiles
         .filter(f => f.toLowerCase().includes(q))
         .slice(0, 10) // Limit to 10 for performance
@@ -222,7 +226,9 @@ export function SessionChat({
       const trigger = lastWordMatch[1] as '/' | '@'
       const query = lastWordMatch[2]
       
-      console.log('Autocomplete triggered:', { trigger, query })
+      if (import.meta.env.DEV) {
+        console.log('Autocomplete triggered:', { trigger, query })
+      }
 
       // Calculate position based on textarea and cursor
       const rect = e.target.getBoundingClientRect()

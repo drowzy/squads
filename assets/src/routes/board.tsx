@@ -6,6 +6,7 @@ import { TicketFlow } from '../components/board/TicketFlow'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useActiveProject } from './__root'
 import { CreateTicketModal } from '../components/board/CreateTicketModal'
+import { ListToolbar } from '../components/ui/ListToolbar'
 
 export const Route = createFileRoute('/board')({
   component: TicketBoardWrapper,
@@ -92,39 +93,20 @@ function TicketBoard() {
           <p className="text-tui-dim text-xs md:text-sm italic">Status of all active and pending tickets</p>
         </div>
         
-        <div className="flex flex-wrap gap-2 md:gap-4 items-center">
-          {/* Filters */}
-          <div className="flex items-center gap-2 bg-tui-bg border border-tui-border px-3 py-2 flex-1 min-w-0 md:flex-none">
-            <Search size={14} className="text-tui-dim shrink-0" />
-            <input 
-              type="text" 
-              placeholder="SEARCH..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none outline-none text-xs uppercase font-mono w-full md:w-40 placeholder:text-tui-dim/30"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="text-tui-dim hover:text-tui-accent shrink-0">
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 bg-tui-bg border border-tui-border px-3 py-2 flex-1 min-w-0 md:flex-none">
-            <Filter size={14} className="text-tui-dim shrink-0" />
-            <select 
-              value={assigneeFilter || ''}
-              onChange={e => setAssigneeFilter(e.target.value || null)}
-              className="bg-transparent border-none outline-none text-xs uppercase font-mono w-full md:w-32 cursor-pointer"
-            >
-              <option value="">ALL_ASSIGNEES</option>
-              {assignees.map(a => (
-                <option key={a} value={a}>{a.toUpperCase()}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex border border-tui-border shrink-0">
+        <ListToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          filters={[
+            {
+              icon: <Filter size={14} className="text-tui-dim shrink-0" />,
+              value: assigneeFilter || '',
+              onChange: (val) => setAssigneeFilter(val || null),
+              options: assignees.map(a => ({ value: a, label: a })),
+              placeholder: "ALL_ASSIGNEES"
+            }
+          ]}
+        >
+          <div className="flex border border-tui-border shrink-0 bg-tui-bg">
             <button 
               onClick={() => setIsCreateModalOpen(true)}
               className="px-3 md:px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase hover:bg-white transition-colors"
@@ -134,18 +116,18 @@ function TicketBoard() {
             <div className="w-[1px] bg-tui-border"></div>
             <button 
               onClick={() => setViewMode('kanban')}
-              className={`p-2.5 md:p-2 transition-colors ${viewMode === 'kanban' ? 'bg-tui-accent text-tui-bg' : 'text-tui-dim hover:text-tui-text'}`}
+              className={`p-2 transition-colors ${viewMode === 'kanban' ? 'bg-tui-accent text-tui-bg' : 'text-tui-dim hover:text-tui-text'}`}
             >
               <Layout size={18} />
             </button>
             <button 
               onClick={() => setViewMode('flow')}
-              className={`p-2.5 md:p-2 transition-colors ${viewMode === 'flow' ? 'bg-tui-accent text-tui-bg' : 'text-tui-dim hover:text-tui-text'}`}
+              className={`p-2 transition-colors ${viewMode === 'flow' ? 'bg-tui-accent text-tui-bg' : 'text-tui-dim hover:text-tui-text'}`}
             >
               <Network size={18} />
             </button>
           </div>
-        </div>
+        </ListToolbar>
       </div>
 
       {tickets.length === 0 && (

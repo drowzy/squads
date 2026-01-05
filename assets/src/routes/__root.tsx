@@ -1,5 +1,25 @@
 import { createRootRouteWithContext, Link, Outlet, useLocation } from '@tanstack/react-router'
-import { Terminal, Users, LayoutDashboard, UserCircle, ClipboardList, Mail, Wifi, WifiOff, Menu, X, ChevronDown, Plus, FolderOpen, Play, Search, Network } from 'lucide-react'
+import { 
+  Terminal, 
+  Users, 
+  LayoutDashboard, 
+  UserCircle, 
+  ClipboardList, 
+  Mail, 
+  Wifi, 
+  WifiOff, 
+  Menu, 
+  X, 
+  ChevronDown, 
+  Plus, 
+  FolderOpen, 
+  Play, 
+  Search, 
+  Network,
+  Settings,
+  Activity,
+  Bug
+} from 'lucide-react'
 import type { QueryClient } from '@tanstack/react-query'
 import { useEffect, useState, createContext, useContext } from 'react'
 import { useProjects, useDeleteProject, type Project } from '../api/queries'
@@ -55,6 +75,7 @@ function AppShell() {
   const location = useLocation()
   const operationsRoutes = ['/agent', '/review', '/events', '/nodes', '/fleet']
   const isOperationsRoute = operationsRoutes.some((path) => location.pathname.startsWith(path))
+  const [utilitiesOpen, setUtilitiesOpen] = useState(false)
 
   // Set first project as active when projects load
   useEffect(() => {
@@ -281,7 +302,7 @@ function AppShell() {
           </div>
         </div>
         
-        <nav className="flex-1 p-2 space-y-4">
+        <nav className="flex-1 p-2 space-y-4 overflow-y-auto">
           <div className="space-y-1">
             <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.3em] text-tui-dim">
               Primary
@@ -318,8 +339,64 @@ function AppShell() {
           </div>
         </nav>
 
-        <div className="p-4 border-t border-tui-border text-xs text-tui-dim">
-          SYSTEM_READY_V0.1.0
+        <div className="p-2 border-t border-tui-border">
+           <div className="relative">
+             <button
+                onClick={() => setUtilitiesOpen(!utilitiesOpen)}
+                className={cn(
+                  "w-full flex items-center justify-between gap-2 px-3 py-2",
+                  "text-left text-xs border border-tui-border rounded",
+                  "hover:bg-tui-dim/10 transition-colors uppercase font-bold tracking-widest",
+                  utilitiesOpen && "bg-tui-dim/10"
+                )}
+             >
+                <div className="flex items-center gap-2">
+                  <Settings size={14} className="text-tui-dim" />
+                  <span>Utilities</span>
+                </div>
+                <ChevronDown size={14} className={cn("text-tui-dim transition-transform", utilitiesOpen && "rotate-180")} />
+             </button>
+
+             {utilitiesOpen && (
+               <div className="absolute bottom-full left-0 right-0 mb-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg p-1 space-y-1">
+                  <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-tui-dim border-b border-tui-border/50 mb-1">System_Tools</div>
+                  <button 
+                    onClick={() => {
+                      setUtilitiesOpen(false)
+                      setCommandPaletteOpen(true)
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-widest hover:bg-tui-dim/20 transition-colors text-left"
+                  >
+                    <Search size={14} />
+                    <span>Command Palette (⌘K)</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setUtilitiesOpen(false)
+                      window.dispatchEvent(new CustomEvent('toggle-terminal'))
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-widest hover:bg-tui-dim/20 transition-colors text-left"
+                  >
+                    <Terminal size={14} />
+                    <span>Toggle Terminal</span>
+                  </button>
+                  {import.meta.env.DEV && (
+                    <div className="pt-1 mt-1 border-t border-tui-border/50">
+                      <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-tui-accent">Dev_Mode</div>
+                      <div className="flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-widest text-tui-dim">
+                        <Bug size={14} />
+                        <span>Devtools Active</span>
+                      </div>
+                    </div>
+                  )}
+               </div>
+             )}
+           </div>
+        </div>
+
+        <div className="p-4 border-t border-tui-border text-[10px] text-tui-dim flex items-center justify-between">
+          <span>SYSTEM_READY</span>
+          <span>V0.1.0</span>
         </div>
       </aside>
 
@@ -356,96 +433,90 @@ function AppShell() {
              </button>
           </div>
 
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setStatusOpen((open) => !open)}
-              aria-expanded={statusOpen}
-              className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-tui-dim hover:text-tui-text transition-colors"
-            >
-              <span className="hidden sm:inline">Status</span>
-              <div className={cn(
-                "flex items-center gap-1.5 px-2 py-1 border rounded-sm transition-colors",
-                sseStatus === 'connected' ? "border-ctp-green/30 text-ctp-green" :
-                sseStatus === 'connecting' ? "border-ctp-peach/30 text-ctp-peach" :
-                "border-ctp-red/30 text-ctp-red"
-              )}>
-                {sseStatus === 'connected' ? <Wifi size={12} /> : <WifiOff size={12} />}
-                <span className="hidden sm:inline">
-                  {sseStatus === 'connected' ? 'ESTABLISHED' :
-                   sseStatus === 'connecting' ? 'NEGOTIATING...' : 'DISCONNECTED'}
-                </span>
-                {sseStatus === 'connected' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-ctp-green animate-pulse" />
-                )}
-              </div>
-            </button>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setStatusOpen((open) => !open)}
+                aria-expanded={statusOpen}
+                className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-tui-dim hover:text-tui-text transition-colors"
+              >
+                <span className="hidden sm:inline">Uplink</span>
+                <div className={cn(
+                  "w-2 h-2 rounded-full",
+                  sseStatus === 'connected' ? "bg-ctp-green animate-pulse" :
+                  sseStatus === 'connecting' ? "bg-ctp-peach animate-pulse" :
+                  "bg-ctp-red"
+                )} />
+              </button>
 
-            {statusOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
-                <div className="absolute right-0 top-full mt-2 z-50 w-80 border border-tui-border bg-tui-bg shadow-lg">
-                  <div className="px-3 py-2 border-b border-tui-border text-[10px] font-bold uppercase tracking-widest text-tui-dim">
-                    System_Status
-                  </div>
-                  <div className="p-3 space-y-3 text-xs text-tui-dim">
-                    <div className="flex items-center justify-between">
-                      <span>Uplink</span>
-                      <span className={cn(
-                        "font-mono",
-                        sseStatus === 'connected' ? "text-ctp-green" :
-                        sseStatus === 'connecting' ? "text-ctp-peach" :
-                        "text-ctp-red"
-                      )}>
-                        {sseStatus === 'connected' ? 'CONNECTED' :
-                         sseStatus === 'connecting' ? 'CONNECTING' :
-                         'DISCONNECTED'}
-                      </span>
+              {statusOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-50 w-80 border border-tui-border bg-tui-bg shadow-lg">
+                    <div className="px-3 py-2 border-b border-tui-border text-[10px] font-bold uppercase tracking-widest text-tui-dim flex justify-between items-center">
+                      <span>System_Status</span>
+                      <button onClick={() => setStatusOpen(false)} className="hover:text-tui-text"><X size={12} /></button>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span>Node</span>
-                      <span className="font-mono text-tui-text">
-                        {activeProjectId?.slice(0, 8) || 'OFFLINE'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Path</span>
-                      <span
-                        className="font-mono text-tui-text truncate max-w-[180px]"
-                        title={activeProject?.path || '~/workspace'}
-                      >
-                        {activeProject?.path || '~/workspace'}
-                      </span>
-                    </div>
-                    {activeProject && (
-                      <div className="pt-2 mt-2 border-t border-tui-border">
-                        <button
-                          onClick={() => {
-                            if (confirm(`Are you sure you want to remove project "${activeProject.name}"? This will remove all associated squads and agents.`)) {
-                              deleteProject.mutate(activeProject.id, {
-                                onSuccess: () => {
-                                  setStatusOpen(false)
-                                  setActiveProjectId(null)
-                                  addNotification({
-                                    type: 'success',
-                                    title: 'Project Removed',
-                                    message: `Project ${activeProject.name} has been removed.`,
-                                  })
-                                }
-                              })
-                            }
-                          }}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 text-ctp-red hover:bg-ctp-red/10 transition-colors rounded"
-                        >
-                          <Trash2 size={14} aria-hidden="true" />
-                          <span>Remove Project</span>
-                        </button>
+                    <div className="p-3 space-y-3 text-xs text-tui-dim">
+                      <div className="flex items-center justify-between">
+                        <span>Status</span>
+                        <span className={cn(
+                          "font-mono font-bold px-1.5 py-0.5 border rounded-sm",
+                          sseStatus === 'connected' ? "border-ctp-green/30 text-ctp-green bg-ctp-green/5" :
+                          sseStatus === 'connecting' ? "border-ctp-peach/30 text-ctp-peach bg-ctp-peach/5" :
+                          "border-ctp-red/30 text-ctp-red bg-ctp-red/5"
+                        )}>
+                          {sseStatus === 'connected' ? 'ESTABLISHED' :
+                           sseStatus === 'connecting' ? 'NEGOTIATING' :
+                           'DISCONNECTED'}
+                        </span>
                       </div>
-                    )}
+                      <div className="flex items-center justify-between">
+                        <span>Project_ID</span>
+                        <span className="font-mono text-tui-text">
+                          {activeProjectId?.slice(0, 8) || 'OFFLINE'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Working_Dir</span>
+                        <span
+                          className="font-mono text-tui-text truncate max-w-[180px]"
+                          title={activeProject?.path || '~/workspace'}
+                        >
+                          {activeProject?.path || '~/workspace'}
+                        </span>
+                      </div>
+                      {activeProject && (
+                        <div className="pt-2 mt-2 border-t border-tui-border">
+                          <button
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to remove project "${activeProject.name}"? This will remove all associated squads and agents.`)) {
+                                deleteProject.mutate(activeProject.id, {
+                                  onSuccess: () => {
+                                    setStatusOpen(false)
+                                    setActiveProjectId(null)
+                                    addNotification({
+                                      type: 'success',
+                                      title: 'Project Removed',
+                                      message: `Project ${activeProject.name} has been removed.`,
+                                    })
+                                  }
+                                })
+                              }
+                            }}
+                            className="w-full flex items-center gap-2 px-2 py-1.5 text-ctp-red hover:bg-ctp-red/10 transition-colors rounded"
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                            <span>Remove Project</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </header>
 

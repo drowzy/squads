@@ -28,6 +28,7 @@ import {
 import { useActiveProject } from './__root'
 import { cn } from '../lib/cn'
 import { useNotifications } from '../components/Notifications'
+import { ListToolbar } from '../components/ui/ListToolbar'
 
 export const Route = createFileRoute('/mail')({
   component: MailSystem,
@@ -38,8 +39,16 @@ function MailSystem() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [showFolders, setShowFolders] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const { data: threads = [], isLoading: isLoadingThreads, error: threadsError } = useMailThreads(activeProject?.id)
+
+  const filteredThreads = useMemo(() => {
+    return threads.filter(t => 
+      t.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.participants.some(p => p.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+  }, [threads, searchQuery])
 
   const handleSelectThread = (threadId: string) => {
     setSelectedThreadId(threadId)
@@ -80,6 +89,12 @@ function MailSystem() {
         </button>
       </div>
 
+      <ListToolbar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="SEARCH_THREADS..."
+      />
+
       <div className="flex-1 border border-tui-border flex flex-col md:flex-row bg-tui-bg/50 overflow-hidden relative">
         {/* Mobile folder toggle */}
         <button 
@@ -110,19 +125,11 @@ function MailSystem() {
             selectedThreadId ? "hidden md:flex" : "flex",
             showFolders && "hidden md:flex"
           )}>
-            <div className="h-12 border-b border-tui-border flex items-center px-4 gap-4 bg-tui-dim/10">
-              <Search size={16} className="text-tui-dim" />
-              <input 
-                type="text" 
-                placeholder="SEARCH_THREADS..." 
-                className="bg-transparent border-none outline-none text-xs font-mono w-full placeholder:text-tui-dim/50"
-              />
-            </div>
             <div className="flex-1 overflow-y-auto divide-y divide-tui-border/50">
-              {threads.length === 0 && (
+              {filteredThreads.length === 0 && (
                 <div className="p-8 text-center text-tui-dim italic text-sm">No active threads found.</div>
               )}
-              {threads.map((thread) => (
+              {filteredThreads.map((thread) => (
                 <ThreadItem 
                   key={thread.id} 
                   thread={thread} 

@@ -2,9 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useActiveProject } from './__root'
 import { useEvents } from '../api/queries'
 import { EventTimeline } from '../components/events/EventTimeline'
-import { Terminal, Filter, RefreshCcw, Search } from 'lucide-react'
+import { Terminal, Filter, RefreshCcw, Search, Hash } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { cn } from '../lib/cn'
+import { ListToolbar } from '../components/ui/ListToolbar'
 
 export const Route = createFileRoute('/events')({
   component: EventsPage,
@@ -36,12 +37,12 @@ function EventsPage() {
   }, [events, kindFilter, filterText])
 
   const eventKinds = [
-    { id: 'all', label: 'ALL_EVENTS' },
-    { id: 'session:', label: 'SESSIONS' },
-    { id: 'message:', label: 'MESSAGES' },
-    { id: 'ticket:', label: 'TICKETS' },
-    { id: 'mail:', label: 'MAIL' },
-    { id: 'agent:', label: 'AGENTS' },
+    { value: 'all', label: 'ALL_EVENTS' },
+    { value: 'session:', label: 'SESSIONS' },
+    { value: 'message:', label: 'MESSAGES' },
+    { value: 'ticket:', label: 'TICKETS' },
+    { value: 'mail:', label: 'MAIL' },
+    { value: 'agent:', label: 'AGENTS' },
   ]
 
   return (
@@ -56,81 +57,50 @@ function EventsPage() {
             Audit trail for {activeProject?.name || 'active project'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-           <button
-            onClick={() => refetch()}
-            disabled={isLoading || isRefetching}
-            className="p-2 border border-tui-border hover:bg-tui-dim/10 text-tui-dim hover:text-tui-text transition-colors disabled:opacity-50"
-            title="Refresh events"
-          >
-            <RefreshCcw size={18} className={cn(isRefetching && "animate-spin")} />
-          </button>
-          <select 
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="bg-black/40 border border-tui-border text-xs font-bold py-2 px-3 focus:outline-none focus:ring-1 focus:ring-tui-accent"
-          >
-            <option value={20}>LIMIT: 20</option>
-            <option value={50}>LIMIT: 50</option>
-            <option value={100}>LIMIT: 100</option>
-            <option value={500}>LIMIT: 500</option>
-          </select>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <aside className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-tui-dim">
-              Filter_By_Kind
-            </label>
-            <div className="flex flex-col gap-1">
-              {eventKinds.map((kind) => (
-                <button
-                  key={kind.id}
-                  onClick={() => setKindFilter(kind.id)}
-                  className={cn(
-                    "flex items-center justify-between px-3 py-2 text-xs font-bold transition-all border",
-                    kindFilter === kind.id 
-                      ? "bg-tui-accent/10 border-tui-accent text-tui-accent" 
-                      : "border-tui-border text-tui-dim hover:bg-tui-dim/5 hover:text-tui-text"
-                  )}
-                >
-                  <span>{kind.label}</span>
-                  {kindFilter === kind.id && <Filter size={12} />}
-                </button>
-              ))}
-            </div>
-          </div>
+      <ListToolbar
+        searchQuery={filterText}
+        onSearchChange={setFilterText}
+        searchPlaceholder="KEYWORDS..."
+        filters={[
+          {
+            icon: <Filter size={14} className="text-tui-dim shrink-0" />,
+            value: kindFilter,
+            onChange: setKindFilter,
+            options: eventKinds,
+          },
+          {
+            icon: <Hash size={14} className="text-tui-dim shrink-0" />,
+            value: limit.toString(),
+            onChange: (val) => setLimit(Number(val)),
+            options: [
+              { value: '20', label: 'LIMIT: 20' },
+              { value: '50', label: 'LIMIT: 50' },
+              { value: '100', label: 'LIMIT: 100' },
+              { value: '500', label: 'LIMIT: 500' },
+            ]
+          }
+        ]}
+      >
+        <button
+          onClick={() => refetch()}
+          disabled={isLoading || isRefetching}
+          className="p-2 border border-tui-border bg-tui-bg hover:bg-tui-dim/10 text-tui-dim hover:text-tui-text transition-colors disabled:opacity-50"
+          title="Refresh events"
+        >
+          <RefreshCcw size={18} className={cn(isRefetching && "animate-spin")} />
+        </button>
+      </ListToolbar>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-tui-dim">
-              Search_Payload
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-tui-dim" size={14} />
-              <input 
-                type="text"
-                placeholder="KEYWORDS..."
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="w-full bg-black/40 border border-tui-border py-2 pl-9 pr-3 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-tui-accent"
-              />
-            </div>
-          </div>
-        </aside>
-
-        <div className="md:col-span-3">
-          <div className="bg-black/20 border border-tui-border overflow-hidden">
-            <div className="p-3 border-b border-tui-border bg-black/40 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-tui-dim">
-                {filteredEvents.length} MATCHING_EVENTS
-              </span>
-            </div>
-            <div className="p-4">
-              <EventTimeline events={filteredEvents} isLoading={isLoading} showSessionLink />
-            </div>
-          </div>
+      <div className="bg-black/20 border border-tui-border overflow-hidden">
+        <div className="p-3 border-b border-tui-border bg-black/40 flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-tui-dim">
+            {filteredEvents.length} MATCHING_EVENTS
+          </span>
+        </div>
+        <div className="p-4">
+          <EventTimeline events={filteredEvents} isLoading={isLoading} showSessionLink />
         </div>
       </div>
     </div>

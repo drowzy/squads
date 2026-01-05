@@ -57,7 +57,9 @@ export function useProjectEvents({ projectId, onEvent }: UseProjectEventsOptions
           if (data.type === 'event') {
             onEventRef.current?.(data.data)
           } else if (data.type === 'joined') {
-            console.log(`Joined project ${data.project_id}`)
+            if (import.meta.env.DEV) {
+              console.log(`Joined project ${data.project_id}`)
+            }
           }
         } catch (err) {
           console.error('Failed to parse websocket message', err)

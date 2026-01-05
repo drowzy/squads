@@ -42,7 +42,12 @@ defmodule SquadsWeb.API.SquadConnectionJSON do
     %{
       id: squad.id,
       name: squad.name,
-      project_id: squad.project_id
+      project_id: squad.project_id,
+      project_name:
+        if(Ecto.assoc_loaded?(squad.project),
+          do: squad.project.name,
+          else: nil
+        )
     }
   end
 end

@@ -20,6 +20,13 @@ export function TerminalPanel({ projectId }: TerminalPanelProps) {
   const [events, setEvents] = useState<SystemEvent[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Listen for custom toggle events
+  useEffect(() => {
+    const handleToggle = () => setIsOpen(prev => !prev)
+    window.addEventListener('toggle-terminal', handleToggle)
+    return () => window.removeEventListener('toggle-terminal', handleToggle)
+  }, [])
+
   const { isConnected } = useProjectEvents({
     projectId,
     onEvent: (event) => {
@@ -49,15 +56,7 @@ export function TerminalPanel({ projectId }: TerminalPanelProps) {
   }, [isConnected])
 
   if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 right-4 md:bottom-4 bg-tui-bg border border-tui-accent text-tui-accent p-3 md:p-2 rounded-full shadow-lg hover:bg-tui-accent hover:text-tui-bg transition-colors z-40"
-        title="Open System Terminal"
-      >
-        <Terminal size={24} className="md:w-5 md:h-5" />
-      </button>
-    )
+    return null
   }
 
   if (isMinimized) {

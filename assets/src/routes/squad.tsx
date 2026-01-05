@@ -705,7 +705,7 @@ function MessageSquadModal({ isOpen, onClose, squadId, squadName }: MessageSquad
             <option value="">Select recipient...</option>
             {targetSquads.map(s => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {s.name} {s.project_name ? `(${s.project_name})` : ''}
               </option>
             ))}
           </select>

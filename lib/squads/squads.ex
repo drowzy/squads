@@ -20,6 +20,7 @@ defmodule Squads.Squads do
     Squad
     |> where([s], s.project_id == ^project_id)
     |> Repo.all()
+    |> Repo.preload(:project)
   end
 
   @doc """
@@ -27,7 +28,9 @@ defmodule Squads.Squads do
   """
   @spec get_squad(Ecto.UUID.t()) :: Squad.t() | nil
   def get_squad(id) do
-    Repo.get(Squad, id)
+    Squad
+    |> Repo.get(id)
+    |> Repo.preload(:project)
   end
 
   @doc """
@@ -35,7 +38,9 @@ defmodule Squads.Squads do
   """
   @spec get_squad!(Ecto.UUID.t()) :: Squad.t()
   def get_squad!(id) do
-    Repo.get!(Squad, id)
+    Squad
+    |> Repo.get!(id)
+    |> Repo.preload(:project)
   end
 
   @doc """
@@ -114,7 +119,7 @@ defmodule Squads.Squads do
     SquadConnection
     |> where([c], c.from_squad_id == ^squad_id or c.to_squad_id == ^squad_id)
     |> Repo.all()
-    |> Repo.preload([:from_squad, :to_squad])
+    |> Repo.preload(from_squad: :project, to_squad: :project)
   end
 
   @doc """
@@ -130,7 +135,7 @@ defmodule Squads.Squads do
     SquadConnection
     |> where([c], c.from_squad_id in subquery(squad_ids) or c.to_squad_id in subquery(squad_ids))
     |> Repo.all()
-    |> Repo.preload([:from_squad, :to_squad])
+    |> Repo.preload(from_squad: :project, to_squad: :project)
   end
 
   @doc """
@@ -146,7 +151,7 @@ defmodule Squads.Squads do
     case result do
       {:ok, connection} ->
         # Load squads to get project IDs for events
-        connection = Repo.preload(connection, [:from_squad, :to_squad])
+        connection = Repo.preload(connection, from_squad: :project, to_squad: :project)
 
         # Emit events for both squads' projects
         if connection.from_squad do

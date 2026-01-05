@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { useAgents, type Agent } from '../api/queries'
 import { useActiveProject } from './__root'
 import { cn } from '../lib/cn'
+import { ListToolbar } from '../components/ui/ListToolbar'
 
 export const Route = createFileRoute('/agent/')({
   component: AgentOverview,
@@ -45,17 +46,11 @@ export function AgentOverview() {
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-tui-dim/5 p-2 border border-tui-border">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-tui-dim" size={16} />
-          <input 
-            type="text"
-            placeholder="Search agents by name, role, or slug..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-tui-bg border border-tui-border text-sm focus:outline-none focus:border-tui-accent transition-colors"
-          />
-        </div>
+      <ListToolbar
+        searchQuery={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search agents by name, role, or slug..."
+      >
         <div className="flex items-center gap-1 border border-tui-border p-1 bg-tui-bg">
           <button 
             onClick={() => setViewMode('grid')}
@@ -72,7 +67,7 @@ export function AgentOverview() {
             <List size={16} />
           </button>
         </div>
-      </div>
+      </ListToolbar>
 
       {isLoading ? (
         <div className="p-8 border border-tui-border border-dashed text-center text-tui-dim animate-pulse uppercase tracking-widest text-xs">

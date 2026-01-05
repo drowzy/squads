@@ -74,6 +74,7 @@ export interface Squad {
   name: string
   description: string | null
   project_id: string
+  project_name?: string
   opencode_status?: 'idle' | 'provisioning' | 'running' | 'error'
   agents?: Agent[]
   inserted_at: string

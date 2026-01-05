@@ -10,17 +10,6 @@
       "_syntax-highlighter.js"
     ]
   },
-  "node_modules/@tanstack/router-devtools-core/dist/FloatingTanStackRouterDevtools-DymJEvfG.js": {
-    "file": "assets/FloatingTanStackRouterDevtools-DymJEvfG.js",
-    "name": "FloatingTanStackRouterDevtools-DymJEvfG",
-    "src": "node_modules/@tanstack/router-devtools-core/dist/FloatingTanStackRouterDevtools-DymJEvfG.js",
-    "isDynamicEntry": true,
-    "imports": [
-      "src/main.tsx",
-      "_vendor.js",
-      "_syntax-highlighter.js"
-    ]
-  },
   "src/main.tsx": {
     "file": "assets/main.js",
     "name": "main",
@@ -29,9 +18,6 @@
     "imports": [
       "_vendor.js",
       "_syntax-highlighter.js"
-    ],
-    "dynamicImports": [
-      "node_modules/@tanstack/router-devtools-core/dist/FloatingTanStackRouterDevtools-DymJEvfG.js"
     ],
     "css": [
       "assets/main.css"
