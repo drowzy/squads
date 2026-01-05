@@ -95,7 +95,37 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
               <div className="text-xs">Try searching for something else</div>
             </Command.Empty>
 
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mb-2 block uppercase">Navigation</span>}>
+            {currentAgent && (
+              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-accent px-2 mt-2 mb-2 block uppercase">Current Context</span>}>
+                <PaletteItem
+                  onSelect={() => runCommand(async () => {
+                    try {
+                      await newSession.mutateAsync({
+                        agent_id: currentAgent.id,
+                        title: `New Session for ${currentAgent.name}`
+                      })
+                      navigate({ to: `/agent/${currentAgent.id}` })
+                      addNotification({
+                        type: 'success',
+                        title: 'New Session Started',
+                        message: `Started a fresh session for ${currentAgent.name}`
+                      })
+                    } catch (err) {
+                      addNotification({
+                        type: 'error',
+                        title: 'Failed to start session',
+                        message: err instanceof Error ? err.message : 'Unknown error'
+                      })
+                    }
+                  })}
+                  icon={<PlusCircle size={18} className="text-tui-accent" />}
+                  label={`New Session for ${currentAgent.name}`}
+                  shortcut="⌘ N"
+                />
+              </Command.Group>
+            )}
+
+            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Navigation</span>}>
               <PaletteItem
                 onSelect={() => runCommand(() => navigate({ to: '/' }))}
                 icon={<LayoutDashboard size={18} />}
@@ -134,70 +164,33 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
               />
             </Command.Group>
 
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Actions</span>}>
-              {currentAgent ? (
-                <PaletteItem
-                  onSelect={() => runCommand(async () => {
-                    try {
-                      await newSession.mutateAsync({
-                        agent_id: currentAgent.id,
-                        title: `New Session for ${currentAgent.name}`
-                      })
-                      navigate({ to: `/agent/${currentAgent.id}` })
-                      addNotification({
-                        type: 'success',
-                        title: 'New Session Started',
-                        message: `Started a fresh session for ${currentAgent.name}`
-                      })
-                    } catch (err) {
-                      addNotification({
-                        type: 'error',
-                        title: 'Failed to start session',
-                        message: err instanceof Error ? err.message : 'Unknown error'
-                      })
-                    }
-                  })}
-                  icon={<PlusCircle size={18} className="text-tui-accent" />}
-                  label={`New Session for ${currentAgent.name}`}
-                  shortcut="⌘ N"
-                />
-              ) : (
-                <PaletteItem
-                  onSelect={() => runCommand(() => navigate({ to: '/agent' }))}
-                  icon={<PlusCircle size={18} className="text-tui-accent" />}
-                  label="New Session"
-                  description="Select an agent to start a new session"
-                />
-              )}
-            </Command.Group>
+            {agents && agents.length > 0 && (
+              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Agents</span>}>
+                {agents.slice(0, 5).map(agent => (
+                  <PaletteItem
+                    key={agent.id}
+                    onSelect={() => runCommand(() => navigate({ to: `/agent`, search: { search: agent.slug } }))}
+                    icon={<UserCircle size={18} className={agent.id === currentAgentId ? "text-tui-accent" : "text-tui-dim"} />}
+                    label={agent.name}
+                    description={agent.role}
+                  />
+                ))}
+              </Command.Group>
+            )}
 
-          {agents && agents.length > 0 && (
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Agents</span>}>
-              {agents.map(agent => (
-                <PaletteItem
-                  key={agent.id}
-                  onSelect={() => runCommand(() => navigate({ to: `/agent`, search: { search: agent.slug } }))}
-                  icon={<UserCircle size={18} className="text-tui-accent" />}
-                  label={agent.name}
-                  description={agent.role}
-                />
-              ))}
-            </Command.Group>
-          )}
-
-          {squads && squads.length > 0 && (
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Squads</span>}>
-              {squads.map(squad => (
-                <PaletteItem
-                  key={squad.id}
-                  onSelect={() => runCommand(() => navigate({ to: '/squad' }))}
-                  icon={<Users size={18} className="text-tui-success" />}
-                  label={squad.name}
-                  description={squad.description || 'No description'}
-                />
-              ))}
-            </Command.Group>
-          )}
+            {squads && squads.length > 0 && (
+              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Squads</span>}>
+                {squads.slice(0, 3).map(squad => (
+                  <PaletteItem
+                    key={squad.id}
+                    onSelect={() => runCommand(() => navigate({ to: '/squad' }))}
+                    icon={<Users size={18} className="text-tui-success" />}
+                    label={squad.name}
+                    description={squad.description || 'No description'}
+                  />
+                ))}
+              </Command.Group>
+            )}
 
             {sessions && sessions.length > 0 && (
               <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Recent Sessions</span>}>
@@ -207,27 +200,28 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
                     onSelect={() => runCommand(() => navigate({ to: `/agent/${session.agent_id}` }))}
                     icon={<Play size={18} className="text-tui-warning" />}
                     label={session.ticket_key || session.id.slice(0, 8)}
-                    description={session.status}
+                    description={session.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')}
                   />
                 ))}
               </Command.Group>
             )}
 
-          {projects && projects.length > 1 && (
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Projects</span>}>
-              {projects.map(project => (
-                <PaletteItem
-                  key={project.id}
-                  onSelect={() => runCommand(() => {
-                    navigate({ to: '/' })
-                  })}
-                  icon={<ChevronRight size={18} />}
-                  label={project.name}
-                  description={project.path}
-                />
-              ))}
-            </Command.Group>
-          )}
+            {projects && projects.length > 1 && (
+              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Projects</span>}>
+                {projects.map(project => (
+                  <PaletteItem
+                    key={project.id}
+                    onSelect={() => runCommand(() => {
+                      // Logic for switching projects if needed
+                      navigate({ to: '/' })
+                    })}
+                    icon={<ChevronRight size={18} className={project.id === activeProjectId ? "text-tui-accent" : "text-tui-dim"} />}
+                    label={project.name}
+                    description={project.path}
+                  />
+                ))}
+              </Command.Group>
+            )}
         </Command.List>
 
         <div className="border-t border-tui-border p-3 bg-ctp-crust/40 flex items-center justify-between text-[10px] text-tui-dim uppercase tracking-tui font-bold">
