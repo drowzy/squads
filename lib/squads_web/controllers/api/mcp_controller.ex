@@ -147,6 +147,36 @@ defmodule SquadsWeb.API.MCPController do
     end
   end
 
+  def oauth_list(conn, _params) do
+    case MCP.oauth_list() do
+      {:ok, output} ->
+        json(conn, %{data: output})
+
+      {:error, reason} ->
+        cli_error(conn, reason)
+    end
+  end
+
+  def oauth_authorize(conn, %{"provider" => provider}) do
+    case MCP.oauth_authorize(provider) do
+      {:ok, output} ->
+        json(conn, %{data: output})
+
+      {:error, reason} ->
+        cli_error(conn, reason)
+    end
+  end
+
+  def oauth_revoke(conn, %{"provider" => provider}) do
+    case MCP.oauth_revoke(provider) do
+      {:ok, output} ->
+        json(conn, %{data: output})
+
+      {:error, reason} ->
+        cli_error(conn, reason)
+    end
+  end
+
   def auth(conn, _params) do
     json(conn, %{status: "ok"})
   end

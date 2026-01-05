@@ -6,9 +6,16 @@ defmodule SquadsWeb.API.WorktreeController do
   action_fallback SquadsWeb.FallbackController
 
   def index(conn, %{"project_id" => project_id}) do
-    with {:ok, uuid} <- Ecto.UUID.cast(project_id),
+    with {:ok, uuid} <- cast_uuid(project_id),
          worktrees when is_list(worktrees) <- Worktrees.list_worktrees(uuid) do
       render(conn, :index, worktrees: worktrees)
+    end
+  end
+
+  defp cast_uuid(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> {:ok, uuid}
+      :error -> {:error, :not_found}
     end
   end
 

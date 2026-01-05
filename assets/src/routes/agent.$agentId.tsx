@@ -281,9 +281,9 @@ function AgentDetail() {
   // Use real agent data or fallback
   const agent = {
     id: agentId,
-    name: agentData?.name || 'AGENT ' + agentId.slice(0, 4),
-    role: agentData?.role || 'CORE WORKER',
-    status: activeSession ? 'ACTIVE' : (agentData?.status === 'working' ? 'WORKING' : 'IDLE'),
+    name: agentData?.name || 'Agent ' + agentId.slice(0, 4),
+    role: agentData?.role || 'Core Worker',
+    status: activeSession ? 'Active' : (agentData?.status === 'working' ? 'Working' : 'Idle'),
     model: currentSession?.model || agentData?.model || 'gpt-4o',
     session_id: currentSession?.id || 'NO SESSION',
     uptime: 'N/A',
@@ -301,7 +301,7 @@ function AgentDetail() {
           </div>
           <div>
             <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tighter uppercase">{agent.name}</h2>
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tighter">{agent.name}</h2>
               <span className={`text-xs px-2 py-0.5 border font-bold ${activeSession ? 'border-tui-accent text-tui-accent' : 'border-tui-border-dim text-tui-dim'}`}>
                 {agent.status}
               </span>
@@ -382,20 +382,20 @@ function AgentDetail() {
         )}
 
         {/* Sidebar: Session History */}
-        <aside className={cn(
-          "w-full sm:w-80 lg:w-72 shrink-0 flex flex-col border border-tui-border lg:h-full transition-transform duration-300 ease-in-out",
-          "lg:static lg:translate-x-0",
-          "fixed inset-y-0 left-0 z-50 bg-ctp-mantle lg:bg-transparent",
-          mobileSidebar === 'history' 
-            ? "translate-x-0" 
-            : "-translate-x-full lg:translate-x-0"
-        )}>
-          <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest">
-                <Archive size={14} />
-                Session History
-              </div>
+          <aside className={cn(
+            "w-full sm:w-80 lg:w-72 shrink-0 flex flex-col border border-tui-border lg:h-full transition-transform duration-300 ease-in-out",
+            "lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-50 bg-ctp-mantle lg:bg-transparent",
+            mobileSidebar === 'history' 
+              ? "translate-x-0" 
+              : "-translate-x-full lg:translate-x-0"
+          )}>
+            <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold tracking-widest">
+                  <Archive size={14} />
+                  Session History
+                </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={handleStartSession}
@@ -499,10 +499,10 @@ function AgentDetail() {
                      />
                   </div>
                   {currentSession.status === 'running' && (
-                    <div className="px-2 py-0.5 text-[10px] font-bold text-tui-accent flex items-center gap-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-tui-accent animate-pulse" />
-                      RUNNING
-                    </div>
+                      <div className="px-2 py-0.5 text-[10px] font-bold text-tui-accent flex items-center gap-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-tui-accent animate-pulse" />
+                        Running
+                      </div>
                   )}
                 </div>
 
@@ -519,23 +519,23 @@ function AgentDetail() {
                     />
                   )}
                   {activeTab === 'todos' && (
-                    <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto">
-                      <div className="text-xs font-bold uppercase tracking-tui text-tui-dim mb-4">Session tasks</div>
-                      <SessionTodos sessionId={currentSession.id} />
-                    </div>
-                  )}
-                  {activeTab === 'diff' && (
-                    <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto font-mono text-xs">
-                      <div className="text-xs font-bold uppercase tracking-tui text-tui-dim mb-4">Pending changes</div>
-                      <SessionDiff sessionId={currentSession.id} />
-                    </div>
-                  )}
-                  {activeTab === 'history' && (
-                    <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto">
-                      <div className="text-xs font-bold uppercase tracking-tui text-tui-dim mb-4">Event timeline</div>
-                      <EventTimeline events={events} />
-                    </div>
-                  )}
+                      <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto">
+                        <div className="text-xs font-bold tracking-tui text-tui-dim mb-4">Session tasks</div>
+                        <SessionTodos sessionId={currentSession.id} />
+                      </div>
+                    )}
+                    {activeTab === 'diff' && (
+                      <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto font-mono text-xs">
+                        <div className="text-xs font-bold tracking-tui text-tui-dim mb-4">Pending changes</div>
+                        <SessionDiff sessionId={currentSession.id} />
+                      </div>
+                    )}
+                    {activeTab === 'history' && (
+                      <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto">
+                        <div className="text-xs font-bold tracking-tui text-tui-dim mb-4">Event timeline</div>
+                        <EventTimeline events={events} />
+                      </div>
+                    )}
                 </div>
               </div>
             ) : (
@@ -570,9 +570,9 @@ function AgentDetail() {
                   key={event.id}
                   time={new Date(event.occurred_at).toLocaleTimeString()} 
                   level={event.kind.includes('fail') || event.kind.includes('error') ? 'ERROR' : 'INFO'} 
-                  msg={`${event.kind.toUpperCase()}: ${JSON.stringify(event.payload)}`} 
-                />
-              ))}
+                        msg={`${event.kind.charAt(0).toUpperCase() + event.kind.slice(1)}: ${JSON.stringify(event.payload)}`} 
+                      />
+                    ))}
               {activeSession && (
                 <div className="animate-pulse inline-block w-2 h-4 bg-tui-text ml-1 align-middle" />
               )}
@@ -643,7 +643,7 @@ function AgentDetail() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Inbox size={12} className={thread.unread_count > 0 ? 'text-tui-accent' : 'text-tui-dim'} />
-                      <span className="text-xs text-tui-dim uppercase">{thread.message_count} MSGS</span>
+                      <span className="text-xs text-tui-dim uppercase">{thread.message_count} msgs</span>
                     </div>
                   </Link>
                 ))
@@ -689,19 +689,19 @@ function AgentDetail() {
               <div className="p-3 space-y-2 text-[10px] font-mono">
                 {currentSession.metadata.terminated_by ? (
                   <div className="flex justify-between">
-                    <span className="text-tui-dim">BY:</span>
-                    <span className="text-tui-text font-bold">{(currentSession.metadata.terminated_by as string).toUpperCase()}</span>
+                    <span className="text-tui-dim">By:</span>
+                    <span className="text-tui-text font-bold">{currentSession.metadata.terminated_by as string}</span>
                   </div>
                 ) : null}
                 {currentSession.metadata.terminated_at ? (
                   <div className="flex justify-between">
-                    <span className="text-tui-dim">AT:</span>
+                    <span className="text-tui-dim">At:</span>
                     <span className="text-tui-text">{new Date(currentSession.metadata.terminated_at as string).toLocaleString()}</span>
                   </div>
                 ) : null}
                 {currentSession.metadata.termination_reason ? (
                   <div className="mt-1 border-t border-tui-border/30 pt-1">
-                    <div className="text-tui-dim mb-0.5">REASON:</div>
+                    <div className="text-tui-dim mb-0.5">Reason:</div>
                     <div className="text-tui-text italic">{currentSession.metadata.termination_reason as string}</div>
                   </div>
                 ) : null}
@@ -770,6 +770,7 @@ function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalPro
   const [role, setRole] = useState(agent.role)
   const [level, setLevel] = useState<Agent['level']>(agent.level)
   const [systemInstruction, setSystemInstruction] = useState(agent.system_instruction || '')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   
   // Reset form when modal opens or agent changes
   useEffect(() => {
@@ -839,7 +840,7 @@ function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalPro
           </select>
         </FormField>
 
-        <FormField label="Level" hint="Seniority influences default system instruction">
+        <FormField label="Level" hint="Seniority level of the agent">
           <select
             value={level}
             onChange={(e) => setLevel(e.target.value as Agent['level'])}
@@ -858,63 +859,71 @@ function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalPro
           </select>
         </FormField>
 
-        <FormField label="Default System Instruction" hint="Derived from role + level">
-          <textarea
-            value={defaultSystemInstruction || 'Loading...'}
-            readOnly
-            rows={6}
-            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:outline-none"
-          />
-        </FormField>
-
-        <FormField label="System Instruction Override" hint="Optional: overrides the default system instruction">
-          <textarea
-            value={systemInstruction}
-            onChange={(e) => setSystemInstruction(e.target.value)}
-            rows={6}
-            placeholder="Optional override (leave blank to use the default)"
-            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none"
-          />
-        </FormField>
-
-        <FormField label="Model" hint="Available models from configured providers">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="flex-1 px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
-                disabled={modelsQuery.isLoading || models.length === 0}
+        <div className="border border-tui-border-dim bg-ctp-crust/20 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen(!advancedOpen)}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-ctp-crust/40 transition-colors"
+          >
+            <span>Advanced Configuration</span>
+            <ChevronDown size={14} className={cn("transition-transform", advancedOpen && "rotate-180")} />
+          </button>
+          
+          {advancedOpen && (
+            <div className="p-3 space-y-4 border-t border-tui-border-dim">
+              <FormField 
+                label="System Instruction" 
+                hint="Leave blank to use the default instruction for this role and level"
               >
-                {models.length === 0 ? (
-                  <option value="">No providers configured</option>
-                ) : (
-                  <>
-                    <option value="">Default (Auto)</option>
-                    {models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.id}
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => syncProviders.mutate({ project_id: projectId })}
-                disabled={!projectId || syncProviders.isPending}
-              >
-                {syncProviders.isPending ? 'Syncing...' : 'Sync'}
-              </Button>
+                <textarea
+                  value={systemInstruction}
+                  onChange={(e) => setSystemInstruction(e.target.value)}
+                  rows={8}
+                  placeholder={defaultSystemInstruction || "System instructions..."}
+                  className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none font-mono"
+                />
+              </FormField>
+
+              <FormField label="Model" hint="Available models from configured providers">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
+                      disabled={modelsQuery.isLoading || models.length === 0}
+                    >
+                      {models.length === 0 ? (
+                        <option value="">No providers configured</option>
+                      ) : (
+                        <>
+                          <option value="">Default (Auto)</option>
+                          {models.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.id}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => syncProviders.mutate({ project_id: projectId })}
+                      disabled={!projectId || syncProviders.isPending}
+                    >
+                      {syncProviders.isPending ? 'Syncing...' : 'Sync'}
+                    </Button>
+                  </div>
+                  {!modelsQuery.isLoading && models.length === 0 && (
+                    <div className="text-xs text-tui-dim">no providers configured</div>
+                  )}
+                </div>
+              </FormField>
             </div>
-            
-            {!modelsQuery.isLoading && models.length === 0 && (
-              <div className="text-xs text-tui-dim">no providers configured</div>
-            )}
-          </div>
-        </FormField>
+          )}
+        </div>
 
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>

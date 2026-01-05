@@ -44,9 +44,9 @@ defmodule SquadsWeb.API.WorktreeControllerTest do
       assert json_response(conn, 200)["data"] == []
     end
 
-    test "returns empty list for invalid project id", %{conn: conn} do
+    test "returns 404 for invalid project id", %{conn: conn} do
       conn = get(conn, ~p"/api/projects/invalid-id/worktrees")
-      assert json_response(conn, 200)["data"] == []
+      assert json_response(conn, 404)["errors"]["detail"] == "Not Found"
     end
   end
 

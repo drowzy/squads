@@ -131,6 +131,9 @@ defmodule SquadsWeb.Router do
     get "/mcp", MCPController, :index
     get "/mcp/catalog", MCPController, :catalog
     get "/mcp/cli", MCPController, :cli
+    get "/mcp/oauth", MCPController, :oauth_list
+    post "/mcp/oauth/:provider/authorize", MCPController, :oauth_authorize
+    post "/mcp/oauth/:provider/revoke", MCPController, :oauth_revoke
     post "/mcp", MCPController, :create
     patch "/mcp/:name", MCPController, :update
     get "/mcp/:name/connect", MCPController, :connect_stream

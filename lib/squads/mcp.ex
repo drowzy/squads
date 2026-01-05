@@ -164,6 +164,37 @@ defmodule Squads.MCP do
   end
 
   @doc """
+  Initiates OAuth authorization for a provider.
+  """
+  def oauth_authorize(provider) do
+    docker_cli().oauth_authorize(provider)
+  end
+
+  @doc """
+  Lists OAuth authorized providers.
+  """
+  def oauth_list do
+    case docker_cli().oauth_ls() do
+      {:ok, output} ->
+        # The output from `docker mcp oauth ls` is usually a table or JSON.
+        # DockerCLI.oauth_ls uses run_cmd which returns {:ok, trimmed_output}.
+        # For now, let's just return the output. If it's JSON, we might want to decode it.
+        # DockerCLI doesn't have a run_json_cmd for oauth_ls yet.
+        {:ok, output}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Revokes OAuth authorization for a provider.
+  """
+  def oauth_revoke(provider) do
+    docker_cli().oauth_revoke(provider)
+  end
+
+  @doc """
   Handles an MCP request.
   """
   def handle_request("agent_mail", %{"method" => "list_tools"}) do

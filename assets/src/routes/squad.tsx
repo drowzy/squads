@@ -1253,6 +1253,7 @@ function CreateAgentModal({ isOpen, onClose, projectId, squadId, squadName }: Cr
   const [role, setRole] = useState('fullstack_engineer')
   const [level, setLevel] = useState<Agent['level']>('senior')
   const [systemInstruction, setSystemInstruction] = useState('')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const [autoName, setAutoName] = useState(true)
   const [customName, setCustomName] = useState('')
@@ -1399,7 +1400,7 @@ function CreateAgentModal({ isOpen, onClose, projectId, squadId, squadName }: Cr
           </select>
         </FormField>
 
-        <FormField label="Level" hint="Seniority influences default system instruction">
+        <FormField label="Level" hint="Seniority level of the agent">
           <select
             value={level}
             onChange={(e) => setLevel(e.target.value as Agent['level'])}
@@ -1418,60 +1419,68 @@ function CreateAgentModal({ isOpen, onClose, projectId, squadId, squadName }: Cr
           </select>
         </FormField>
 
-        <FormField label="Default System Instruction" hint="Derived from role + level">
-          <textarea
-            value={defaultSystemInstruction || 'Loading...'}
-            readOnly
-            rows={6}
-            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:outline-none"
-          />
-        </FormField>
-
-        <FormField label="System Instruction Override" hint="Optional: overrides the default system instruction">
-          <textarea
-            value={systemInstruction}
-            onChange={(e) => setSystemInstruction(e.target.value)}
-            rows={6}
-            placeholder="Optional override (leave blank to use the default)"
-            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none"
-          />
-        </FormField>
-
-        <FormField label="Model" hint="Available models from configured providers">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="flex-1 px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
-                disabled={modelsQuery.isLoading || models.length === 0}
+        <div className="border border-tui-border-dim bg-ctp-crust/20 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen(!advancedOpen)}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-ctp-crust/40 transition-colors"
+          >
+            <span>Advanced Configuration</span>
+            <ChevronDown size={14} className={cn("transition-transform", advancedOpen && "rotate-180")} />
+          </button>
+          
+          {advancedOpen && (
+            <div className="p-3 space-y-4 border-t border-tui-border-dim">
+              <FormField 
+                label="System Instruction" 
+                hint="Leave blank to use the default instruction for this role and level"
               >
-                {models.length === 0 ? (
-                  <option value="">No providers configured</option>
-                ) : (
-                  models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.id}
-                    </option>
-                  ))
-                )}
-              </select>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => syncProviders.mutate({ project_id: projectId })}
-                disabled={!projectId || syncProviders.isPending}
-              >
-                {syncProviders.isPending ? 'Syncing...' : 'Sync'}
-              </Button>
+                <textarea
+                  value={systemInstruction}
+                  onChange={(e) => setSystemInstruction(e.target.value)}
+                  rows={8}
+                  placeholder={defaultSystemInstruction || "System instructions..."}
+                  className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none font-mono"
+                />
+              </FormField>
+
+              <FormField label="Model" hint="Available models from configured providers">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
+                      disabled={modelsQuery.isLoading || models.length === 0}
+                    >
+                      {models.length === 0 ? (
+                        <option value="">No providers configured</option>
+                      ) : (
+                        models.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.id}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => syncProviders.mutate({ project_id: projectId })}
+                      disabled={!projectId || syncProviders.isPending}
+                    >
+                      {syncProviders.isPending ? 'Syncing...' : 'Sync'}
+                    </Button>
+                  </div>
+                  {!modelsQuery.isLoading && models.length === 0 && (
+                    <div className="text-xs text-tui-dim">no providers configured</div>
+                  )}
+                </div>
+              </FormField>
             </div>
-
-            {!modelsQuery.isLoading && models.length === 0 && (
-              <div className="text-xs text-tui-dim">no providers configured</div>
-            )}
-          </div>
-        </FormField>
+          )}
+        </div>
 
         <FormField label="Agent Name">
           <div className="space-y-2">
