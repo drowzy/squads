@@ -15,7 +15,7 @@ defmodule Squads.Sessions.Session do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @statuses ~w(pending running paused completed failed cancelled)
+  @statuses ~w(pending running paused completed failed cancelled archived)
 
   schema "sessions" do
     field :opencode_session_id, :string

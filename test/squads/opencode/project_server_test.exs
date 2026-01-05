@@ -13,12 +13,6 @@ defmodule Squads.OpenCode.ProjectServerTest do
     :ok
   end
 
-  defp listen_port do
-    {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
-    {:ok, port} = :inet.port(socket)
-    {socket, port}
-  end
-
   defp reserve_port do
     {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, port} = :inet.port(socket)
@@ -26,37 +20,88 @@ defmodule Squads.OpenCode.ProjectServerTest do
     port
   end
 
-  test "normal exit with reachable server keeps status running" do
-    {socket, port} = listen_port()
-    project_path = "/tmp/opencode-status-reachable"
+  defmodule FakeClient do
+    def get_current_project(opts) do
+      case opts[:base_url] do
+        "http://127.0.0.1:55975" -> {:ok, %{"worktree" => "/tmp/opencode-status-attach-port"}}
+        "http://127.0.0.1:60001" -> {:ok, %{"worktree" => "/tmp/opencode-project-match"}}
+        _ -> {:error, :not_found}
+      end
+    end
+  end
+
+  defp lsof_line(pid, port) do
+    "opencode #{pid} user 10u IPv4 0x000000 0t0 TCP 127.0.0.1:#{port} (LISTEN)"
+  end
+
+  defp lsof_runner_for_port(port, output) do
+    port_string = Integer.to_string(port)
+
+    fn
+      "lsof", ["-nP", "-iTCP:" <> ^port_string, "-sTCP:LISTEN"] ->
+        {output, 0}
+
+      "lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"] ->
+        {"", 0}
+
+      _cmd, _args ->
+        {"", 1}
+    end
+  end
+
+  defp lsof_runner_for_all(output) do
+    fn
+      "lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"] -> {output, 0}
+      "lsof", ["-nP", "-iTCP:" <> _port, "-sTCP:LISTEN"] -> {"", 0}
+      _cmd, _args -> {"", 1}
+    end
+  end
+
+  test "normal exit attaches to lsof listener on same port" do
+    port = 55975
+    os_pid = 42_424
+    project_path = "/tmp/opencode-status-attach-port"
     Status.set(project_path, :running)
 
     state = %{
       project_id: "proj",
       project_path: project_path,
+      port: port,
       url: "http://127.0.0.1:#{port}",
-      status: :running,
+      os_pid: 111,
+      status: :starting,
       waiters: [],
-      started_at_ms: System.monotonic_time(:millisecond)
+      started_at_ms: System.monotonic_time(:millisecond),
+      attach_attempts: 0,
+      lsof_runner: lsof_runner_for_port(port, lsof_line(os_pid, port)),
+      client: FakeClient
     }
 
-    assert {:noreply, ^state} = ProjectServer.handle_info({:EXIT, self(), :normal}, state)
+    assert {:noreply, new_state} = ProjectServer.handle_info({:EXIT, self(), :normal}, state)
+    assert new_state.os_pid == os_pid
+    assert new_state.port == port
+    assert new_state.url == "http://127.0.0.1:#{port}"
+    assert new_state.status == :running
     assert Status.get(project_path) == :running
-    :ok = :gen_tcp.close(socket)
   end
 
-  test "normal exit with unreachable server marks error" do
-    port = reserve_port()
+  test "normal exit with no attachable instance marks error after retries" do
+    port = 55976
     project_path = "/tmp/opencode-status-unreachable"
     Status.set(project_path, :running)
 
     state = %{
       project_id: "proj",
       project_path: project_path,
+      port: port,
       url: "http://127.0.0.1:#{port}",
-      status: :running,
+      os_pid: 111,
+      status: :attaching,
       waiters: [],
-      started_at_ms: System.monotonic_time(:millisecond)
+      started_at_ms: System.monotonic_time(:millisecond),
+      attach_attempts: 5,
+      lsof_runner: lsof_runner_for_port(port, ""),
+      client: FakeClient
     }
 
     assert {:stop, :process_exited, ^state} =
@@ -65,27 +110,102 @@ defmodule Squads.OpenCode.ProjectServerTest do
     assert Status.get(project_path) == :error
   end
 
+  test "normal exit while starting schedules attach retry" do
+    port = 55977
+    project_path = "/tmp/opencode-status-retry"
+    Status.set(project_path, :running)
+
+    state = %{
+      project_id: "proj",
+      project_path: project_path,
+      port: port,
+      url: "http://127.0.0.1:#{port}",
+      os_pid: 111,
+      status: :starting,
+      waiters: [],
+      started_at_ms: System.monotonic_time(:millisecond),
+      attach_attempts: 0,
+      lsof_runner: lsof_runner_for_port(port, ""),
+      client: FakeClient
+    }
+
+    assert {:noreply, new_state} = ProjectServer.handle_info({:EXIT, self(), :normal}, state)
+    assert new_state.status == :attaching
+    assert new_state.attach_attempts == 1
+  end
+
+  test "normal exit attaches to instance discovered by project path" do
+    port = 60001
+    os_pid = 55_555
+    project_path = "/tmp/opencode-project-match"
+    Status.set(project_path, :running)
+
+    state = %{
+      project_id: "proj",
+      project_path: project_path,
+      port: nil,
+      url: nil,
+      os_pid: nil,
+      status: :starting,
+      waiters: [],
+      started_at_ms: System.monotonic_time(:millisecond),
+      attach_attempts: 0,
+      lsof_runner: lsof_runner_for_all(lsof_line(os_pid, port)),
+      client: FakeClient
+    }
+
+    assert {:noreply, new_state} = ProjectServer.handle_info({:EXIT, self(), :normal}, state)
+    assert new_state.os_pid == os_pid
+    assert new_state.port == port
+    assert new_state.url == "http://127.0.0.1:#{port}"
+    assert new_state.status == :running
+    assert Status.get(project_path) == :running
+  end
+
+  test "startup attaches to existing instance before spawning" do
+    port = 60001
+    os_pid = 55_555
+    project_path = "/tmp/opencode-project-match"
+    Status.set(project_path, :running)
+
+    state = %{
+      project_id: "proj-start",
+      project_path: project_path,
+      port: nil,
+      url: nil,
+      os_pid: nil,
+      status: :starting,
+      waiters: [],
+      started_at_ms: nil,
+      attach_attempts: 0,
+      lsof_runner: lsof_runner_for_all(lsof_line(os_pid, port)),
+      client: FakeClient
+    }
+
+    assert {:noreply, new_state} = ProjectServer.handle_continue(:start_process, state)
+    assert new_state.os_pid == os_pid
+    assert new_state.port == port
+    assert new_state.url == "http://127.0.0.1:#{port}"
+    assert new_state.status == :running
+    assert Status.get(project_path) == :running
+  end
+
   @tag :integration
   test "opencode serve stays attached when run with pty" do
-    case System.find_executable("opencode") do
-      nil ->
-        skip("opencode binary not available")
+    if System.find_executable("opencode") == nil or
+         System.get_env("OPENCODE_INTEGRATION") != "1" do
+      :ok
+    else
+      Process.flag(:trap_exit, true)
+      port = reserve_port()
+      cmd = "opencode serve --port #{port} --hostname 127.0.0.1 --print-logs"
 
-      _ ->
-        if System.get_env("OPENCODE_INTEGRATION") != "1" do
-          skip("set OPENCODE_INTEGRATION=1 to run")
-        end
+      {:ok, pid, os_pid} = :exec.run_link(cmd, [:stdout, :stderr, :pty])
 
-        Process.flag(:trap_exit, true)
-        port = reserve_port()
-        cmd = "opencode serve --port #{port} --hostname 127.0.0.1 --print-logs"
+      assert wait_for_port(port, 5_000)
+      refute_receive {:EXIT, ^pid, _reason}, 2_000
 
-        {:ok, pid, os_pid} = :exec.run_link(cmd, [:stdout, :stderr, :pty])
-
-        assert wait_for_port(port, 5_000)
-        refute_receive {:EXIT, ^pid, _reason}, 2_000
-
-        :ok = :exec.stop(os_pid)
+      :ok = :exec.stop(os_pid)
     end
   end
 

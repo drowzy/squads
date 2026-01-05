@@ -16,8 +16,12 @@ defmodule SquadsWeb.API.MCPControllerTest do
   end
 
   setup %{conn: conn} do
-    Application.put_env(:squads, Squads.MCP, docker_cli: DockerCLIStub, catalog: CatalogStub)
-    on_exit(fn -> Application.delete_env(:squads, Squads.MCP) end)
+    Application.put_env(:squads, MCP,
+      docker_cli: __MODULE__.DockerCLIStub,
+      catalog: __MODULE__.CatalogStub
+    )
+
+    on_exit(fn -> Application.delete_env(:squads, MCP) end)
 
     {:ok, conn: put_req_header(conn, "accept", "application/json")}
   end

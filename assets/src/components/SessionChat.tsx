@@ -13,13 +13,15 @@ import {
   Zap,
   FileText,
   Command,
-  RefreshCw
+  RefreshCw,
+  StopCircle
 } from 'lucide-react'
 import {
   useSessionMessages,
   useSendSessionPrompt,
   useExecuteSessionCommand,
   useRunSessionShell,
+  useAbortSession,
   useProjectFiles,
   type Session,
   type SessionMessageEntry,
@@ -73,6 +75,8 @@ export function SessionChat({
   onNewSession,
 }: SessionChatProps) {
   const [chatInput, setChatInput] = useState('')
+  const [awaitingResponse, setAwaitingResponse] = useState(false)
+  const pendingSinceRef = useRef<number | null>(null)
   const [autocomplete, setAutocomplete] = useState<{
     active: boolean
     trigger: '/' | '@' | null
@@ -94,6 +98,7 @@ export function SessionChat({
   const sendPrompt = useSendSessionPrompt()
   const executeCommand = useExecuteSessionCommand()
   const runShell = useRunSessionShell()
+  const abortSession = useAbortSession()
   const { addNotification } = useNotifications()
 
   const queryClient = useQueryClient()
@@ -137,10 +142,27 @@ export function SessionChat({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [session.id, sessionMessages.length])
 
+  useEffect(() => {
+    if (!awaitingResponse || pendingSinceRef.current === null) return
+
+    const pendingSince = pendingSinceRef.current
+    const hasAssistantResponse = sessionMessages.some((message) => {
+      const created = message.info?.time?.created
+      return message.info?.role === 'assistant' && typeof created === 'number' && created >= pendingSince
+    })
+
+    if (hasAssistantResponse) {
+      setAwaitingResponse(false)
+      pendingSinceRef.current = null
+    }
+  }, [awaitingResponse, sessionMessages])
+
   // Reset chat input and autocomplete when session changes
   useEffect(() => {
     setChatInput('')
     setAutocomplete(prev => ({ ...prev, active: false }))
+    setAwaitingResponse(false)
+    pendingSinceRef.current = null
   }, [session.id])
 
   // Autocomplete logic
@@ -241,6 +263,25 @@ export function SessionChat({
     }
   }
 
+  const handleAbort = async () => {
+    try {
+      await abortSession.mutateAsync({ session_id: session.id })
+      setAwaitingResponse(false)
+      pendingSinceRef.current = null
+      addNotification({
+        type: 'success',
+        title: 'Request Cancelled',
+        message: 'The in-flight request has been aborted.'
+      })
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Abort Failed',
+        message: error instanceof Error ? error.message : 'Failed to abort request'
+      })
+    }
+  }
+
   const handleSendPrompt = async () => {
     const input = chatInput.trim()
     if (!input) return
@@ -252,38 +293,52 @@ export function SessionChat({
         return
       }
 
-      // If session is read-only (completed/failed/cancelled), sending a message should effectively "reactivate" it
+      // If session is read-only (completed/failed/cancelled/archived), sending a message should effectively "reactivate" it
       // In Squads, this currently means the backend will try to ensure it's running before sending the message
       // and we rely on the backend to handle the state transition or error if it's truly locked.
 
-        if (input.startsWith('/')) {
-          const parts = input.split(' ')
-          const command = parts[0]
-          const args = parts.slice(1).join(' ')
-          await executeCommand.mutateAsync({
-            session_id: session.id,
-            command,
-            arguments: args || undefined,
-            agent: mode,
-            model: session.model,
-          })
-        } else if (input.startsWith('!')) {
-          const command = input.slice(1).trim()
-          await runShell.mutateAsync({
-            session_id: session.id,
-            command,
-            agent: mode,
-            model: session.model,
-          })
-        } else {
+      const shouldAwaitResponse = !input.startsWith('/') && !input.startsWith('!')
+
+      if (shouldAwaitResponse) {
+        setAwaitingResponse(true)
+        pendingSinceRef.current = Date.now()
+      }
+
+      if (input.startsWith('/')) {
+        const parts = input.split(' ')
+        const command = parts[0]
+        const args = parts.slice(1).join(' ')
+        await executeCommand.mutateAsync({
+          session_id: session.id,
+          command,
+          arguments: args || undefined,
+          agent: mode,
+          model: session.model,
+        })
+      } else if (input.startsWith('!')) {
+        const command = input.slice(1).trim()
+        await runShell.mutateAsync({
+          session_id: session.id,
+          command,
+          agent: mode,
+          model: session.model,
+        })
+      } else {
         await sendPrompt.mutateAsync({
           session_id: session.id,
           prompt: input,
           agent: mode, // Send with current mode
         })
       }
+
+      if (!shouldAwaitResponse) {
+        setAwaitingResponse(false)
+        pendingSinceRef.current = null
+      }
       setChatInput('')
     } catch (error) {
+      setAwaitingResponse(false)
+      pendingSinceRef.current = null
       console.error('SessionChat action failed', {
         input,
         sessionId: session.id,
@@ -298,8 +353,10 @@ export function SessionChat({
   }
 
   const isActive = (['running', 'pending', 'paused', 'starting'] as string[]).includes(session.status)
-  const isHistory = (['completed', 'failed', 'cancelled'] as string[]).includes(session.status)
+  const isHistory = (['completed', 'failed', 'cancelled', 'archived'] as string[]).includes(session.status)
   const isPending = sendPrompt.isPending || executeCommand.isPending || runShell.isPending
+  const isAborting = abortSession.isPending
+  const isProcessing = isPending || awaitingResponse
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
@@ -419,18 +476,29 @@ export function SessionChat({
                 Enter to send - Shift+Enter for newline
               </span>
             </div>
-            <button
-              onClick={handleSendPrompt}
-              disabled={isPending || !chatInput.trim()}
-              className="bg-tui-text text-tui-bg px-4 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white transition-colors disabled:opacity-50"
-            >
-              {isPending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
+            {isProcessing ? (
+              <button
+                onClick={handleAbort}
+                disabled={isAborting}
+                className="bg-red-500/20 text-red-400 border border-red-500/40 px-4 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+              >
+                {isAborting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <StopCircle size={14} />
+                )}
+                Cancel
+              </button>
+            ) : (
+              <button
+                onClick={handleSendPrompt}
+                disabled={!chatInput.trim()}
+                className="bg-tui-text text-tui-bg px-4 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white transition-colors disabled:opacity-50"
+              >
                 <Send size={14} />
-              )}
-              Send
-            </button>
+                Send
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -277,7 +277,9 @@ defmodule Squads.SessionsTest do
       %{agent: agent} = create_test_agent()
       {:ok, session} = Sessions.create_session(%{agent_id: agent.id, status: "running"})
 
-      assert {:error, :no_opencode_session} = Sessions.execute_command(session, "/compact")
+      # Use a command that would be forwarded to OpenCode (not a local Squads command)
+      assert {:error, :no_opencode_session} =
+               Sessions.execute_command(session, "/some-opencode-command")
     end
 
     test "returns error when session is not running" do
@@ -290,7 +292,9 @@ defmodule Squads.SessionsTest do
           opencode_session_id: "ses_123"
         })
 
-      assert {:error, :session_not_active} = Sessions.execute_command(session, "/compact")
+      # Use a command that would be forwarded to OpenCode (not a local Squads command)
+      assert {:error, :session_not_active} =
+               Sessions.execute_command(session, "/some-opencode-command")
     end
   end
 

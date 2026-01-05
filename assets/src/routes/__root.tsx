@@ -476,7 +476,7 @@ function AppShell() {
         activeProjectId={activeProjectId}
       />
       {activeProjectId && <TerminalPanel projectId={activeProjectId} />}
-      <TanStackRouterDevtools />
+      <TanStackRouterDevtools position="bottom-left" initialIsOpen={false} />
     </div>
     </ProjectContext.Provider>
   )

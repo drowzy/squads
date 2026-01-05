@@ -358,3 +358,98 @@ defmodule SquadsWeb.API.SessionControllerTest do
     end
   end
 end
+
+defmodule SquadsWeb.API.SessionControllerPromptIntegrationTest do
+  use SquadsWeb.ConnCase, async: false
+
+  alias Squads.Agents
+  alias Squads.Projects
+  alias Squads.Sessions
+  alias Squads.Squads, as: SquadsContext
+
+  defp create_test_agent(context) do
+    tmp_dir =
+      context[:tmp_dir] ||
+        System.tmp_dir!() |> Path.join("squads_test_#{:rand.uniform(1_000_000)}")
+
+    File.mkdir_p!(tmp_dir)
+
+    {:ok, project} = Projects.init(tmp_dir, "test-project")
+    {:ok, squad} = SquadsContext.create_squad(%{project_id: project.id, name: "Test Squad"})
+
+    {:ok, agent} =
+      Agents.create_agent(%{squad_id: squad.id, name: "BlueOcean", slug: "blue-ocean"})
+
+    %{agent: agent, project: project, squad: squad, tmp_dir: tmp_dir}
+  end
+
+  setup %{conn: conn} do
+    {:ok, conn: put_req_header(conn, "accept", "application/json")}
+  end
+
+  @tag :tmp_dir
+  @tag :integration
+  @tag timeout: 180_000
+  test "prompt async returns response via messages", %{conn: conn} = context do
+    if System.find_executable("opencode") == nil or System.get_env("OPENCODE_INTEGRATION") != "1" do
+      :ok
+    else
+      pid = Process.whereis(Squads.OpenCode.Server)
+
+      if pid do
+        Ecto.Adapters.SQL.Sandbox.allow(Squads.Repo, self(), pid)
+      end
+
+      %{agent: agent} = create_test_agent(context)
+
+      {:ok, session} =
+        Sessions.create_and_start_session(%{
+          agent_id: agent.id,
+          title: "Prompt Integration"
+        })
+
+      conn =
+        post(conn, ~p"/api/sessions/#{session.id}/prompt_async", %{
+          "prompt" => "Hello",
+          "agent" => "plan"
+        })
+
+      assert json_response(conn, 202)["data"]
+
+      {found?, messages} = await_assistant_message(session.id, 48, 2_500)
+
+      assert found?,
+             "Expected assistant response; last messages: #{inspect(messages)}"
+    end
+  end
+
+  defp await_assistant_message(session_id, attempts, delay_ms) do
+    Enum.reduce_while(1..attempts, {false, []}, fn _, _acc ->
+      messages = fetch_messages(session_id)
+
+      if has_assistant_message?(messages) do
+        {:halt, {true, messages}}
+      else
+        Process.sleep(delay_ms)
+        {:cont, {false, messages}}
+      end
+    end)
+  end
+
+  defp fetch_messages(session_id) do
+    build_conn()
+    |> put_req_header("accept", "application/json")
+    |> get(~p"/api/sessions/#{session_id}/messages?limit=100")
+    |> json_response(200)
+    |> Map.get("data", [])
+  end
+
+  defp has_assistant_message?(messages) do
+    Enum.any?(messages, fn message ->
+      case message do
+        %{"info" => %{"role" => role}} -> role == "assistant"
+        _ -> false
+      end
+    end)
+  end
+end

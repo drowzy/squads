@@ -10,6 +10,7 @@ import {
   Pause,
   Clock,
   StopCircle,
+  Archive,
 } from 'lucide-react'
 import {
   useSessions,
@@ -29,14 +30,14 @@ export const Route = createFileRoute('/sessions')({
 })
 
 // Status filter options
-const STATUS_FILTERS = ['running', 'starting', 'pending', 'paused', 'completed', 'failed', 'cancelled'] as const
+const STATUS_FILTERS = ['running', 'starting', 'pending', 'paused', 'completed', 'failed', 'cancelled', 'archived'] as const
 type StatusFilter = (typeof STATUS_FILTERS)[number]
 
 function SessionsPage() {
   const [filter, setFilter] = useState<'active' | 'history' | 'all'>('active')
   const { data: sessions = [], isLoading: sessionsLoading } = useSessions(
     filter === 'active' ? { status: 'running,starting,pending,paused' } : 
-    filter === 'history' ? { status: 'completed,failed,cancelled' } : 
+    filter === 'history' ? { status: 'completed,failed,cancelled,archived' } : 
     undefined
   )
   const { data: projects = [], isLoading: projectsLoading } = useProjects()
@@ -158,7 +159,7 @@ function SessionsPage() {
           </h1>
           <p className="text-xs text-tui-dim mt-1 uppercase tracking-widest">
             {filter === 'active' ? 'Running, pending, and paused sessions across all projects' : 
-             filter === 'history' ? 'Completed, failed, and cancelled sessions' :
+             filter === 'history' ? 'Completed, failed, cancelled, and archived sessions' :
              'All recorded sessions across all projects'}
           </p>
         </div>
@@ -199,7 +200,7 @@ function SessionsPage() {
            </h3>
            <p className="text-sm text-tui-dim">
              {filter === 'active' ? 'No running, pending, or paused sessions found.' : 
-              filter === 'history' ? 'No completed, failed, or cancelled sessions found.' :
+              filter === 'history' ? 'No completed, failed, cancelled, or archived sessions found.' :
               'No sessions found in the system.'}
            </p>
            <div className="mt-6 flex justify-center">
@@ -314,6 +315,11 @@ function SessionRow({ session, agent, onOpenChat }: SessionRowProps) {
     },
     cancelled: {
       icon: StopCircle,
+      color: 'text-tui-dim border-tui-dim/30',
+      bg: 'bg-tui-dim/5',
+    },
+    archived: {
+      icon: Archive,
       color: 'text-tui-dim border-tui-dim/30',
       bg: 'bg-tui-dim/5',
     },

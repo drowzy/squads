@@ -29,7 +29,6 @@ defmodule Squads.OpenCode.EventIngester do
 
   require Logger
 
-  alias Squads.Events
   alias Squads.OpenCode.SSE
 
   @default_reconnect_delay 5_000

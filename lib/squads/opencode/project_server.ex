@@ -5,9 +5,13 @@ defmodule Squads.OpenCode.ProjectServer do
   use GenServer
   require Logger
 
+  alias Squads.OpenCode.Client
   alias Squads.OpenCode.Status
 
   @registry Squads.OpenCode.ServerRegistry
+
+  @attach_retry_delay_ms 1_000
+  @attach_retry_limit 5
 
   def start_link(opts) do
     project_id = Keyword.fetch!(opts, :project_id)
@@ -27,6 +31,9 @@ defmodule Squads.OpenCode.ProjectServer do
     project_id = Keyword.fetch!(opts, :project_id)
     project_path = Keyword.fetch!(opts, :project_path)
 
+    lsof_runner = Keyword.get(opts, :lsof_runner, &System.cmd/2)
+    client = Keyword.get(opts, :client, Client)
+
     state = %{
       project_id: project_id,
       project_path: project_path,
@@ -35,7 +42,10 @@ defmodule Squads.OpenCode.ProjectServer do
       os_pid: nil,
       status: :starting,
       waiters: [],
-      started_at_ms: nil
+      started_at_ms: nil,
+      attach_attempts: 0,
+      lsof_runner: lsof_runner,
+      client: client
     }
 
     {:ok, state, {:continue, :start_process}}
@@ -43,48 +53,61 @@ defmodule Squads.OpenCode.ProjectServer do
 
   @impl true
   def handle_continue(:start_process, state) do
-    port = find_available_port()
-    cmd = "opencode serve --port #{port} --hostname 127.0.0.1"
+    case attach_to_local_instance(state) do
+      {:ok, instance} ->
+        Logger.info(
+          "OpenCode bootstrap: attaching to existing instance",
+          project_id: state.project_id,
+          port: instance.port,
+          os_pid: instance.pid
+        )
 
-    Logger.info(
-      "Starting OpenCode server for project #{state.project_id} at #{state.project_path} on port #{port}"
-    )
+        {:noreply, mark_running(state, instance)}
 
-    started_at_ms = System.monotonic_time(:millisecond)
-
-    Logger.info(
-      "OpenCode bootstrap: provisioning for project #{state.project_id} at #{state.project_path}"
-    )
-
-    Status.set(state.project_path, :provisioning)
-
-    case :exec.run_link(cmd, [:stdout, :stderr, :pty, {:cd, state.project_path}]) do
-      {:ok, _pid, os_pid} ->
-        url = "http://127.0.0.1:#{port}"
+      {:error, _reason} ->
+        port = find_available_port()
+        cmd = "opencode serve --port #{port} --hostname 127.0.0.1 --print-logs"
 
         Logger.info(
-          "OpenCode bootstrap: process started for project #{state.project_id} (os_pid=#{os_pid})"
+          "Starting OpenCode server for project #{state.project_id} at #{state.project_path} on port #{port}"
         )
 
-        # Start health check
-        _task = Task.async(fn -> wait_for_healthy(url) end)
+        started_at_ms = System.monotonic_time(:millisecond)
 
-        {:noreply,
-         %{
-           state
-           | port: port,
-             url: url,
-             os_pid: os_pid,
-             status: :starting,
-             started_at_ms: started_at_ms
-         }}
-
-      {:error, reason} ->
-        Logger.error(
-          "Failed to start OpenCode process for project #{state.project_id}: #{inspect(reason)}"
+        Logger.info(
+          "OpenCode bootstrap: provisioning for project #{state.project_id} at #{state.project_path}"
         )
 
-        {:stop, reason, state}
+        Status.set(state.project_path, :provisioning)
+
+        case :exec.run_link(cmd, [:stdout, :stderr, :pty, {:cd, state.project_path}]) do
+          {:ok, _pid, os_pid} ->
+            url = "http://127.0.0.1:#{port}"
+
+            Logger.info(
+              "OpenCode bootstrap: process started for project #{state.project_id} (os_pid=#{os_pid})"
+            )
+
+            # Start health check
+            _task = Task.async(fn -> wait_for_healthy(url) end)
+
+            {:noreply,
+             %{
+               state
+               | port: port,
+                 url: url,
+                 os_pid: os_pid,
+                 status: :starting,
+                 started_at_ms: started_at_ms
+             }}
+
+          {:error, reason} ->
+            Logger.error(
+              "Failed to start OpenCode process for project #{state.project_id}: #{inspect(reason)}"
+            )
+
+            {:stop, reason, state}
+        end
     end
   end
 
@@ -107,15 +130,20 @@ defmodule Squads.OpenCode.ProjectServer do
       "OpenCode bootstrap: running for project #{state.project_id} (elapsed_ms=#{elapsed_ms(state)})"
     )
 
-    Status.set(state.project_path, :running)
+    {:noreply, mark_running(state, %{url: state.url, port: state.port, pid: state.os_pid})}
+  end
 
-    # Update registry with URL metadata
-    Registry.update_value(@registry, state.project_id, fn _ -> state.url end)
+  @impl true
+  def handle_info({ref, {:error, reason}}, %{status: :running} = state) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
 
-    # Reply to all waiters
-    Enum.each(state.waiters, fn from -> GenServer.reply(from, {:ok, state.url}) end)
+    Logger.debug(
+      "OpenCode health check failed after attach; ignoring",
+      project_id: state.project_id,
+      reason: inspect(reason)
+    )
 
-    {:noreply, %{state | status: :running, waiters: []}}
+    {:noreply, state}
   end
 
   @impl true
@@ -126,10 +154,28 @@ defmodule Squads.OpenCode.ProjectServer do
       "OpenCode server health check failed for project #{state.project_id}: #{inspect(reason)} (elapsed_ms=#{elapsed_ms(state)})"
     )
 
-    Status.set(state.project_path, :error)
+    case attach_to_local_instance(state) do
+      {:ok, instance} ->
+        Logger.warning(
+          "OpenCode bootstrap: attaching to existing instance after health check failure",
+          project_id: state.project_id,
+          port: instance.port,
+          os_pid: instance.pid
+        )
 
-    Enum.each(state.waiters, fn from -> GenServer.reply(from, {:error, reason}) end)
-    {:stop, reason, state}
+        {:noreply, mark_running(state, instance)}
+
+      {:error, attach_reason} ->
+        Logger.error(
+          "OpenCode bootstrap: failed to attach after health check failure",
+          project_id: state.project_id,
+          reason: inspect(attach_reason)
+        )
+
+        Status.set(state.project_path, :error)
+        reply_waiters(state, {:error, reason})
+        {:stop, reason, state}
+    end
   end
 
   @impl true
@@ -139,9 +185,7 @@ defmodule Squads.OpenCode.ProjectServer do
         "OpenCode health check task crashed for project #{state.project_id}: #{inspect(reason)}"
       )
 
-      Enum.each(state.waiters, fn from ->
-        GenServer.reply(from, {:error, :health_check_crashed})
-      end)
+      reply_waiters(state, {:error, :health_check_crashed})
 
       {:stop, :health_check_crashed, state}
     else
@@ -150,37 +194,77 @@ defmodule Squads.OpenCode.ProjectServer do
   end
 
   @impl true
+  def handle_info(:attach_retry, state) do
+    case attach_to_local_instance(state) do
+      {:ok, instance} ->
+        Logger.info(
+          "OpenCode attach retry succeeded",
+          project_id: state.project_id,
+          port: instance.port,
+          os_pid: instance.pid
+        )
+
+        {:noreply, mark_running(state, instance)}
+
+      {:error, attach_reason} ->
+        schedule_attach_retry(state, attach_reason)
+    end
+  end
+
+  @impl true
   def handle_info({:stdout, _pid, data}, state) do
-    Logger.debug("OpenCode [#{state.project_id}] stdout: #{data}")
+    if state.status in [:starting, :attaching] do
+      Logger.info("OpenCode [#{state.project_id}] stdout: #{data}")
+    else
+      Logger.debug("OpenCode [#{state.project_id}] stdout: #{data}")
+    end
+
     {:noreply, state}
   end
 
   @impl true
   def handle_info({:stderr, _pid, data}, state) do
-    Logger.error("OpenCode [#{state.project_id}] stderr: #{data}")
+    log_stderr(state.project_id, data, state.status in [:starting, :attaching])
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:EXIT, _pid, :normal}, %{status: :running} = state) do
+    Logger.debug("OpenCode process exited after attach; ignoring", project_id: state.project_id)
     {:noreply, state}
   end
 
   @impl true
   def handle_info({:EXIT, _pid, reason}, state) do
-    reachable = state.status == :running and server_reachable?(state.url)
+    if reason == :normal do
+      case attach_to_local_instance(state) do
+        {:ok, instance} ->
+          Logger.warning(
+            "OpenCode process exited normally; attaching to existing instance",
+            project_id: state.project_id,
+            port: instance.port,
+            os_pid: instance.pid
+          )
 
-    if reason == :normal and reachable do
-      Logger.warning(
-        "OpenCode process exited normally but server still reachable for project #{state.project_id} (elapsed_ms=#{elapsed_ms(state)})"
-      )
+          Logger.info(
+            "OpenCode bootstrap: running for project #{state.project_id} (elapsed_ms=#{elapsed_ms(state)})"
+          )
 
-      Logger.info("OpenCode bootstrap: instance still reachable after normal exit")
-      Status.set(state.project_path, :running)
+          {:noreply, mark_running(state, instance)}
 
-      {:noreply, state}
+        {:error, attach_reason} ->
+          case schedule_attach_retry(state, attach_reason) do
+            {:noreply, updated_state} -> {:noreply, updated_state}
+            {:stop, stop_reason, updated_state} -> {:stop, stop_reason, updated_state}
+          end
+      end
     else
       Logger.error(
         "OpenCode process for project #{state.project_id} exited: #{inspect(reason)} (elapsed_ms=#{elapsed_ms(state)})"
       )
 
       Status.set(state.project_path, :error)
-      Enum.each(state.waiters, fn from -> GenServer.reply(from, {:error, :process_exited}) end)
+      reply_waiters(state, {:error, :process_exited})
       {:stop, :process_exited, state}
     end
   end
@@ -194,16 +278,248 @@ defmodule Squads.OpenCode.ProjectServer do
     port
   end
 
-  defp server_reachable?(url) when is_binary(url) do
-    port = URI.parse(url).port
+  defp mark_running(state, %{url: url, port: port, pid: os_pid}) do
+    Status.set(state.project_path, :running)
 
-    case :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 1000) do
-      {:ok, socket} ->
-        :gen_tcp.close(socket)
-        true
+    # Update registry with URL metadata
+    Registry.update_value(@registry, state.project_id, fn _ -> url end)
+
+    reply_waiters(state, {:ok, url})
+
+    %{
+      state
+      | status: :running,
+        waiters: [],
+        url: url,
+        port: port,
+        os_pid: os_pid,
+        attach_attempts: 0
+    }
+  end
+
+  defp reply_waiters(state, reply) do
+    Enum.each(state.waiters, fn from -> GenServer.reply(from, reply) end)
+  end
+
+  defp schedule_attach_retry(state, reason) do
+    if state.status in [:starting, :attaching] and state.attach_attempts < @attach_retry_limit do
+      attempt = state.attach_attempts + 1
+
+      Logger.warning(
+        "OpenCode attach attempt #{attempt} failed; retrying",
+        project_id: state.project_id,
+        reason: inspect(reason)
+      )
+
+      Process.send_after(self(), :attach_retry, @attach_retry_delay_ms)
+      {:noreply, %{state | status: :attaching, attach_attempts: attempt}}
+    else
+      Logger.error(
+        "OpenCode process exited normally but no attachable instance found",
+        project_id: state.project_id,
+        reason: inspect(reason)
+      )
+
+      Status.set(state.project_path, :error)
+      reply_waiters(state, {:error, :process_exited})
+      {:stop, :process_exited, state}
+    end
+  end
+
+  defp log_stderr(project_id, data, startup? \\ false)
+
+  defp log_stderr(project_id, data, startup?) when is_binary(data) do
+    data
+    |> String.split("\n", trim: true)
+    |> Enum.each(fn line ->
+      message = "OpenCode [#{project_id}] stderr: #{line}"
+
+      cond do
+        String.starts_with?(line, "ERROR") -> Logger.error(message)
+        String.starts_with?(line, "WARN") -> Logger.warning(message)
+        String.starts_with?(line, "WARNING") -> Logger.warning(message)
+        startup? -> Logger.info(message)
+        String.starts_with?(line, "INFO") -> Logger.debug(message)
+        true -> Logger.debug(message)
+      end
+    end)
+  end
+
+  defp log_stderr(project_id, data, _startup?) do
+    Logger.debug("OpenCode [#{project_id}] stderr: #{inspect(data)}")
+  end
+
+  defp attach_to_local_instance(state) do
+    lsof_runner = Map.get(state, :lsof_runner, &System.cmd/2)
+    client = Map.get(state, :client, Client)
+
+    case resolve_instance_for_port(state.port, state.project_path, lsof_runner, client) do
+      {:ok, instance} -> {:ok, instance}
+      :not_found -> discover_instance_for_project(state.project_path, lsof_runner, client)
+    end
+  end
+
+  defp resolve_instance_for_port(nil, _project_path, _lsof_runner, _client), do: :not_found
+
+  defp resolve_instance_for_port(port, project_path, lsof_runner, client) when is_integer(port) do
+    case resolve_opencode_listener(port, lsof_runner) do
+      {:ok, listener} ->
+        base_url = url_for_port(listener.port)
+
+        case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
+          {:ok, project} when is_map(project) ->
+            if project_matches?(project_path, project) do
+              {:ok,
+               %{
+                 url: base_url,
+                 port: listener.port,
+                 pid: listener.pid,
+                 source: :lsof_port
+               }}
+            else
+              :not_found
+            end
+
+          _ ->
+            :not_found
+        end
+
+      :not_found ->
+        probe_instance_for_port(port, project_path, client)
+    end
+  end
+
+  defp probe_instance_for_port(port, project_path, client) when is_integer(port) do
+    base_url = url_for_port(port)
+
+    case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
+      {:ok, project} when is_map(project) ->
+        if project_matches?(project_path, project) do
+          {:ok,
+           %{
+             url: base_url,
+             port: port,
+             pid: nil,
+             source: :port_probe
+           }}
+        else
+          :not_found
+        end
 
       _ ->
-        false
+        :not_found
+    end
+  end
+
+  defp resolve_opencode_listener(nil, _lsof_runner), do: :not_found
+
+  defp resolve_opencode_listener(port, lsof_runner) when is_integer(port) do
+    case lsof_runner.("lsof", ["-nP", "-iTCP:#{port}", "-sTCP:LISTEN"]) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.filter(&String.contains?(&1, "opencode"))
+        |> Enum.find_value(&parse_lsof_listener/1)
+        |> case do
+          nil -> :not_found
+          listener -> {:ok, listener}
+        end
+
+      _ ->
+        :not_found
+    end
+  rescue
+    _ -> :not_found
+  end
+
+  defp discover_instance_for_project(project_path, lsof_runner, client)
+       when is_binary(project_path) do
+    instance =
+      list_opencode_listeners(lsof_runner)
+      |> Enum.find_value(fn %{port: port, pid: pid} ->
+        base_url = url_for_port(port)
+
+        case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
+          {:ok, project} when is_map(project) ->
+            if project_matches?(project_path, project) do
+              %{
+                url: base_url,
+                port: port,
+                pid: pid,
+                source: :lsof_project
+              }
+            end
+
+          _ ->
+            nil
+        end
+      end)
+
+    case instance do
+      nil -> {:error, :no_matching_instance}
+      _ -> {:ok, instance}
+    end
+  end
+
+  defp discover_instance_for_project(_project_path, _lsof_runner, _client) do
+    {:error, :invalid_project_path}
+  end
+
+  defp list_opencode_listeners(lsof_runner) do
+    case lsof_runner.("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"]) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.filter(&String.contains?(&1, "opencode"))
+        |> Enum.map(&parse_lsof_listener/1)
+        |> Enum.filter(& &1)
+        |> Enum.uniq_by(& &1.port)
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  defp parse_lsof_listener(line) do
+    case Regex.run(~r/^\s*\S+\s+(\d+).*TCP\s+.*:(\d+)\s+\(LISTEN\)/, line) do
+      [_, pid, port] ->
+        %{pid: String.to_integer(pid), port: String.to_integer(port)}
+
+      _ ->
+        nil
+    end
+  end
+
+  defp url_for_port(port) when is_integer(port) do
+    "http://127.0.0.1:#{port}"
+  end
+
+  defp project_matches?(project_path, project) do
+    path = project["worktree"] || project["path"]
+
+    project_path = canonicalize_path(project_path)
+    opencode_path = canonicalize_path(path)
+
+    is_binary(project_path) and is_binary(opencode_path) and project_path == opencode_path
+  end
+
+  defp canonicalize_path(path) when is_binary(path) do
+    path
+    |> Path.expand()
+    |> normalize_macos_volume()
+  end
+
+  defp canonicalize_path(_), do: nil
+
+  defp normalize_macos_volume(path) do
+    data_prefix = "/System/Volumes/Data"
+
+    if String.starts_with?(path, data_prefix <> "/") do
+      String.replace_prefix(path, data_prefix, "")
+    else
+      path
     end
   end
 

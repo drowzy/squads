@@ -1,6 +1,8 @@
 defmodule SquadsWeb.API.MCPController do
   use SquadsWeb, :controller
 
+  require Logger
+
   alias Squads.MCP
   alias Squads.Squads, as: SquadsContext
 
@@ -72,7 +74,25 @@ defmodule SquadsWeb.API.MCPController do
     end)
   end
 
+  def connect(conn, %{"name" => name}) do
+    handle_mcp_rpc(conn, name)
+  end
+
   def connect(conn, _params), do: missing_squad_id(conn)
+
+  def connect_stream(conn, %{"name" => name}) do
+    conn =
+      conn
+      |> put_resp_header("content-type", "text/event-stream")
+      |> put_resp_header("cache-control", "no-cache")
+      |> put_resp_header("connection", "keep-alive")
+      |> send_chunked(200)
+
+    {:ok, conn} =
+      chunk(conn, "event: ping\ndata: {\"status\":\"connected\",\"name\":\"#{name}\"}\n\n")
+
+    loop_mcp_stream(conn)
+  end
 
   def disconnect(conn, %{"name" => name, "squad_id" => squad_id}) do
     with_squad(squad_id, fn squad ->
@@ -103,6 +123,8 @@ defmodule SquadsWeb.API.MCPController do
         json(conn, %{data: entries})
 
       {:error, reason} ->
+        log_catalog_error(reason, params)
+
         conn
         |> put_status(:bad_gateway)
         |> json(%{error: "catalog_error", message: format_reason(reason)})
@@ -145,6 +167,137 @@ defmodule SquadsWeb.API.MCPController do
     end
   end
 
+  defp handle_mcp_rpc(conn, name) do
+    payload =
+      case conn.body_params do
+        %{} = params -> params
+        _ -> %{}
+      end
+
+    method = payload["method"] || payload[:method]
+    id = payload["id"] || payload[:id]
+
+    cond do
+      is_nil(method) ->
+        rpc_error(conn, id, -32600, "Invalid Request")
+
+      is_nil(id) ->
+        handle_mcp_notification(conn, name, payload)
+
+      true ->
+        handle_mcp_request(conn, name, payload)
+    end
+  end
+
+  defp handle_mcp_notification(conn, name, payload) do
+    method = payload["method"] || payload[:method]
+
+    case method do
+      "tools/call" ->
+        _ = handle_tool_call(name, payload)
+        send_resp(conn, :accepted, "")
+
+      "call_tool" ->
+        _ = handle_tool_call(name, payload)
+        send_resp(conn, :accepted, "")
+
+      "initialized" ->
+        send_resp(conn, :accepted, "")
+
+      _ ->
+        send_resp(conn, :accepted, "")
+    end
+  end
+
+  defp handle_mcp_request(conn, name, payload) do
+    method = payload["method"] || payload[:method]
+    id = payload["id"] || payload[:id]
+
+    case method do
+      "initialize" ->
+        result = %{
+          protocolVersion: "2025-06-18",
+          serverInfo: %{
+            name: "squads-#{name}",
+            version: to_string(Application.spec(:squads, :vsn))
+          },
+          capabilities: %{tools: %{listChanged: false}}
+        }
+
+        rpc_result(conn, id, result)
+
+      "tools/list" ->
+        case MCP.handle_request(name, %{"method" => "list_tools"}) do
+          {:ok, result} -> rpc_result(conn, id, result)
+          {:error, reason} -> rpc_error_from_reason(conn, id, reason)
+        end
+
+      "list_tools" ->
+        case MCP.handle_request(name, %{"method" => "list_tools"}) do
+          {:ok, result} -> rpc_result(conn, id, result)
+          {:error, reason} -> rpc_error_from_reason(conn, id, reason)
+        end
+
+      "tools/call" ->
+        case handle_tool_call(name, payload) do
+          {:ok, result} -> rpc_result(conn, id, result)
+          {:error, reason} -> rpc_error_from_reason(conn, id, reason)
+        end
+
+      "call_tool" ->
+        case handle_tool_call(name, payload) do
+          {:ok, result} -> rpc_result(conn, id, result)
+          {:error, reason} -> rpc_error_from_reason(conn, id, reason)
+        end
+
+      "ping" ->
+        rpc_result(conn, id, %{})
+
+      _ ->
+        rpc_error(conn, id, -32601, "Method not found")
+    end
+  end
+
+  defp handle_tool_call(name, payload) do
+    params = payload["params"] || payload[:params] || %{}
+    tool_name = params["name"] || params[:name]
+    arguments = params["arguments"] || params[:arguments] || %{}
+
+    MCP.handle_request(name, %{
+      "method" => "call_tool",
+      "params" => %{"name" => tool_name, "arguments" => arguments}
+    })
+  end
+
+  defp rpc_result(conn, id, result) do
+    json(conn, %{jsonrpc: "2.0", id: id, result: result})
+  end
+
+  defp rpc_error_from_reason(conn, id, %{code: code, message: message}) do
+    rpc_error(conn, id, code, message)
+  end
+
+  defp rpc_error_from_reason(conn, id, reason) do
+    rpc_error(conn, id, -32000, inspect(reason))
+  end
+
+  defp rpc_error(conn, id, code, message) do
+    json(conn, %{jsonrpc: "2.0", id: id, error: %{code: code, message: message}})
+  end
+
+  defp loop_mcp_stream(conn) do
+    receive do
+      _ ->
+        loop_mcp_stream(conn)
+    after
+      30_000 ->
+        case chunk(conn, "event: ping\ndata: {\"status\":\"keep-alive\"}\n\n") do
+          {:ok, conn} -> loop_mcp_stream(conn)
+          {:error, _reason} -> conn
+        end
+    end
+  end
+
   defp missing_squad_id(conn) do
     conn
     |> put_status(:bad_request)
@@ -159,6 +312,15 @@ defmodule SquadsWeb.API.MCPController do
 
   defp format_reason(reason) when is_binary(reason), do: reason
   defp format_reason(reason), do: inspect(reason)
+
+  defp log_catalog_error(reason, params) do
+    Logger.error("MCP catalog error",
+      reason: inspect(reason),
+      query: params["query"],
+      category: params["category"],
+      tag: params["tag"]
+    )
+  end
 
   defp maybe_put(opts, _key, nil), do: opts
   defp maybe_put(opts, key, value), do: [{key, value} | opts]

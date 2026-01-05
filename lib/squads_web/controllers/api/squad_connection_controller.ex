@@ -2,7 +2,6 @@ defmodule SquadsWeb.API.SquadConnectionController do
   use SquadsWeb, :controller
 
   alias Squads.Squads
-  alias Squads.Squads.SquadConnection
 
   action_fallback SquadsWeb.FallbackController
 

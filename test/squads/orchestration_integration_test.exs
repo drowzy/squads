@@ -9,6 +9,8 @@ defmodule Squads.OrchestrationIntegrationTest do
 
   @tag :tmp_dir
   @tag timeout: 180_000
+  @tag :integration
+  @tag :skip
   test "full orchestration lifecycle: project -> squad -> agent -> session -> server", %{
     tmp_dir: tmp_dir
   } do

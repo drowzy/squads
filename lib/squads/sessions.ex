@@ -363,6 +363,79 @@ defmodule Squads.Sessions do
     end
   end
 
+  @doc """
+  Aborts a running session on OpenCode without finishing it locally.
+  """
+  def abort_session(session, opencode_opts \\ []) do
+    cond do
+      is_nil(session.opencode_session_id) ->
+        {:error, :no_opencode_session}
+
+      not String.starts_with?(session.opencode_session_id, "ses") ->
+        {:error, :no_opencode_session}
+
+      test_env?() ->
+        {:ok, true}
+
+      true ->
+        opts = with_base_url(session, opencode_opts)
+
+        case OpenCodeClient.abort_session(session.opencode_session_id, opts) do
+          {:ok, response} ->
+            {:ok, response}
+
+          {:error, {:not_found, _}} ->
+            {:ok, false}
+
+          {:error, reason} ->
+            {:error, {:opencode_error, reason}}
+        end
+    end
+  end
+
+  @doc """
+  Archives a session on OpenCode and marks it archived locally.
+  """
+  def archive_session(session, opencode_opts \\ []) do
+    archived_at = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    metadata =
+      (session.metadata || %{})
+      |> Map.put("archived_at", DateTime.to_iso8601(archived_at))
+
+    apply_local_archive = fn ->
+      session
+      |> Ecto.Changeset.change(%{status: "archived", metadata: metadata})
+      |> Repo.update()
+    end
+
+    cond do
+      is_nil(session.opencode_session_id) ->
+        apply_local_archive.()
+
+      not String.starts_with?(session.opencode_session_id, "ses") ->
+        apply_local_archive.()
+
+      test_env?() ->
+        apply_local_archive.()
+
+      true ->
+        opts = with_base_url(session, opencode_opts)
+        payload = %{time: %{archived: DateTime.to_unix(archived_at, :millisecond)}}
+
+        case OpenCodeClient.update_session(session.opencode_session_id, payload, opts) do
+          {:ok, _} ->
+            apply_local_archive.()
+
+          {:error, {:not_found, _}} ->
+            apply_local_archive.()
+
+          {:error, reason} ->
+            {:error, {:opencode_error, reason}}
+        end
+    end
+  end
+
   defp add_termination_metadata(changeset, opts) do
     terminated_by = opts[:terminated_by]
     reason = opts[:reason]
@@ -424,30 +497,10 @@ defmodule Squads.Sessions do
   end
 
   @doc """
-  Ensures an agent has a fresh session.
-  If an active session exists, it stops it first.
+  Starts a new session for an agent without stopping existing sessions.
   """
   def new_session_for_agent(agent_id, attrs \\ %{}) do
-    Repo.transaction(fn ->
-      # 1. Find and stop active session if exists
-      active_session =
-        Session
-        |> where([s], s.agent_id == ^agent_id and s.status in ["running", "paused"])
-        |> Repo.one()
-
-      if active_session do
-        case stop_session(active_session, 0, terminated_by: "user", reason: "Started new session") do
-          {:ok, _} -> :ok
-          {:error, reason} -> Repo.rollback(reason)
-        end
-      end
-
-      # 2. Start new session
-      case create_and_start_session(Map.put(attrs, :agent_id, agent_id)) do
-        {:ok, session} -> session
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
+    create_and_start_session(Map.put(attrs, :agent_id, agent_id))
   end
 
   # ============================================================================
@@ -504,12 +557,44 @@ defmodule Squads.Sessions do
     * `:no_reply` - Optional. If true, don't wait for AI response.
   """
   def send_message(session, params, opencode_opts \\ []) do
+    Logger.debug("send_message called",
+      session_id: session.id,
+      opencode_session_id: session.opencode_session_id,
+      status: session.status
+    )
+
     case ensure_session_running(session, opencode_opts) do
       {:ok, session} ->
         opts = with_base_url(session, opencode_opts)
-        OpenCodeClient.send_message(session.opencode_session_id, params, opts)
+        base_url = Keyword.get(opts, :base_url)
+
+        Logger.info("Sending message to OpenCode",
+          session_id: session.id,
+          opencode_session_id: session.opencode_session_id,
+          base_url: base_url
+        )
+
+        result = OpenCodeClient.send_message(session.opencode_session_id, params, opts)
+
+        case result do
+          {:ok, _} ->
+            Logger.info("OpenCode message sent successfully", session_id: session.id)
+
+          {:error, reason} ->
+            Logger.error("OpenCode message failed",
+              session_id: session.id,
+              reason: inspect(reason)
+            )
+        end
+
+        result
 
       {:error, reason} ->
+        Logger.warning("Cannot send message: session not running",
+          session_id: session.id,
+          reason: inspect(reason)
+        )
+
         {:error, reason}
     end
   end
@@ -568,6 +653,18 @@ defmodule Squads.Sessions do
   # Session Commands and Dispatch
   # ============================================================================
 
+  def local_command?(command) when is_binary(command) do
+    command in [
+      "/squads-status",
+      "/squads-tickets",
+      "/check-mail",
+      "/sessions",
+      "/compact"
+    ]
+  end
+
+  def local_command?(_command), do: false
+
   @doc """
   Executes a slash command in a session.
   """
@@ -610,6 +707,12 @@ defmodule Squads.Sessions do
           {:error, :agent_not_found}
         end
 
+      "/sessions" ->
+        {:ok, %{"output" => format_session_listing(session.agent_id)}}
+
+      "/compact" ->
+        {:ok, %{"output" => "Compaction is not available for Squads-managed sessions yet."}}
+
       "/help" ->
         output =
           [
@@ -641,7 +744,12 @@ defmodule Squads.Sessions do
           true ->
             case ensure_session_running(session, opencode_opts) do
               {:ok, session} ->
-                opts = with_base_url(session, Keyword.merge(params, opencode_opts))
+                opts =
+                  params
+                  |> Keyword.merge(opencode_opts)
+                  |> normalize_agent_opt()
+
+                opts = with_base_url(session, opts)
 
                 Logger.debug(
                   "Executing command #{command} on session #{session.opencode_session_id} with opts: #{inspect(opts)}"
@@ -693,7 +801,12 @@ defmodule Squads.Sessions do
       true ->
         case ensure_session_running(session, opencode_opts) do
           {:ok, session} ->
-            opts = with_base_url(session, Keyword.merge(params, opencode_opts))
+            opts =
+              params
+              |> Keyword.merge(opencode_opts)
+              |> normalize_agent_opt()
+
+            opts = with_base_url(session, opts)
 
             OpenCodeClient.run_shell(
               session.opencode_session_id,
@@ -758,7 +871,13 @@ defmodule Squads.Sessions do
       end
 
     params = if model, do: Map.put(params, :model, model), else: params
-    params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
+
+    params =
+      case normalize_prompt_agent(opts[:agent]) do
+        nil -> params
+        agent -> Map.put(params, :agent, agent)
+      end
+
     params = if opts[:no_reply], do: Map.put(params, :no_reply, opts[:no_reply]), else: params
     params = if system_override, do: Map.put(params, :system, system_override), else: params
 
@@ -810,12 +929,40 @@ defmodule Squads.Sessions do
       end
 
     params = if model, do: Map.put(params, :model, model), else: params
-    params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
+
+    params =
+      case normalize_prompt_agent(opts[:agent]) do
+        nil -> params
+        agent -> Map.put(params, :agent, agent)
+      end
+
     params = if system_override, do: Map.put(params, :system, system_override), else: params
 
     opts = with_base_url(session, Keyword.drop(opts, [:model, :agent, :system]))
     send_message_async(session, params, opts)
   end
+
+  # TODO(opencode-squads-gfh): Restore mode-to-agent mapping once OpenCode supports it.
+  defp normalize_prompt_agent(agent) when is_binary(agent) do
+    trimmed = String.trim(agent)
+
+    cond do
+      trimmed == "" -> nil
+      trimmed in ["plan", "build"] -> nil
+      true -> trimmed
+    end
+  end
+
+  defp normalize_prompt_agent(_), do: nil
+
+  defp normalize_agent_opt(opts) when is_list(opts) do
+    case normalize_prompt_agent(Keyword.get(opts, :agent)) do
+      nil -> Keyword.delete(opts, :agent)
+      agent -> Keyword.put(opts, :agent, agent)
+    end
+  end
+
+  defp normalize_agent_opt(opts), do: opts
 
   # ============================================================================
   # Private Helpers
@@ -856,10 +1003,10 @@ defmodule Squads.Sessions do
         {:ok, session}
 
       test_env?() ->
-        # Keep unit tests deterministic (don’t hit a real OpenCode server)
+        # Keep unit tests deterministic (don't hit a real OpenCode server)
         # unless explicitly bypassed for integration tests.
         if Application.get_env(:squads, :bypass_test_session_block, false) do
-          true
+          {:ok, session}
         else
           {:error, :session_not_active}
         end
@@ -952,6 +1099,31 @@ defmodule Squads.Sessions do
       end
     end)
   end
+
+  defp format_session_listing(agent_id) do
+    sessions = list_sessions_for_agent(agent_id)
+
+    case sessions do
+      [] ->
+        "No sessions found."
+
+      sessions ->
+        sessions
+        |> Enum.map(&format_session_line/1)
+        |> Enum.join("\n")
+    end
+  end
+
+  defp format_session_line(session) do
+    status = session.status || "unknown"
+    ticket = session.ticket_key || "no-ticket"
+    started_at = format_session_time(session.started_at || session.inserted_at)
+
+    "[#{String.upcase(status)}] #{session.id} #{ticket} #{started_at}"
+  end
+
+  defp format_session_time(nil), do: "n/a"
+  defp format_session_time(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
 
   defp test_env? do
     Code.ensure_loaded?(Mix) and function_exported?(Mix, :env, 0) and Mix.env() == :test

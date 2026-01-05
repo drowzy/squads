@@ -93,6 +93,8 @@ defmodule SquadsWeb.Router do
     resources "/sessions", SessionController, only: [:index, :show, :create] do
       post "/start", SessionController, :start_existing
       post "/stop", SessionController, :stop
+      post "/abort", SessionController, :abort
+      post "/archive", SessionController, :archive
       post "/cancel", SessionController, :cancel
       get "/messages", SessionController, :messages
       get "/diff", SessionController, :diff
@@ -131,6 +133,7 @@ defmodule SquadsWeb.Router do
     get "/mcp/cli", MCPController, :cli
     post "/mcp", MCPController, :create
     patch "/mcp/:name", MCPController, :update
+    get "/mcp/:name/connect", MCPController, :connect_stream
     post "/mcp/:name/connect", MCPController, :connect
     post "/mcp/:name/disconnect", MCPController, :disconnect
     get "/mcp/:name/auth", MCPController, :auth

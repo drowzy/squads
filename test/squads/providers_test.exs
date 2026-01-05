@@ -16,6 +16,19 @@ defmodule Squads.ProvidersTest do
     %{project: project}
   end
 
+  defp respond_provider_stub(conn) do
+    case conn.request_path do
+      "/provider" ->
+        Req.Test.json(conn, [%{"id" => "openai", "status" => "connected", "models" => []}])
+
+      "/config/providers" ->
+        Req.Test.json(conn, %{})
+
+      _ ->
+        Plug.Conn.send_resp(conn, 404, "not found")
+    end
+  end
+
   describe "list_providers/1" do
     test "returns empty list when no providers" do
       %{project: project} = create_test_project()
@@ -244,6 +257,64 @@ defmodule Squads.ProvidersTest do
 
       assert {:ok, _} = Providers.delete_provider(provider)
       assert Providers.get_provider(provider.id) == nil
+    end
+  end
+
+  describe "sync_from_opencode/2 base_url selection" do
+    test "uses registry base_url when available" do
+      %{project: project} = create_test_project()
+
+      base_url = "http://opencode.local:5555"
+      {:ok, _} = Registry.register(Squads.OpenCode.ServerRegistry, project.id, base_url)
+
+      on_exit(fn ->
+        Registry.unregister(Squads.OpenCode.ServerRegistry, project.id)
+      end)
+
+      stub_name = {:providers_test, self(), :registry}
+
+      Req.Test.expect(stub_name, 2, fn conn ->
+        assert conn.host == "opencode.local"
+        assert conn.port == 5555
+        respond_provider_stub(conn)
+      end)
+
+      assert {:ok, providers} =
+               Providers.sync_from_opencode(project.id,
+                 client_opts: [req_options: [plug: {Req.Test, stub_name}]]
+               )
+
+      assert length(providers) == 1
+      assert hd(providers).provider_id == "openai"
+    end
+
+    test "respects explicit base_url over registry" do
+      %{project: project} = create_test_project()
+
+      {:ok, _} = Registry.register(Squads.OpenCode.ServerRegistry, project.id, "http://ignored")
+
+      on_exit(fn ->
+        Registry.unregister(Squads.OpenCode.ServerRegistry, project.id)
+      end)
+
+      stub_name = {:providers_test, self(), :explicit}
+
+      Req.Test.expect(stub_name, 2, fn conn ->
+        assert conn.host == "explicit.local"
+        assert conn.port == 7777
+        respond_provider_stub(conn)
+      end)
+
+      assert {:ok, providers} =
+               Providers.sync_from_opencode(project.id,
+                 client_opts: [
+                   base_url: "http://explicit.local:7777",
+                   req_options: [plug: {Req.Test, stub_name}]
+                 ]
+               )
+
+      assert length(providers) == 1
+      assert hd(providers).provider_id == "openai"
     end
   end
 

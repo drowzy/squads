@@ -21,8 +21,15 @@ defmodule Squads.MCPTest do
   end
 
   setup do
-    Application.put_env(:squads, Squads.MCP, docker_cli: DockerCLIStub, catalog: CatalogStub)
-    on_exit(fn -> Application.delete_env(:squads, Squads.MCP) end)
+    # Clear any cached catalog entries from persistent_term
+    :persistent_term.erase({MCP.Catalog, :catalog})
+
+    Application.put_env(:squads, MCP,
+      docker_cli: __MODULE__.DockerCLIStub,
+      catalog: __MODULE__.CatalogStub
+    )
+
+    on_exit(fn -> Application.delete_env(:squads, MCP) end)
     :ok
   end
 

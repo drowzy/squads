@@ -242,10 +242,11 @@ defmodule Squads.OpenCode.Config do
       "$schema" => "https://opencode.ai/config.json",
       "plugin" => ["opencode-openai-codex-auth@4.2.0"],
       "mcp" => %{
+        # TODO(opencode-squads-gfh): Re-enable agent_mail MCP once decompression is resolved.
         "agent_mail" => %{
           "type" => "remote",
           "url" => "http://127.0.0.1:4000/api/mcp/agent_mail/connect",
-          "enabled" => true,
+          "enabled" => false,
           "headers" => %{
             "Authorization" => "Bearer {env:AGENT_MAIL_API_KEY}"
           }

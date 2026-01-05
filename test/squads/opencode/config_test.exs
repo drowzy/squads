@@ -621,7 +621,7 @@ defmodule Squads.OpenCode.ConfigTest do
 
       assert config["$schema"] == "https://opencode.ai/config.json"
       assert config["mcp"]["agent_mail"]["enabled"] == true
-      assert config["mcp"]["agent_mail"]["url"] =~ "8765/mcp"
+      assert config["mcp"]["agent_mail"]["url"] =~ "/api/mcp/agent_mail/connect"
       assert config["agent"]["default"] == %{"agent" => "generalist"}
       assert config["agent"]["commands"]["squads-status"] != nil
       assert config["agent"]["commands"]["squads-tickets"] != nil

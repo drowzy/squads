@@ -21,7 +21,8 @@ defmodule Squads.OpenCode.Client do
   require Logger
 
   @default_base_url "http://127.0.0.1:4096"
-  @default_timeout 30_000
+  # LLM requests can take several minutes for complex tasks
+  @default_timeout 300_000
   @default_retry_count 3
   @default_retry_delay 1_000
 
@@ -29,7 +30,8 @@ defmodule Squads.OpenCode.Client do
           base_url: String.t(),
           timeout: pos_integer(),
           retry_count: non_neg_integer(),
-          retry_delay: pos_integer()
+          retry_delay: pos_integer(),
+          req_options: keyword()
         ]
 
   @type response :: {:ok, map() | list() | boolean() | String.t()} | {:error, term()}
@@ -444,13 +446,21 @@ defmodule Squads.OpenCode.Client do
 
     url = "#{base_url}#{path}"
 
+    # Only retry idempotent GET requests - POST/PATCH/PUT/DELETE can cause
+    # duplicate operations if retried after a successful but timed-out response
+    should_retry = method == :get and retry_count > 0
+
     req_opts = [
       connect_options: [timeout: timeout],
       receive_timeout: timeout,
-      retry: if(retry_count > 0, do: :transient, else: false),
+      retry: if(should_retry, do: :transient, else: false),
       retry_delay: fn _ -> retry_delay end,
-      max_retries: retry_count
+      max_retries: if(should_retry, do: retry_count, else: 0)
     ]
+
+    Logger.debug(
+      "OpenCode HTTP request #{inspect(%{method: method, url: url, timeout: timeout, retry: should_retry, query: opts[:query], body: body})}"
+    )
 
     # Add query params if present
     req_opts =
@@ -468,7 +478,8 @@ defmodule Squads.OpenCode.Client do
         req_opts
       end
 
-    Logger.debug("OpenCode HTTP #{method} #{url}", body: body)
+    req_options = Keyword.get(opts, :req_options, [])
+    req_opts = Keyword.merge(req_opts, req_options)
 
     result =
       case method do
@@ -479,6 +490,7 @@ defmodule Squads.OpenCode.Client do
         :put -> Req.put(url, req_opts)
       end
 
+    log_response(method, url, result)
     handle_response(result)
   end
 
@@ -524,6 +536,149 @@ defmodule Squads.OpenCode.Client do
   defp handle_response({:error, reason}) do
     {:error, {:request_error, reason}}
   end
+
+  defp log_response(method, url, {:ok, %Req.Response{status: status, body: body}}) do
+    if status in 200..299 do
+      Logger.debug(
+        "OpenCode HTTP response #{inspect(%{method: method, url: url, status: status, body: body})}"
+      )
+    else
+      Logger.warning(
+        "OpenCode HTTP response error #{inspect(%{method: method, url: url, status: status, body: body})}"
+      )
+    end
+  end
+
+  defp log_response(method, url, {:error, reason}) do
+    Logger.error(
+      "OpenCode HTTP request failed #{inspect(%{method: method, url: url, reason: reason})}"
+    )
+  end
+
+  defp summarize_request_body(nil), do: nil
+
+  defp summarize_request_body(body) when is_map(body) do
+    summary = %{}
+
+    summary =
+      case Map.get(body, :agent) || Map.get(body, "agent") do
+        nil -> summary
+        agent -> Map.put(summary, :agent, agent)
+      end
+
+    summary =
+      case Map.get(body, :command) || Map.get(body, "command") do
+        nil -> summary
+        command -> Map.put(summary, :command, command)
+      end
+
+    summary =
+      case Map.get(body, :arguments) || Map.get(body, "arguments") do
+        nil -> summary
+        arguments -> Map.put(summary, :arguments, arguments)
+      end
+
+    summary =
+      case Map.get(body, :noReply) || Map.get(body, "noReply") ||
+             Map.get(body, :no_reply) || Map.get(body, "no_reply") do
+        nil -> summary
+        no_reply -> Map.put(summary, :no_reply, no_reply)
+      end
+
+    summary =
+      case Map.get(body, :model) || Map.get(body, "model") do
+        nil -> summary
+        model -> Map.put(summary, :model, model)
+      end
+
+    summary =
+      case Map.get(body, :system) || Map.get(body, "system") do
+        nil -> summary
+        system -> Map.put(summary, :system_length, String.length(system))
+      end
+
+    parts = Map.get(body, :parts) || Map.get(body, "parts")
+
+    if is_list(parts) do
+      Map.put(summary, :parts, summarize_parts(parts))
+    else
+      summary
+    end
+  end
+
+  defp summarize_request_body(body), do: body
+
+  defp summarize_response_body(body) when is_list(body) do
+    roles =
+      body
+      |> Enum.take(3)
+      |> Enum.map(fn entry ->
+        info = Map.get(entry, "info") || Map.get(entry, :info) || %{}
+        Map.get(info, "role") || Map.get(info, :role)
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    %{count: length(body), roles: roles}
+  end
+
+  defp summarize_response_body(body) when is_map(body) do
+    summary = %{}
+
+    summary =
+      case Map.get(body, "error") || Map.get(body, :error) do
+        nil -> summary
+        error -> Map.put(summary, :error, error)
+      end
+
+    summary =
+      case Map.get(body, "message") || Map.get(body, :message) do
+        nil -> summary
+        message -> Map.put(summary, :message, message)
+      end
+
+    summary =
+      case Map.get(body, "id") || Map.get(body, :id) do
+        nil -> summary
+        id -> Map.put(summary, :id, id)
+      end
+
+    if map_size(summary) == 0 do
+      Map.keys(body)
+    else
+      summary
+    end
+  end
+
+  defp summarize_response_body(body) when is_binary(body) do
+    if String.length(body) > 500 do
+      String.slice(body, 0, 500) <> "..."
+    else
+      body
+    end
+  end
+
+  defp summarize_response_body(body), do: body
+
+  defp summarize_parts(parts) do
+    Enum.map(parts, &summarize_part/1)
+  end
+
+  defp summarize_part(%{"type" => "text", "text" => text}) do
+    %{type: "text", length: safe_text_length(text)}
+  end
+
+  defp summarize_part(%{type: "text", text: text}) do
+    %{type: "text", length: safe_text_length(text)}
+  end
+
+  defp summarize_part(part) do
+    %{
+      type: Map.get(part, "type") || Map.get(part, :type)
+    }
+  end
+
+  defp safe_text_length(text) when is_binary(text), do: String.length(text)
+  defp safe_text_length(_), do: 0
 
   defp get_config_opts do
     Application.get_env(:squads, __MODULE__, [])

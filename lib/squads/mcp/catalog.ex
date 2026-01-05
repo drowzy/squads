@@ -3,6 +3,8 @@ defmodule Squads.MCP.Catalog do
   Fetches and caches MCP catalog entries from Docker's MCP registry.
   """
 
+  require Logger
+
   @registry_api Application.compile_env(
                   :squads,
                   [__MODULE__, :registry_api],
@@ -112,6 +114,16 @@ defmodule Squads.MCP.Catalog do
     with {:ok, server_yaml} <- fetch_yaml(server_url),
          {:ok, tools} <- fetch_optional_json(tools_url) do
       {:ok, normalize_entry(name, server_yaml, tools)}
+    else
+      {:error, reason} ->
+        Logger.error("MCP catalog entry fetch failed",
+          name: name,
+          server_url: server_url,
+          tools_url: tools_url,
+          reason: inspect(reason)
+        )
+
+        {:error, reason}
     end
   end
 

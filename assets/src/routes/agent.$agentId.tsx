@@ -7,7 +7,9 @@ import {
   useSessions, 
   useMailThreads, 
   useSquads, 
-  useStopSession, 
+  useStopSession,
+  useAbortSession,
+  useArchiveSession,
   useUpdateAgent,
   useAgentRolesConfig,
   useModels,
@@ -113,6 +115,8 @@ function AgentDetail() {
   const { data: threads = [] } = useMailThreads(activeProject?.id)
   const modelsQuery = useModels(activeProject?.id || '') // Fetch models for context limits
   const stopSession = useStopSession()
+  const abortSession = useAbortSession()
+  const archiveSession = useArchiveSession()
   const createSession = useNewSession()
   const { addNotification } = useNotifications()
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -123,7 +127,7 @@ function AgentDetail() {
   const sessions = useMemo(() => {
     let filtered = allSessions
     if (historyFilter === 'active') filtered = allSessions.filter(s => ['running', 'pending', 'paused', 'starting'].includes(s.status))
-    if (historyFilter === 'history') filtered = allSessions.filter(s => ['completed', 'failed', 'cancelled'].includes(s.status))
+    if (historyFilter === 'history') filtered = allSessions.filter(s => ['completed', 'failed', 'cancelled', 'archived'].includes(s.status))
     return filtered.sort((a, b) => new Date(b.inserted_at).getTime() - new Date(a.inserted_at).getTime())
   }, [allSessions, historyFilter])
   
@@ -141,7 +145,7 @@ function AgentDetail() {
   const agentData = squads.flatMap(s => s.agents ?? []).find(a => a.id === agentId)
   
   // Find the active session for this agent
-  const activeSession = sessions.find(s => ['running', 'starting', 'pending'].includes(s.status))
+  const activeSession = allSessions.find(s => ['running', 'starting', 'pending'].includes(s.status))
 
   // The session we are currently viewing
   const currentSession = useMemo(() => {
@@ -191,12 +195,62 @@ function AgentDetail() {
     }
   }
 
+  const handleArchiveSession = async () => {
+    if (!currentSession || currentSession.status === 'archived') return
+
+    if (!confirm('Archive this session? You can still view it later from history.')) return
+
+    try {
+      await archiveSession.mutateAsync({ session_id: currentSession.id })
+      addNotification({
+        type: 'success',
+        title: 'Session Archived',
+        message: 'The session has been archived successfully.'
+      })
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Archive Failed',
+        message: error instanceof Error ? error.message : 'Failed to archive session'
+      })
+    }
+  }
+
+  const handleSelectSession = async (sessionId: string) => {
+    if (currentSession && currentSession.id !== sessionId) {
+      const shouldAbort = ['running', 'starting', 'pending'].includes(currentSession.status)
+
+      if (shouldAbort) {
+        try {
+          await abortSession.mutateAsync({ session_id: currentSession.id })
+        } catch (error) {
+          console.warn('Failed to abort session before switching', error)
+        }
+      }
+    }
+
+    setSelectedSessionId(sessionId)
+    setMobileSidebar(null)
+  }
+
   const handleStartSession = async () => {
     if (!agentData) return
 
+    const sessionToAbort =
+      currentSession && ['running', 'starting', 'pending'].includes(currentSession.status)
+        ? currentSession
+        : null
+
     try {
-      // Use the dedicated atomic /new endpoint instead of just creating a session
-      // This ensures previous sessions are stopped and the new one is started on OpenCode
+      if (sessionToAbort) {
+        try {
+          await abortSession.mutateAsync({ session_id: sessionToAbort.id })
+        } catch (error) {
+          console.warn('Failed to abort session before starting a new one', error)
+        }
+      }
+
+      // Use the dedicated /new endpoint to start a fresh session on OpenCode
       const newSession = await createSession.mutateAsync({
         agent_id: agentData.id,
         title: `Session for ${agentData.name}`,
@@ -380,10 +434,7 @@ function AgentDetail() {
               .map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => {
-                    setSelectedSessionId(s.id)
-                    setMobileSidebar(null)
-                  }}
+                  onClick={() => handleSelectSession(s.id)}
                   className={cn(
                     'w-full text-left p-3 transition-colors hover:bg-tui-dim/5',
                     selectedSessionId === s.id ? 'bg-tui-accent/10 border-l-2 border-l-tui-accent' : ''
@@ -616,6 +667,16 @@ function AgentDetail() {
             >
               {createSession.isPending ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
               {createSession.isPending ? 'Starting...' : 'Start Session'}
+            </button>
+          )}
+
+          {currentSession && currentSession.status !== 'archived' && (
+            <button
+              onClick={handleArchiveSession}
+              disabled={archiveSession.isPending}
+              className="w-full border border-tui-border bg-tui-dim/10 py-2 text-tui-dim font-bold text-[10px] hover:text-tui-text hover:border-tui-accent transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {archiveSession.isPending ? 'Archiving...' : 'Archive Session'}
             </button>
           )}
 

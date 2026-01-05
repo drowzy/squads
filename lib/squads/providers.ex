@@ -11,7 +11,11 @@ defmodule Squads.Providers do
   import Ecto.Query, warn: false
   alias Squads.Repo
   alias Squads.Providers.Provider
+  alias Squads.Projects
   alias Squads.OpenCode.Client
+  alias Squads.OpenCode.Server, as: OpenCodeServer
+
+  require Logger
 
   # ============================================================================
   # CRUD Operations
@@ -111,12 +115,7 @@ defmodule Squads.Providers do
           {:ok, [Provider.t()]} | {:error, term()}
   def sync_from_opencode(project_id, opts \\ []) do
     client_opts = Keyword.get(opts, :client_opts, [])
-
-    client_opts =
-      case Squads.OpenCode.Server.get_url(project_id) do
-        {:ok, url} -> Keyword.put_new(client_opts, :base_url, url)
-        _ -> client_opts
-      end
+    client_opts = add_base_url(project_id, client_opts)
 
     with {:ok, provider_payload} <- Client.list_providers(client_opts) do
       config_payload =
@@ -138,12 +137,7 @@ defmodule Squads.Providers do
           {:ok, Provider.t()} | {:error, term()}
   def sync_provider_status(%Provider{} = provider, opts \\ []) do
     client_opts = Keyword.get(opts, :client_opts, [])
-
-    client_opts =
-      case Squads.OpenCode.Server.get_url(provider.project_id) do
-        {:ok, url} -> Keyword.put_new(client_opts, :base_url, url)
-        _ -> client_opts
-      end
+    client_opts = add_base_url(provider.project_id, client_opts)
 
     case Client.list_providers(client_opts) do
       {:ok, %{"all" => providers} = payload} ->
@@ -258,6 +252,45 @@ defmodule Squads.Providers do
   # ============================================================================
   # Private Implementation
   # ============================================================================
+
+  defp add_base_url(project_id, client_opts) do
+    case OpenCodeServer.get_url(project_id) do
+      {:ok, url} ->
+        Keyword.put_new(client_opts, :base_url, url)
+
+      _ ->
+        maybe_attach_base_url(project_id, client_opts)
+    end
+  end
+
+  defp maybe_attach_base_url(project_id, client_opts) do
+    if test_env?() do
+      client_opts
+    else
+      case Projects.get_project(project_id) do
+        %Projects.Project{path: path} ->
+          case OpenCodeServer.ensure_running(project_id, path) do
+            {:ok, url} ->
+              Keyword.put_new(client_opts, :base_url, url)
+
+            {:error, reason} ->
+              Logger.warning("OpenCode server not available for provider sync",
+                project_id: project_id,
+                reason: inspect(reason)
+              )
+
+              client_opts
+          end
+
+        _ ->
+          client_opts
+      end
+    end
+  end
+
+  defp test_env? do
+    Code.ensure_loaded?(Mix) and function_exported?(Mix, :env, 0) and Mix.env() == :test
+  end
 
   defp normalize_providers(%{"all" => providers} = payload, config_payload)
        when is_list(providers) do

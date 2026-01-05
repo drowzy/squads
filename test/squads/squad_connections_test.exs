@@ -1,9 +1,10 @@
 defmodule Squads.SquadConnectionsTest do
   use Squads.DataCase
 
-  alias Squads.Squads
+  alias Squads.Events
   alias Squads.Projects
   alias Squads.Squads.SquadConnection
+  alias Squads.Squads
 
   describe "squad_connections" do
     @valid_attrs %{status: "active", notes: "Collaboration on API", metadata: %{}}
@@ -64,8 +65,8 @@ defmodule Squads.SquadConnectionsTest do
       project1: project1,
       project2: project2
     } do
-      Squads.Events.subscribe(project1.id)
-      Squads.Events.subscribe(project2.id)
+      Events.subscribe(project1.id)
+      Events.subscribe(project2.id)
 
       attrs =
         @valid_attrs
@@ -164,8 +165,8 @@ defmodule Squads.SquadConnectionsTest do
       project1: project1,
       project2: project2
     } do
-      Squads.Events.subscribe(project1.id)
-      Squads.Events.subscribe(project2.id)
+      Events.subscribe(project1.id)
+      Events.subscribe(project2.id)
 
       attrs =
         @valid_attrs

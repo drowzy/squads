@@ -136,6 +136,66 @@ defmodule SquadsWeb.API.SessionController do
   end
 
   @doc """
+  Abort a running session without finishing it.
+
+  POST /api/sessions/:session_id/abort
+  """
+  def abort(conn, %{"session_id" => id} = params) do
+    case resolve_session_or_external(id, params) do
+      {:ok, session_or_url} ->
+        case session_or_url do
+          %Sessions.Session{} = session ->
+            case Sessions.abort_session(session) do
+              {:ok, response} -> json(conn, %{data: response})
+              error -> error
+            end
+
+          external_url when is_binary(external_url) ->
+            opts = Keyword.put([], :base_url, external_url)
+
+            case Squads.OpenCode.Client.abort_session(id, opts) do
+              {:ok, response} -> json(conn, %{data: response})
+              error -> error
+            end
+        end
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Archive a session on OpenCode and mark it archived locally.
+
+  POST /api/sessions/:session_id/archive
+  """
+  def archive(conn, %{"session_id" => id} = params) do
+    case resolve_session_or_external(id, params) do
+      {:ok, session_or_url} ->
+        case session_or_url do
+          %Sessions.Session{} = session ->
+            case Sessions.archive_session(session) do
+              {:ok, session} -> render(conn, :show, session: session)
+              error -> error
+            end
+
+          external_url when is_binary(external_url) ->
+            archived_at = DateTime.utc_now() |> DateTime.truncate(:second)
+            payload = %{time: %{archived: DateTime.to_unix(archived_at, :millisecond)}}
+            opts = Keyword.put([], :base_url, external_url)
+
+            case Squads.OpenCode.Client.update_session(id, payload, opts) do
+              {:ok, response} -> json(conn, %{data: response})
+              error -> error
+            end
+        end
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
   Cancel a pending session.
 
   POST /api/sessions/:session_id/cancel
@@ -219,6 +279,13 @@ defmodule SquadsWeb.API.SessionController do
   Body: { "prompt": "Hello", "model": "anthropic/claude-sonnet-4-5", "agent": "coder" }
   """
   def prompt(conn, %{"session_id" => id, "prompt" => prompt} = params) do
+    Logger.info("Session prompt request",
+      session_id: id,
+      prompt_length: String.length(prompt),
+      model: params["model"],
+      agent: params["agent"]
+    )
+
     case resolve_session_or_external(id, params) do
       {:ok, session_or_url} ->
         opts =
@@ -229,21 +296,39 @@ defmodule SquadsWeb.API.SessionController do
 
         case session_or_url do
           %Sessions.Session{} = session ->
+            Logger.debug("Sending prompt to local session",
+              session_id: session.id,
+              opencode_session_id: session.opencode_session_id,
+              status: session.status
+            )
+
             case Sessions.send_prompt(session, prompt, opts) do
               {:ok, response} ->
+                Logger.info("Prompt succeeded", session_id: session.id)
                 json(conn, %{data: response})
 
               {:error, :session_not_active} ->
+                Logger.warning("Prompt failed: session not active", session_id: session.id)
                 {:error, :session_not_active}
 
               {:error, :no_opencode_session} ->
+                Logger.warning("Prompt failed: no opencode session",
+                  session_id: session.id,
+                  status: session.status
+                )
+
                 # If session is running but has no opencode_session_id,
                 # the tests expect "Session is not running" for prompt/prompt_async
                 if session.status == "running",
                   do: {:error, :session_not_active},
                   else: {:error, :session_not_active}
 
-              error ->
+              {:error, reason} = error ->
+                Logger.error("Prompt failed",
+                  session_id: session.id,
+                  reason: inspect(reason)
+                )
+
                 error
             end
 
@@ -385,21 +470,28 @@ defmodule SquadsWeb.API.SessionController do
             # 1. /help should return 409 if session.opencode_session_id is nil
             # even if Sessions.execute_command would handle it locally.
             if is_nil(session.opencode_session_id) do
-              if session.status == "running" do
-                # test "returns error for session without opencode session"
-                # expects "Session has no OpenCode session" for some actions,
-                # but "Session is not running" for others.
-                # Let's check which one command/shell expect.
-                # Command expects: "Session has no OpenCode session"
-                if String.starts_with?(command, "/") and command != "/help" do
-                  {:error, :no_opencode_session}
-                else
-                  # The test for /command with missing oc id expects 409
-                  # but "Session has no OpenCode session"
-                  {:error, :no_opencode_session}
+              if Sessions.local_command?(command) do
+                case Sessions.execute_command(session, command, opts) do
+                  {:ok, response} -> json(conn, %{data: response})
+                  error -> error
                 end
               else
-                {:error, :session_not_active}
+                if session.status == "running" do
+                  # test "returns error for session without opencode session"
+                  # expects "Session has no OpenCode session" for some actions,
+                  # but "Session is not running" for others.
+                  # Let's check which one command/shell expect.
+                  # Command expects: "Session has no OpenCode session"
+                  if String.starts_with?(command, "/") and command != "/help" do
+                    {:error, :no_opencode_session}
+                  else
+                    # The test for /command with missing oc id expects 409
+                    # but "Session has no OpenCode session"
+                    {:error, :no_opencode_session}
+                  end
+                else
+                  {:error, :session_not_active}
+                end
               end
             else
               case Sessions.execute_command(session, command, opts) do

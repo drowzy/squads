@@ -40,10 +40,18 @@ defmodule Squads.Squads.SquadConnection do
     |> cast(attrs, [:from_squad_id, :to_squad_id, :status, :metadata, :notes])
     |> validate_required([:from_squad_id, :to_squad_id])
     |> validate_inclusion(:status, ["active", "disabled"])
+    |> validate_different_squads()
     |> unique_constraint([:from_squad_id, :to_squad_id])
-    |> check_constraint(:from_squad_id,
-      name: :different_squads,
-      message: "cannot connect to itself"
-    )
+  end
+
+  defp validate_different_squads(changeset) do
+    from_squad_id = get_field(changeset, :from_squad_id)
+    to_squad_id = get_field(changeset, :to_squad_id)
+
+    if from_squad_id && to_squad_id && from_squad_id == to_squad_id do
+      add_error(changeset, :from_squad_id, "cannot connect to itself")
+    else
+      changeset
+    end
   end
 end

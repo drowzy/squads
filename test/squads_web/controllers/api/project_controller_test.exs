@@ -83,7 +83,8 @@ defmodule SquadsWeb.API.ProjectControllerTest do
         })
 
       response = json_response(conn, 422)
-      assert response["errors"]["detail"] =~ "already initialized"
+      # The unique_constraint on path returns this error
+      assert response["errors"]["path"] != nil
     end
 
     test "returns error for invalid path", %{conn: conn} do

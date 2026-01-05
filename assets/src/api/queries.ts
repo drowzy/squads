@@ -573,7 +573,13 @@ export function useSendMessage(projectId?: string) {
         body: JSON.stringify(data),
       })
     },
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
+      const actualProjectId = variables.project_id || projectId
+      if (actualProjectId) {
+        queryClient.invalidateQueries({ queryKey: ['projects', actualProjectId, 'mail', 'threads'] })
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['mail', 'threads'] })
+      }
       queryClient.invalidateQueries({ queryKey: ['mail'] })
     },
   })
@@ -674,14 +680,15 @@ export function useSessionDiff(sessionId: string) {
 export function useSendSessionPrompt() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: { session_id: string; prompt: string; model?: string; agent?: string; no_reply?: boolean }) => {
+    mutationFn: async (data: { session_id: string; prompt: string; model?: string; agent?: string; no_reply?: boolean }) => {
       const { session_id, ...payload } = data
-      // For prompts, we use a higher timeout because they can trigger long-running subagent tasks
-      return fetcher<{ ok?: boolean }>(`/sessions/${session_id}/prompt`, {
+      // TODO(opencode-squads-gfh): Switch back to /prompt_async once async flow is stable.
+      // Use sync endpoint for easier request/response debugging.
+      await fetcher<void>(`/sessions/${session_id}/prompt`, {
         method: 'POST',
         body: JSON.stringify(payload),
-        timeout: 120000 // 2 minutes
       })
+      return { ok: true }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id, 'messages'] })
@@ -794,6 +801,34 @@ export function useStopSession() {
       queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id] })
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
+export function useAbortSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { session_id: string }) =>
+      fetcher<void>(`/sessions/${data.session_id}/abort`, {
+        method: 'POST',
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id] })
+      queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id, 'messages'] })
+    },
+  })
+}
+
+export function useArchiveSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { session_id: string }) =>
+      fetcher<Session>(`/sessions/${data.session_id}/archive`, {
+        method: 'POST',
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id] })
     },
   })
 }
