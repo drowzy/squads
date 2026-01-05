@@ -28,13 +28,9 @@ defmodule SquadsWeb.API.MailController do
   end
 
   def show(conn, %{"id" => id}) do
-    case Ecto.UUID.cast(id) do
-      {:ok, uuid} ->
-        message = Mail.get_message!(uuid)
-        render(conn, :show, message: message)
-
-      :error ->
-        {:error, :not_found}
+    with {:ok, uuid} <- Ecto.UUID.cast(id),
+         {:ok, message} <- Mail.fetch_message(uuid) do
+      render(conn, :show, message: message)
     end
   end
 

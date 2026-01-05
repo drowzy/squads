@@ -50,14 +50,27 @@ defmodule Squads.Providers do
   def get_provider(id), do: Repo.get(Provider, id)
 
   @doc """
+  Fetches a provider by ID with a tuple result.
+  """
+  @spec fetch_provider(Ecto.UUID.t()) :: {:ok, Provider.t()} | {:error, :not_found}
+  def fetch_provider(id) do
+    case get_provider(id) do
+      nil -> {:error, :not_found}
+      provider -> {:ok, provider}
+    end
+  end
+
+  @doc """
   Gets a provider by ID or raises.
   """
   @spec get_provider!(Ecto.UUID.t()) :: Provider.t()
-  def get_provider!(id), do: Repo.get!(Provider, id)
+  def get_provider!(id) do
+    case get_provider(id) do
+      nil -> raise Ecto.NoResultsError, queryable: Provider
+      provider -> provider
+    end
+  end
 
-  @doc """
-  Gets a provider by project and provider_id.
-  """
   @spec get_provider_by_provider_id(Ecto.UUID.t(), String.t()) :: Provider.t() | nil
   def get_provider_by_provider_id(project_id, provider_id) do
     Provider

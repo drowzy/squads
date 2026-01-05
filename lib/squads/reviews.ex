@@ -59,10 +59,30 @@ defmodule Squads.Reviews do
   @doc """
   Gets a review by ID.
   """
-  def get_review!(id) do
+  def get_review(id) do
     Review
-    |> Repo.get!(id)
+    |> Repo.get(id)
     |> Repo.preload([:ticket, :author, :reviewer])
+  end
+
+  @doc """
+  Fetches a review by ID with a tuple result.
+  """
+  def fetch_review(id) do
+    case get_review(id) do
+      nil -> {:error, :not_found}
+      review -> {:ok, review}
+    end
+  end
+
+  @doc """
+  Gets a review by ID, raising if not found.
+  """
+  def get_review!(id) do
+    case get_review(id) do
+      nil -> raise Ecto.NoResultsError, queryable: Review
+      review -> review
+    end
   end
 
   @doc """

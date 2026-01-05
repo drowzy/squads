@@ -156,42 +156,42 @@ defmodule SquadsWeb.API.SquadController do
       |> json(%{error: "not_connected", message: "Squads are not connected"})
     else
       # 2. Get target squad details (for project_id)
-      target_squad = SquadsContext.get_squad!(target_squad_id)
-      sender_squad = SquadsContext.get_squad!(sender_squad_id)
+      with {:ok, target_squad} <- SquadsContext.fetch_squad(target_squad_id),
+           {:ok, sender_squad} <- SquadsContext.fetch_squad(sender_squad_id) do
+        # 3. Get target agents
+        target_agents = Agents.list_agents_for_squad(target_squad_id)
+        recipient_ids = Enum.map(target_agents, & &1.id)
 
-      # 3. Get target agents
-      target_agents = Agents.list_agents_for_squad(target_squad_id)
-      recipient_ids = Enum.map(target_agents, & &1.id)
+        if recipient_ids == [] do
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "no_recipients", message: "Target squad has no agents"})
+        else
+          # 4. Send message
+          # We create the thread in the TARGET squad's project context
+          sender_name = params["sender_name"] || "Squad #{sender_squad.name}"
 
-      if recipient_ids == [] do
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "no_recipients", message: "Target squad has no agents"})
-      else
-        # 4. Send message
-        # We create the thread in the TARGET squad's project context
-        sender_name = params["sender_name"] || "Squad #{sender_squad.name}"
+          mail_params = %{
+            project_id: target_squad.project_id,
+            subject: params["subject"],
+            body_md: params["body"],
+            to: recipient_ids,
+            author_name: sender_name,
+            importance: "normal",
+            kind: "text"
+          }
 
-        mail_params = %{
-          project_id: target_squad.project_id,
-          subject: params["subject"],
-          body_md: params["body"],
-          to: recipient_ids,
-          author_name: sender_name,
-          importance: "normal",
-          kind: "text"
-        }
+          case Squads.Mail.send_message(mail_params) do
+            {:ok, message} ->
+              conn
+              |> put_status(:created)
+              |> render(:message_sent, message: message)
 
-        case Squads.Mail.send_message(mail_params) do
-          {:ok, message} ->
-            conn
-            |> put_status(:created)
-            |> render(:message_sent, message: message)
-
-          {:error, _reason} ->
-            conn
-            |> put_status(:unprocessable_entity)
-            |> json(%{error: "send_failed", message: "Failed to send message"})
+            {:error, _reason} ->
+              conn
+              |> put_status(:unprocessable_entity)
+              |> json(%{error: "send_failed", message: "Failed to send message"})
+          end
         end
       end
     end

@@ -56,8 +56,31 @@ defmodule Squads.Mail do
   @doc """
   Gets a message by ID.
   """
-  def get_message!(id),
-    do: Repo.get!(Message, id) |> Repo.preload([:sender, :thread, recipients: :agent])
+  def get_message(id) do
+    Message
+    |> Repo.get(id)
+    |> Repo.preload([:sender, :thread, recipients: :agent])
+  end
+
+  @doc """
+  Fetches a message by ID with a tuple result.
+  """
+  def fetch_message(id) do
+    case get_message(id) do
+      nil -> {:error, :not_found}
+      message -> {:ok, message}
+    end
+  end
+
+  @doc """
+  Gets a message by ID, raising if not found.
+  """
+  def get_message!(id) do
+    case get_message(id) do
+      nil -> raise Ecto.NoResultsError, queryable: Message
+      message -> message
+    end
+  end
 
   @doc """
   Lists all messages in a thread.

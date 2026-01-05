@@ -34,13 +34,14 @@ defmodule Squads.Squads do
   end
 
   @doc """
-  Gets a squad by ID, raising if not found.
+  Fetches a squad by ID with a tuple result.
   """
-  @spec get_squad!(Ecto.UUID.t()) :: Squad.t()
-  def get_squad!(id) do
-    Squad
-    |> Repo.get!(id)
-    |> Repo.preload(:project)
+  @spec fetch_squad(Ecto.UUID.t()) :: {:ok, Squad.t()} | {:error, :not_found}
+  def fetch_squad(id) do
+    case get_squad(id) do
+      nil -> {:error, :not_found}
+      squad -> {:ok, squad}
+    end
   end
 
   @doc """
