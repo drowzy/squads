@@ -67,10 +67,10 @@ function SessionTodos({ sessionId }: { sessionId: string }) {
   return (
     <div className="space-y-2">
       {todos.map((todo: any, idx: number) => (
-        <div key={idx} className="flex items-start gap-3 p-2 border border-tui-border bg-black/20">
+        <div key={idx} className="flex items-start gap-3 p-2 border border-tui-border bg-ctp-crust/40">
           <div className={cn(
             "w-4 h-4 mt-0.5 border flex items-center justify-center shrink-0",
-            todo.status === 'completed' ? "bg-tui-accent border-tui-accent" : "border-tui-dim"
+            todo.status === 'completed' ? "bg-tui-accent border-tui-accent" : "border-tui-border-dim"
           )}>
             {todo.status === 'completed' && <X size={12} className="text-tui-bg" />}
           </div>
@@ -281,11 +281,11 @@ function AgentDetail() {
   // Use real agent data or fallback
   const agent = {
     id: agentId,
-    name: agentData?.name || 'AGENT_' + agentId.slice(0, 4),
-    role: agentData?.role || 'CORE_WORKER',
+    name: agentData?.name || 'AGENT ' + agentId.slice(0, 4),
+    role: agentData?.role || 'CORE WORKER',
     status: activeSession ? 'ACTIVE' : (agentData?.status === 'working' ? 'WORKING' : 'IDLE'),
     model: currentSession?.model || agentData?.model || 'gpt-4o',
-    session_id: currentSession?.id || 'NO_SESSION',
+    session_id: currentSession?.id || 'NO SESSION',
     uptime: 'N/A',
     last_active: events[0]?.occurred_at ? new Date(events[0].occurred_at).toLocaleTimeString() : 'Never'
   }
@@ -295,14 +295,14 @@ function AgentDetail() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-tui-border pb-4 md:pb-6">
         <div className="flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 md:w-16 md:h-16 border border-tui-border flex items-center justify-center bg-tui-dim/10 shrink-0">
+          <div className="w-12 h-12 md:w-16 md:h-16 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40 shrink-0">
             <Cpu size={24} className="text-tui-accent md:hidden" />
             <Cpu size={32} className="text-tui-accent hidden md:block" />
           </div>
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="text-2xl md:text-3xl font-bold tracking-tighter uppercase">{agent.name}</h2>
-              <span className={`text-xs px-2 py-0.5 border font-bold ${activeSession ? 'border-tui-accent text-tui-accent' : 'border-tui-dim text-tui-dim'}`}>
+              <span className={`text-xs px-2 py-0.5 border font-bold ${activeSession ? 'border-tui-accent text-tui-accent' : 'border-tui-border-dim text-tui-dim'}`}>
                 {agent.status}
               </span>
               <button 
@@ -385,12 +385,12 @@ function AgentDetail() {
         <aside className={cn(
           "w-full sm:w-80 lg:w-72 shrink-0 flex flex-col border border-tui-border lg:h-full transition-transform duration-300 ease-in-out",
           "lg:static lg:translate-x-0",
-          "fixed inset-y-0 left-0 z-50 bg-tui-bg lg:bg-transparent",
+          "fixed inset-y-0 left-0 z-50 bg-ctp-mantle lg:bg-transparent",
           mobileSidebar === 'history' 
             ? "translate-x-0" 
             : "-translate-x-full lg:translate-x-0"
         )}>
-          <div className="p-2 border-b border-tui-border bg-tui-dim/10 flex flex-col gap-2">
+          <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest">
                 <Archive size={14} />
@@ -414,7 +414,7 @@ function AgentDetail() {
                 </button>
               </div>
             </div>
-            <div className="flex items-center gap-1 border border-tui-border p-0.5 bg-tui-bg">
+            <div className="flex items-center gap-1 border border-tui-border p-0.5 bg-ctp-crust/40">
                {(['active', 'history', 'all'] as const).map((f) => (
                 <button
                   key={f}
@@ -429,7 +429,7 @@ function AgentDetail() {
               ))}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-tui-border/50 bg-black/20">
+          <div className="flex-1 overflow-y-auto divide-y divide-tui-border/50 bg-ctp-mantle/50">
             {sessions
               .map((s) => (
                 <button
@@ -443,7 +443,7 @@ function AgentDetail() {
                   <div className="flex justify-between items-start mb-1 gap-2">
                     <span className={cn(
                       "text-[10px] font-bold uppercase px-1 border",
-                      s.status === 'running' ? 'border-tui-accent text-tui-accent' : 'border-tui-dim text-tui-dim'
+                      s.status === 'running' ? 'border-tui-accent text-tui-accent' : 'border-tui-border-dim text-tui-dim'
                     )}>
                       {s.status}
                     </span>
@@ -471,32 +471,32 @@ function AgentDetail() {
           <section className="border border-tui-border flex flex-col flex-[2] min-h-[400px] lg:min-h-[500px]">
             {currentSession ? (
               <div className="flex-1 flex flex-col">
-                <div className="flex items-center justify-between border-b border-tui-border bg-tui-dim/5 p-1">
+                <div className="flex items-center justify-between border-b border-tui-border bg-ctp-crust/40 p-1">
                   <div className="flex items-center gap-1">
-                    <TabButton 
-                      active={activeTab === 'chat'} 
-                      onClick={() => setActiveTab('chat')}
-                      icon={<Terminal size={12} />}
-                      label="CHAT"
-                    />
-                    <TabButton 
-                      active={activeTab === 'todos'} 
-                      onClick={() => setActiveTab('todos')}
-                      icon={<ListTodo size={12} />}
-                      label="TODOS"
-                    />
-                    <TabButton 
-                      active={activeTab === 'diff'} 
-                      onClick={() => setActiveTab('diff')}
-                      icon={<FileDiff size={12} />}
-                      label="DIFF"
-                    />
-                    <TabButton 
-                      active={activeTab === 'history'} 
-                      onClick={() => setActiveTab('history')}
-                      icon={<History size={12} />}
-                      label="HISTORY"
-                    />
+                      <TabButton 
+                       active={activeTab === 'chat'} 
+                       onClick={() => setActiveTab('chat')}
+                       icon={<Terminal size={12} />}
+                       label="Chat"
+                     />
+                     <TabButton 
+                       active={activeTab === 'todos'} 
+                       onClick={() => setActiveTab('todos')}
+                       icon={<ListTodo size={12} />}
+                       label="Tasks"
+                     />
+                     <TabButton 
+                       active={activeTab === 'diff'} 
+                       onClick={() => setActiveTab('diff')}
+                       icon={<FileDiff size={12} />}
+                       label="Diff"
+                     />
+                     <TabButton 
+                       active={activeTab === 'history'} 
+                       onClick={() => setActiveTab('history')}
+                       icon={<History size={12} />}
+                       label="History"
+                     />
                   </div>
                   {currentSession.status === 'running' && (
                     <div className="px-2 py-0.5 text-[10px] font-bold text-tui-accent flex items-center gap-1">
@@ -519,28 +519,28 @@ function AgentDetail() {
                     />
                   )}
                   {activeTab === 'todos' && (
-                    <div className="h-full flex flex-col p-4 bg-black/20 overflow-y-auto">
-                      <div className="text-xs font-bold uppercase tracking-widest text-tui-dim mb-4">Session Tasks</div>
+                    <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto">
+                      <div className="text-xs font-bold uppercase tracking-tui text-tui-dim mb-4">Session tasks</div>
                       <SessionTodos sessionId={currentSession.id} />
                     </div>
                   )}
                   {activeTab === 'diff' && (
-                    <div className="h-full flex flex-col p-4 bg-black/20 overflow-y-auto font-mono text-xs">
-                      <div className="text-xs font-bold uppercase tracking-widest text-tui-dim mb-4">Pending Changes</div>
+                    <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto font-mono text-xs">
+                      <div className="text-xs font-bold uppercase tracking-tui text-tui-dim mb-4">Pending changes</div>
                       <SessionDiff sessionId={currentSession.id} />
                     </div>
                   )}
                   {activeTab === 'history' && (
-                    <div className="h-full flex flex-col p-4 bg-black/20 overflow-y-auto">
-                      <div className="text-xs font-bold uppercase tracking-widest text-tui-dim mb-4">Event Timeline</div>
+                    <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto">
+                      <div className="text-xs font-bold uppercase tracking-tui text-tui-dim mb-4">Event timeline</div>
                       <EventTimeline events={events} />
                     </div>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center text-tui-dim gap-2 bg-black/40 p-4">
-                <div className="text-xs uppercase tracking-widest">NO_SESSION_SELECTED</div>
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-tui-dim gap-2 bg-ctp-mantle/50 p-4">
+                <div className="text-xs uppercase tracking-tui font-bold">No session selected</div>
                 <div className="text-[10px] italic">Start a session to begin chatting with this agent.</div>
                 <button
                   onClick={handleStartSession}
@@ -554,14 +554,14 @@ function AgentDetail() {
 
           {/* Events Section */}
           <section className="border border-tui-border flex flex-col flex-1 min-h-[200px] lg:min-h-[250px]">
-            <div className="p-2 border-b border-tui-border bg-tui-dim/10 flex items-center justify-between">
+            <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-bold">
                 <Activity size={14} />
-                AGENT_EVENTS
+                Agent events
               </div>
               <span className="text-xs text-tui-dim italic hidden sm:block">tail -f /logs/agent.log</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-black/40 font-mono text-[10px] sm:text-xs space-y-1">
+             <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-ctp-crust/40 font-mono text-[10px] sm:text-xs space-y-1">
               {events.length === 0 && (
                 <div className="text-tui-dim italic">No events recorded for this agent.</div>
               )}
@@ -584,16 +584,16 @@ function AgentDetail() {
         <aside className={cn(
           "w-full sm:w-80 lg:w-80 shrink-0 flex flex-col lg:h-full gap-4 md:gap-6 transition-transform duration-300 ease-in-out",
           "lg:static lg:translate-x-0",
-          "fixed inset-y-0 right-0 z-50 bg-tui-bg lg:bg-transparent p-4 lg:p-0 overflow-y-auto",
+          "fixed inset-y-0 right-0 z-50 bg-ctp-mantle lg:bg-transparent p-4 lg:p-0 overflow-y-auto",
           mobileSidebar === 'info' 
             ? "translate-x-0" 
             : "translate-x-full lg:translate-x-0"
         )}>
           {mobileSidebar === 'info' && (
             <div className="flex justify-between items-center mb-4 lg:hidden">
-              <div className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                 <div className="text-xs font-bold uppercase tracking-tui flex items-center gap-2">
                 <Info size={16} className="text-tui-accent" />
-                Agent Information
+                Agent information
               </div>
               <button
                 onClick={() => setMobileSidebar(null)}
@@ -604,22 +604,22 @@ function AgentDetail() {
             </div>
           )}
           <section className="border border-tui-border">
-            <div className="p-2 border-b border-tui-border bg-tui-dim/10 flex items-center gap-2 text-xs font-bold">
+            <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center gap-2 text-xs font-bold">
               <Activity size={14} />
-              STATISTICS
+              Statistics
             </div>
             <div className="p-3 md:p-4 space-y-4">
-              <StatItem label="TOTAL_SESSIONS" value={sessions.length.toString()} />
-              <StatItem label="LAST_ACTIVE" value={agent.last_active} />
-              <StatItem label="TOTAL_EVENTS" value={events.length.toString()} />
+              <StatItem label="Total sessions" value={sessions.length.toString()} />
+              <StatItem label="Last active" value={agent.last_active} />
+              <StatItem label="Total events" value={events.length.toString()} />
             </div>
           </section>
 
           <section className="border border-tui-border shrink-0">
-            <div className="p-2 border-b border-tui-border bg-tui-dim/10 flex items-center justify-between">
+            <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-bold">
                 <Mail size={14} />
-                AGENT_MAILBOX
+                Mailbox
               </div>
               <Link to="/mail">
                 <ChevronRight size={14} className="text-tui-dim hover:text-tui-accent" />
@@ -674,7 +674,7 @@ function AgentDetail() {
             <button
               onClick={handleArchiveSession}
               disabled={archiveSession.isPending}
-              className="w-full border border-tui-border bg-tui-dim/10 py-2 text-tui-dim font-bold text-[10px] hover:text-tui-text hover:border-tui-accent transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full border border-tui-border bg-ctp-crust/40 py-2 text-tui-dim font-bold text-[10px] hover:text-tui-text hover:border-tui-accent transition-colors uppercase tracking-tui disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {archiveSession.isPending ? 'Archiving...' : 'Archive Session'}
             </button>
@@ -682,7 +682,7 @@ function AgentDetail() {
 
           {currentSession?.status !== 'running' && currentSession?.metadata && (
             <section className="border border-tui-border shrink-0">
-              <div className="p-2 border-b border-tui-border bg-tui-dim/10 flex items-center gap-2 text-xs font-bold uppercase">
+              <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center gap-2 text-xs font-bold uppercase">
                 <Archive size={14} />
                 Termination Metadata
               </div>
@@ -824,7 +824,7 @@ function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalPro
           <select
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
             disabled={!roleConfig}
           >
             {roleConfig ? (
@@ -843,7 +843,7 @@ function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalPro
           <select
             value={level}
             onChange={(e) => setLevel(e.target.value as Agent['level'])}
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
             disabled={!roleConfig}
           >
             {roleConfig ? (
@@ -863,7 +863,7 @@ function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalPro
             value={defaultSystemInstruction || 'Loading...'}
             readOnly
             rows={6}
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border rounded text-xs text-tui-text focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:outline-none"
           />
         </FormField>
 
@@ -873,7 +873,7 @@ function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalPro
             onChange={(e) => setSystemInstruction(e.target.value)}
             rows={6}
             placeholder="Optional override (leave blank to use the default)"
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none"
           />
         </FormField>
 
@@ -883,7 +883,7 @@ function EditAgentModal({ isOpen, onClose, agent, projectId }: EditAgentModalPro
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="flex-1 px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+                className="flex-1 px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
                 disabled={modelsQuery.isLoading || models.length === 0}
               >
                 {models.length === 0 ? (

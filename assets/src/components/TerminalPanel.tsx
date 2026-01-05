@@ -61,7 +61,7 @@ export function TerminalPanel({ projectId }: TerminalPanelProps) {
 
   if (isMinimized) {
     return (
-      <div className="fixed bottom-20 right-4 md:bottom-4 w-auto md:w-64 bg-tui-bg border border-tui-border shadow-lg z-40 flex items-center justify-between p-2 rounded md:rounded-none">
+      <div className="fixed bottom-20 right-4 md:bottom-4 w-auto md:w-64 bg-ctp-mantle border border-tui-border shadow-lg z-40 flex items-center justify-between p-2 rounded md:rounded-none">
         <div className="flex items-center gap-2 text-xs text-tui-accent font-mono mr-2">
           <Terminal size={14} />
           <span className="hidden md:inline">System Stream</span>
@@ -86,9 +86,9 @@ export function TerminalPanel({ projectId }: TerminalPanelProps) {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-[40vh] md:left-auto md:right-4 md:bottom-4 md:w-[400px] md:h-[300px] bg-tui-bg border-t md:border border-tui-border shadow-xl z-50 flex flex-col font-mono text-xs">
+    <div className="fixed bottom-0 left-0 right-0 h-[40vh] md:left-auto md:right-4 md:bottom-4 md:w-[400px] md:h-[300px] bg-ctp-mantle border-t md:border border-tui-border shadow-xl z-50 flex flex-col font-mono text-xs">
       {/* Header */}
-      <div className="flex items-center justify-between p-2 border-b border-tui-border bg-tui-dim/5">
+      <div className="flex items-center justify-between p-2 border-b border-tui-border bg-ctp-crust/40">
         <div className="flex items-center gap-2 text-tui-accent">
           <Terminal size={14} />
           <span className="font-bold tracking-wider">SYSTEM STREAM</span>
@@ -112,7 +112,7 @@ export function TerminalPanel({ projectId }: TerminalPanelProps) {
       {/* Content */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-3 space-y-2 bg-black/50"
+        className="flex-1 overflow-y-auto p-3 space-y-2 bg-ctp-crust/70"
       >
         {events.length === 0 ? (
           <div className="text-tui-dim italic">Waiting for signal...</div>
@@ -125,7 +125,7 @@ export function TerminalPanel({ projectId }: TerminalPanelProps) {
       </div>
 
       {/* Footer status */}
-      <div className="p-1 border-t border-tui-border flex justify-between text-[10px] text-tui-dim bg-tui-dim/5">
+      <div className="p-1 border-t border-tui-border flex justify-between text-[10px] text-tui-dim bg-ctp-crust/40">
         <span>{isConnected ? 'CONNECTED' : 'CONNECTING...'}</span>
         <span>{events.length} EVENTS</span>
       </div>

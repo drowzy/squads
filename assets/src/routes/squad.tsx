@@ -78,13 +78,13 @@ function SquadOverview() {
       </div>
 
       {isLoading ? (
-        <div className="p-12 border border-tui-border border-dashed text-center space-y-4 bg-tui-dim/5">
+        <div className="p-12 border border-tui-border border-dashed text-center space-y-4 bg-ctp-mantle/50">
           <div className="text-tui-dim animate-pulse uppercase tracking-widest text-xs">
             Scanning neural networks...
           </div>
         </div>
       ) : !projectId ? (
-        <div className="p-12 border border-tui-border border-dashed text-center space-y-4 bg-tui-dim/5">
+        <div className="p-12 border border-tui-border border-dashed text-center space-y-4 bg-ctp-mantle/50">
           <div className="text-tui-dim uppercase tracking-widest text-xs">
             Select a project first
           </div>
@@ -96,9 +96,9 @@ function SquadOverview() {
           ))}
         </div>
       ) : (
-        <div className="p-16 border border-tui-border border-dashed text-center space-y-6 bg-tui-dim/5">
+        <div className="p-16 border border-tui-border border-dashed text-center space-y-6 bg-ctp-mantle/50">
           <div className="flex justify-center">
-            <div className="w-16 h-16 border border-tui-border flex items-center justify-center bg-tui-bg text-tui-dim">
+            <div className="w-16 h-16 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40 text-tui-dim">
               <Users size={32} />
             </div>
           </div>
@@ -191,7 +191,7 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
   }
 
   return (
-    <div className="border border-tui-border bg-tui-dim/5">
+    <div className="border border-tui-border bg-ctp-mantle/50">
       {/* Squad Header */}
       <div 
         className="flex items-center gap-3 p-3 md:p-4 cursor-pointer hover:bg-tui-dim/10 transition-colors"
@@ -209,7 +209,7 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
           />
         </button>
         
-        <div className="w-10 h-10 border border-tui-border flex items-center justify-center bg-tui-bg shrink-0">
+        <div className="w-10 h-10 border border-tui-border flex items-center justify-center bg-ctp-crust/40 shrink-0">
           <Users className="text-tui-accent" size={18} />
         </div>
 
@@ -290,7 +290,7 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
                 />
                 <div 
                   role="menu"
-                  className="absolute right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg min-w-[140px]"
+                  className="absolute right-0 mt-1 z-20 bg-ctp-mantle border border-tui-border rounded shadow-lg min-w-[140px]"
                 >
             <button
               onClick={(e) => {
@@ -298,7 +298,7 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
                 setMenuOpen(false)
                 // TODO: Open edit modal
               }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-ctp-crust/40 focus:outline-none focus:bg-ctp-crust/40"
             >
               <Pencil size={14} aria-hidden="true" />
               Edit
@@ -310,7 +310,7 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
                 setMenuOpen(false)
                 setMessageModalOpen(true)
               }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-ctp-crust/40 focus:outline-none focus:bg-ctp-crust/40"
             >
               <MessageSquare size={14} aria-hidden="true" />
               Message Squad
@@ -482,9 +482,9 @@ function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: st
   }
 
   return (
-    <div className="flex items-center gap-3 px-3 md:px-4 py-3 md:pl-14 pl-3 hover:bg-tui-dim/10 transition-colors group border-b border-tui-border/50 last:border-b-0">
+    <div className="flex items-center gap-3 px-3 md:px-4 py-3 md:pl-14 pl-3 hover:bg-tui-dim/10 transition-colors group border-b border-tui-border-dim last:border-b-0">
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div className="w-8 h-8 md:w-8 md:h-8 w-10 h-10 border border-tui-border flex items-center justify-center bg-tui-bg shrink-0 group-hover:border-tui-accent">
+        <div className="w-8 h-8 md:w-8 md:h-8 w-10 h-10 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40 shrink-0 group-hover:border-tui-accent">
           <Cpu className="text-tui-text" size={14} />
         </div>
 
@@ -566,7 +566,7 @@ function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: st
             />
             <div 
               role="menu"
-              className="absolute right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg min-w-[120px]"
+              className="absolute right-0 mt-1 z-20 bg-ctp-mantle border border-tui-border rounded shadow-lg min-w-[120px]"
             >
               <button
                 role="menuitem"
@@ -575,7 +575,7 @@ function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: st
                   setMenuOpen(false)
                   navigate({ to: '/agent/$agentId', params: { agentId: agent.id } })
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-ctp-crust/40 focus:outline-none focus:bg-ctp-crust/40"
               >
                 <Eye size={14} aria-hidden="true" />
                 Details
@@ -587,7 +587,7 @@ function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: st
                   setMenuOpen(false)
                   // TODO: Implement edit agent
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-tui-dim/20 focus:outline-none focus:bg-tui-dim/20"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-ctp-crust/40 focus:outline-none focus:bg-ctp-crust/40"
               >
                 <Pencil size={14} aria-hidden="true" />
                 Edit
@@ -699,7 +699,7 @@ function MessageSquadModal({ isOpen, onClose, squadId, squadName }: MessageSquad
               setToSquadId(e.target.value)
               setErrors(prev => ({ ...prev, toSquadId: undefined }))
             }}
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
             disabled={targetSquads.length === 0}
           >
             <option value="">Select recipient...</option>
@@ -734,7 +734,7 @@ function MessageSquadModal({ isOpen, onClose, squadId, squadName }: MessageSquad
               setErrors(prev => ({ ...prev, body: undefined }))
             }}
             rows={8}
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border rounded text-sm text-tui-text focus:border-tui-accent focus:outline-none font-mono"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-sm text-tui-text focus:border-tui-accent focus:outline-none font-mono placeholder:text-tui-dim/30"
             placeholder="Write your message here..."
           />
         </FormField>
@@ -835,9 +835,9 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
   }
 
   return (
-    <div className="border-t border-tui-border/50">
-      <div className="flex items-center justify-between px-3 md:px-4 py-3 bg-tui-dim/10">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-tui-dim">
+    <div className="border-t border-tui-border">
+        <div className="flex items-center justify-between px-3 md:px-4 py-3 bg-ctp-crust/40">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-tui text-tui-dim font-bold">
           <Server size={14} aria-hidden="true" />
           MCP Servers
         </div>
@@ -898,9 +898,9 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
             return (
               <div
                 key={server.id}
-                className="flex items-center gap-3 px-3 md:px-4 py-3 border-t border-tui-border/50"
+                className="flex items-center gap-3 px-3 md:px-4 py-3 border-t border-tui-border-dim"
               >
-                <div className="w-9 h-9 border border-tui-border flex items-center justify-center bg-tui-bg shrink-0">
+                <div className="w-9 h-9 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40 shrink-0">
                   {iconUrl ? (
                     <img
                       src={iconUrl}
@@ -1073,9 +1073,9 @@ function McpCatalogModal({ isOpen, onClose, existingNames, onAdd }: McpCatalogMo
                 .filter(Boolean) as string[]
 
               return (
-                <div key={entry.name} className="border border-tui-border bg-tui-dim/5">
+                <div key={entry.name} className="border border-tui-border bg-ctp-mantle/50">
                   <div className="flex items-center gap-3 p-3">
-                    <div className="w-10 h-10 border border-tui-border bg-tui-bg flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 border border-tui-border-dim bg-ctp-crust/40 flex items-center justify-center shrink-0">
                       {entry.icon ? (
                         <img
                           src={entry.icon}
@@ -1384,7 +1384,7 @@ function CreateAgentModal({ isOpen, onClose, projectId, squadId, squadName }: Cr
           <select
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
             disabled={!roleConfig}
           >
             {roleConfig ? (
@@ -1403,7 +1403,7 @@ function CreateAgentModal({ isOpen, onClose, projectId, squadId, squadName }: Cr
           <select
             value={level}
             onChange={(e) => setLevel(e.target.value as Agent['level'])}
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
             disabled={!roleConfig}
           >
             {roleConfig ? (
@@ -1423,7 +1423,7 @@ function CreateAgentModal({ isOpen, onClose, projectId, squadId, squadName }: Cr
             value={defaultSystemInstruction || 'Loading...'}
             readOnly
             rows={6}
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border rounded text-xs text-tui-text focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:outline-none"
           />
         </FormField>
 
@@ -1433,7 +1433,7 @@ function CreateAgentModal({ isOpen, onClose, projectId, squadId, squadName }: Cr
             onChange={(e) => setSystemInstruction(e.target.value)}
             rows={6}
             placeholder="Optional override (leave blank to use the default)"
-            className="w-full px-3 py-2 bg-tui-bg border border-tui-border rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none"
+            className="w-full px-3 py-2 bg-ctp-crust border border-tui-border-dim rounded text-xs text-tui-text focus:border-tui-accent focus:outline-none"
           />
         </FormField>
 
@@ -1443,7 +1443,7 @@ function CreateAgentModal({ isOpen, onClose, projectId, squadId, squadName }: Cr
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="flex-1 px-3 py-2 bg-tui-bg border border-tui-border text-tui-text focus:border-tui-accent focus:outline-none"
+                className="flex-1 px-3 py-2 bg-ctp-crust border border-tui-border-dim text-tui-text focus:border-tui-accent focus:outline-none"
                 disabled={modelsQuery.isLoading || models.length === 0}
               >
                 {models.length === 0 ? (

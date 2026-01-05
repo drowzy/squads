@@ -30,10 +30,11 @@
   --color-ctp-crust: #11111b;
 
   /* TUI Semantic Mapping (Catppuccin Mocha) */
-  --color-tui-bg: var(--color-ctp-base);
+   --color-tui-bg: var(--color-ctp-base);
   --color-tui-text: var(--color-ctp-text);
-  --color-tui-dim: var(--color-ctp-overlay0);
-  --color-tui-border: var(--color-ctp-surface0);
+  --color-tui-dim: var(--color-ctp-overlay1); /* Brightened slightly for better contrast */
+  --color-tui-border: var(--color-ctp-surface1); /* Stronger border contrast */
+  --color-tui-border-dim: var(--color-ctp-surface0); /* Original dimmer border */
   --color-tui-accent: var(--color-ctp-mauve);
   --color-tui-success: var(--color-ctp-green);
   --color-tui-error: var(--color-ctp-red);

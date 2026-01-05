@@ -56,6 +56,8 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
     setIsOpen(false)
   }
 
+  if (!isOpen) return null
+
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
@@ -70,12 +72,12 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             setIsOpen(false)
           }
         }}
-        className={cn(
-          "relative w-full max-w-2xl bg-tui-bg border border-tui-border rounded-lg shadow-2xl overflow-hidden flex flex-col font-mono",
-          "animate-in zoom-in-95 duration-200"
-        )}
+          className={cn(
+            "relative w-full max-w-2xl bg-ctp-mantle border border-tui-border rounded-lg shadow-2xl overflow-hidden flex flex-col font-mono",
+            "animate-in zoom-in-95 duration-200"
+          )}
       >
-        <div className="flex items-center border-b border-tui-border px-4 py-3">
+        <div className="flex items-center border-b border-tui-border px-4 py-3 bg-ctp-crust/40">
           <Search className="mr-3 h-5 w-5 text-tui-dim" />
           <Command.Input
             autoFocus
@@ -89,11 +91,11 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
 
           <Command.List className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">
             <Command.Empty className="py-12 text-center text-tui-dim flex flex-col items-center gap-2">
-              <div className="text-xl font-bold tracking-widest uppercase">No_Results_Found</div>
+              <div className="text-xl font-bold tracking-tight">No results found</div>
               <div className="text-xs">Try searching for something else</div>
             </Command.Empty>
 
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-[0.2em] text-tui-dim px-2 mb-2 block uppercase">Navigation</span>}>
+            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mb-2 block uppercase">Navigation</span>}>
               <PaletteItem
                 onSelect={() => runCommand(() => navigate({ to: '/' }))}
                 icon={<LayoutDashboard size={18} />}
@@ -132,7 +134,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
               />
             </Command.Group>
 
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-[0.2em] text-tui-dim px-2 mt-4 mb-2 block uppercase">Actions</span>}>
+            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Actions</span>}>
               {currentAgent ? (
                 <PaletteItem
                   onSelect={() => runCommand(async () => {
@@ -170,7 +172,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             </Command.Group>
 
           {agents && agents.length > 0 && (
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-[0.2em] text-tui-dim px-2 mt-4 mb-2 block uppercase">Agents</span>}>
+            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Agents</span>}>
               {agents.map(agent => (
                 <PaletteItem
                   key={agent.id}
@@ -184,7 +186,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
           )}
 
           {squads && squads.length > 0 && (
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-[0.2em] text-tui-dim px-2 mt-4 mb-2 block uppercase">Squads</span>}>
+            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Squads</span>}>
               {squads.map(squad => (
                 <PaletteItem
                   key={squad.id}
@@ -198,7 +200,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
           )}
 
             {sessions && sessions.length > 0 && (
-              <Command.Group heading={<span className="text-[10px] font-bold tracking-[0.2em] text-tui-dim px-2 mt-4 mb-2 block uppercase">Recent_Sessions</span>}>
+              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Recent Sessions</span>}>
                 {Array.from(new Map(sessions.slice(0, 10).map(s => [s.agent_id, s])).values()).slice(0, 5).map(session => (
                   <PaletteItem
                     key={session.id}
@@ -212,7 +214,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             )}
 
           {projects && projects.length > 1 && (
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-[0.2em] text-tui-dim px-2 mt-4 mb-2 block uppercase">Projects</span>}>
+            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Projects</span>}>
               {projects.map(project => (
                 <PaletteItem
                   key={project.id}
@@ -228,7 +230,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
           )}
         </Command.List>
 
-        <div className="border-t border-tui-border p-3 bg-black/20 flex items-center justify-between text-[10px] text-tui-dim uppercase tracking-widest font-bold">
+        <div className="border-t border-tui-border p-3 bg-ctp-crust/40 flex items-center justify-between text-[10px] text-tui-dim uppercase tracking-tui font-bold">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
               <kbd className="px-1 py-0.5 rounded border border-tui-border bg-tui-dim/10">↑↓</kbd>
@@ -240,7 +242,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <span>Uplink_Active</span>
+            <span>Uplink Active</span>
             <div className="w-1.5 h-1.5 rounded-full bg-tui-success animate-pulse" />
           </div>
         </div>
@@ -287,7 +289,7 @@ function PaletteItem({
       {shortcut && (
         <div className="flex items-center gap-1">
           {shortcut.split(' ').map((s, i) => (
-            <kbd key={i} className="px-1.5 py-0.5 rounded border border-tui-border bg-tui-dim/10 text-[9px] group-aria-selected:border-white/30 group-aria-selected:bg-white/10 group-aria-selected:text-white">
+            <kbd key={i} className="px-1.5 py-0.5 rounded border border-tui-border bg-tui-dim/10 text-[9px] group-aria-selected:border-white/20 group-aria-selected:bg-white/10 group-aria-selected:text-white">
               {s}
             </kbd>
           ))}

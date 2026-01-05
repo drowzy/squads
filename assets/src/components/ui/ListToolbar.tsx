@@ -38,7 +38,7 @@ export function ListToolbar({
   className
 }: ListToolbarProps) {
   return (
-    <div className={cn("flex flex-col sm:flex-row gap-4 items-center justify-between bg-tui-dim/5 p-2 border border-tui-border font-mono", className)}>
+    <div className={cn("flex flex-col sm:flex-row gap-4 items-center justify-between bg-ctp-mantle/50 p-2 border border-tui-border font-mono", className)}>
       <div className="flex flex-1 w-full gap-2 items-center">
         {onSearchChange && (
           <div className="relative flex-1 max-w-md">
@@ -48,7 +48,7 @@ export function ListToolbar({
               placeholder={searchPlaceholder.toUpperCase()}
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 bg-tui-bg border border-tui-border text-xs uppercase focus:outline-none focus:border-tui-accent transition-colors placeholder:text-tui-dim/30"
+              className="w-full pl-9 pr-8 py-2 bg-ctp-crust border border-tui-border-dim text-xs uppercase focus:outline-none focus:border-tui-accent transition-colors placeholder:text-tui-dim/30"
             />
             {searchQuery && (
               <button 
@@ -62,7 +62,7 @@ export function ListToolbar({
         )}
 
         {filters.map((filter, idx) => (
-          <div key={idx} className="flex items-center gap-2 bg-tui-bg border border-tui-border px-3 py-2 shrink-0">
+          <div key={idx} className="flex items-center gap-2 bg-ctp-crust border border-tui-border-dim px-3 py-2 shrink-0">
             {filter.icon}
             <select 
               value={filter.value}

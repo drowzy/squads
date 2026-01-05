@@ -185,11 +185,11 @@ function AppShell() {
 
       {/* Sidebar */}
       <aside className={cn(
-        "w-64 border-r border-tui-border flex flex-col bg-tui-bg z-50",
+        "w-64 border-r border-tui-border flex flex-col bg-ctp-mantle z-50",
         "fixed inset-y-0 left-0 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="p-4 border-b border-tui-border flex items-center justify-between">
+        <div className="p-4 border-b border-tui-border flex items-center justify-between bg-ctp-crust/50">
           <div className="flex items-center gap-2">
             <Terminal className="text-tui-accent" aria-hidden="true" />
             <span className="font-bold text-xl tracking-tight">SQUADS_</span>
@@ -240,7 +240,7 @@ function AppShell() {
                 />
                 <div 
                   role="menu"
-                  className="absolute left-0 right-0 mt-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg max-h-64 overflow-auto"
+                  className="absolute left-0 right-0 mt-1 z-20 bg-ctp-mantle border border-tui-border rounded shadow-lg max-h-64 overflow-auto"
                 >
                   {projects?.map(project => (
                     <button
@@ -363,7 +363,7 @@ function AppShell() {
              </button>
 
              {utilitiesOpen && (
-               <div className="absolute bottom-full left-0 right-0 mb-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg p-1 space-y-1">
+               <div className="absolute bottom-full left-0 right-0 mb-1 z-20 bg-ctp-mantle border border-tui-border rounded shadow-lg p-1 space-y-1">
                   <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-tui text-tui-dim border-b border-tui-border/50 mb-1">System Tools</div>
                   <button 
                     onClick={() => {
@@ -407,7 +407,7 @@ function AppShell() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-14 border-b border-tui-border flex items-center px-4 md:px-6 justify-between bg-black/20">
+        <header className="h-14 border-b border-tui-border flex items-center px-4 md:px-6 justify-between bg-ctp-mantle/50 backdrop-blur-md">
           <div className="flex items-center gap-3 md:gap-4">
             {/* Mobile hamburger menu */}
             <button 
@@ -426,7 +426,7 @@ function AppShell() {
           <div className="flex-1 flex justify-center px-4 max-w-md mx-auto hidden md:flex">
              <button 
                 onClick={() => setCommandPaletteOpen(true)}
-                className="w-full max-w-sm flex items-center justify-between gap-3 px-3 py-1.5 bg-black/40 border border-tui-border rounded text-tui-dim hover:text-tui-text hover:border-tui-accent transition-all group"
+                className="w-full max-w-sm flex items-center justify-between gap-3 px-3 py-1.5 bg-ctp-crust/40 border border-tui-border rounded text-tui-dim hover:text-tui-text hover:border-tui-accent transition-all group"
              >
                 <div className="flex items-center gap-2">
                   <Search size={14} className="group-hover:text-tui-accent" />
@@ -458,9 +458,9 @@ function AppShell() {
               {statusOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-50 w-80 border border-tui-border bg-tui-bg shadow-lg">
+                  <div className="absolute right-0 top-full mt-2 z-50 w-80 border border-tui-border bg-ctp-mantle shadow-lg">
                     <div className="px-3 py-2 border-b border-tui-border text-[10px] font-bold uppercase tracking-widest text-tui-dim flex justify-between items-center">
-                      <span>System_Status</span>
+                      <span>System Status</span>
                       <button onClick={() => setStatusOpen(false)} className="hover:text-tui-text"><X size={12} /></button>
                     </div>
                     <div className="p-3 space-y-3 text-xs text-tui-dim">
@@ -478,13 +478,13 @@ function AppShell() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span>Project_ID</span>
+                        <span>Project ID</span>
                         <span className="font-mono text-tui-text">
                           {activeProjectId?.slice(0, 8) || 'OFFLINE'}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <span>Working_Dir</span>
+                        <span>Working Dir</span>
                         <span
                           className="font-mono text-tui-text truncate max-w-[180px]"
                           title={activeProject?.path || '~/workspace'}

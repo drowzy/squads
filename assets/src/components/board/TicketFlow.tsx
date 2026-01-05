@@ -197,7 +197,7 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
   }
 
   return (
-    <div className="h-full w-full bg-black/20 border border-tui-border relative overflow-hidden font-mono">
+    <div className="h-full w-full bg-ctp-mantle/50 border border-tui-border relative overflow-hidden font-mono">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -219,11 +219,11 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
             className="absolute inset-0 bg-black/60 z-10 md:hidden"
             onClick={() => setSelectedTicketId(null)}
           />
-          <div className="absolute inset-4 md:inset-auto md:top-4 md:right-4 md:w-80 bg-tui-bg border border-tui-accent shadow-[0_0_30px_rgba(255,0,255,0.1)] z-20 flex flex-col md:max-h-[calc(100%-2rem)] animate-in fade-in slide-in-from-right duration-300">
+          <div className="absolute inset-4 md:inset-auto md:top-4 md:right-4 md:w-80 bg-ctp-mantle border border-tui-accent shadow-[0_0_30px_rgba(255,0,255,0.1)] z-20 flex flex-col md:max-h-[calc(100%-2rem)] animate-in fade-in slide-in-from-right duration-300">
             <div className="p-3 border-b border-tui-accent bg-tui-accent/10 flex justify-between items-center">
-              <span className="text-xs font-bold text-tui-accent tracking-widest uppercase flex items-center gap-2">
+              <span className="text-xs font-bold text-tui-accent tracking-tui uppercase flex items-center gap-2">
                 <Info size={14} />
-                Ticket_Inspector
+                Ticket Inspector
               </span>
               <button onClick={() => setSelectedTicketId(null)} className="text-tui-accent hover:text-white transition-colors p-1">
                 <X size={20} />
@@ -233,16 +233,16 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
           <div className="p-4 overflow-y-auto space-y-4 flex-1">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-xs font-bold text-tui-dim uppercase tracking-widest block mb-1">ID</span>
+                <span className="text-[10px] font-bold text-tui-dim uppercase tracking-tui block mb-1">ID</span>
                 <span className="text-sm font-bold text-tui-accent">{selectedTicket.id}</span>
               </div>
               <div className="text-right">
-                <span className="text-xs font-bold text-tui-dim uppercase tracking-widest block mb-1">Status</span>
+                <span className="text-[10px] font-bold text-tui-dim uppercase tracking-tui block mb-1">Status</span>
                 <div className="relative group">
                   <select 
                     value={selectedTicket.status}
                     onChange={(e) => handleUpdateStatus(e.target.value as Ticket['status'])}
-                    className="appearance-none bg-tui-bg border border-tui-border px-2 py-1 text-xs uppercase cursor-pointer hover:border-tui-accent focus:outline-none focus:border-tui-accent pr-6"
+                    className="appearance-none bg-ctp-crust border border-tui-border-dim px-2 py-1 text-xs uppercase cursor-pointer hover:border-tui-accent focus:outline-none focus:border-tui-accent pr-6"
                   >
                     {statusOptions.map(status => (
                       <option key={status} value={status}>{status}</option>
@@ -254,15 +254,15 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
             </div>
 
             <div>
-              <span className="text-xs font-bold text-tui-dim uppercase tracking-widest block mb-1">Title</span>
+              <span className="text-[10px] font-bold text-tui-dim uppercase tracking-tui block mb-1">Title</span>
               <h3 className="text-sm font-bold uppercase leading-tight border-l-2 border-tui-accent pl-2 py-1 bg-tui-accent/5">
                 {selectedTicket.title}
               </h3>
             </div>
 
             <div>
-              <span className="text-xs font-bold text-tui-dim uppercase tracking-widest block mb-1">Description</span>
-              <p className="text-xs text-tui-text/80 leading-relaxed italic bg-black/20 p-2 border border-tui-border/30">
+              <span className="text-[10px] font-bold text-tui-dim uppercase tracking-tui block mb-1">Description</span>
+              <p className="text-xs text-tui-text/80 leading-relaxed italic bg-ctp-crust/40 p-2 border border-tui-border-dim">
                 {selectedTicket.description}
               </p>
             </div>
@@ -298,7 +298,7 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
 
             <div className="space-y-1 pt-2 border-t border-tui-border/30">
               <span className="text-xs font-bold text-tui-dim uppercase flex items-center gap-1">
-                <Calendar size={10} /> Created_At
+                <Calendar size={10} /> Created At
               </span>
               <span className="text-xs font-bold text-tui-dim">
                 {new Date(selectedTicket.created_at).toLocaleString()}
@@ -307,8 +307,8 @@ export function TicketFlow({ tickets }: TicketFlowProps) {
           </div>
 
           <div className="p-3 border-t border-tui-border bg-tui-accent/5 flex flex-col gap-2 shrink-0">
-             <div className="flex items-center justify-between text-xs font-bold text-tui-dim uppercase mb-1">
-               <span>Quick_Actions</span>
+              <div className="flex items-center justify-between text-xs font-bold text-tui-dim uppercase tracking-tui mb-1">
+                <span>Quick Actions</span>
                {isSyncing && <span className="animate-pulse text-tui-accent">Syncing...</span>}
              </div>
             <div className="flex gap-2">

@@ -38,7 +38,7 @@ export function CreateTicketModal({ isOpen, onClose, projectId }: CreateTicketMo
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create_Ticket">
+    <Modal isOpen={isOpen} onClose={onClose} title="Create Ticket">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-xs font-bold text-tui-dim uppercase mb-1">Title</label>
@@ -46,7 +46,7 @@ export function CreateTicketModal({ isOpen, onClose, projectId }: CreateTicketMo
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-tui-bg border border-tui-border px-3 py-2 text-sm font-mono focus:border-tui-accent focus:outline-none"
+            className="w-full bg-ctp-crust border border-tui-border-dim px-3 py-2 text-sm font-mono focus:border-tui-accent focus:outline-none placeholder:text-tui-dim/30"
             placeholder="Implement new feature..."
             autoFocus
           />
@@ -58,7 +58,7 @@ export function CreateTicketModal({ isOpen, onClose, projectId }: CreateTicketMo
             <select
               value={issueType}
               onChange={(e) => setIssueType(e.target.value)}
-              className="w-full bg-tui-bg border border-tui-border px-3 py-2 text-sm font-mono focus:border-tui-accent focus:outline-none appearance-none"
+               className="w-full bg-ctp-crust border border-tui-border-dim px-3 py-2 text-sm font-mono focus:border-tui-accent focus:outline-none appearance-none"
             >
               <option value="feature">Feature</option>
               <option value="bug">Bug</option>
@@ -73,7 +73,7 @@ export function CreateTicketModal({ isOpen, onClose, projectId }: CreateTicketMo
             <select
               value={priority}
               onChange={(e) => setPriority(Number(e.target.value))}
-              className="w-full bg-tui-bg border border-tui-border px-3 py-2 text-sm font-mono focus:border-tui-accent focus:outline-none appearance-none"
+               className="w-full bg-ctp-crust border border-tui-border-dim px-3 py-2 text-sm font-mono focus:border-tui-accent focus:outline-none appearance-none"
             >
               <option value={0}>0 - Critical</option>
               <option value={1}>1 - High</option>

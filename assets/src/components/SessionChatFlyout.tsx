@@ -69,7 +69,7 @@ export function SessionChatFlyout({
                 id="flyout-title"
                 className="font-bold text-sm uppercase tracking-widest truncate"
               >
-                {agent?.name || 'SESSION_CHAT'}
+                {agent?.name || 'SESSION CHAT'}
               </h2>
               <div className="text-[10px] text-tui-dim font-mono truncate">
                 session/{session.id.slice(0, 8)}

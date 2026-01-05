@@ -71,7 +71,7 @@ function Toast({ notification, onClose }: { notification: Notification; onClose:
     success: 'border-tui-accent text-tui-accent bg-tui-bg',
     warning: 'border-yellow-500 text-yellow-500 bg-tui-bg',
     error: 'border-red-500 text-red-500 bg-tui-bg',
-    system: 'border-tui-dim text-tui-dim bg-tui-bg/80',
+    system: 'border-tui-border-dim text-tui-dim bg-tui-bg/80',
   }
 
   return (
@@ -81,7 +81,7 @@ function Toast({ notification, onClose }: { notification: Notification; onClose:
     >
       <div className="flex justify-between items-start mb-1">
         <span className="font-bold tracking-widest uppercase">
-          [{notification.type}] {notification.title || 'SYSTEM_MSG'}
+          [{notification.type}] {notification.title || 'SYSTEM MSG'}
         </span>
         <button className="opacity-50 hover:opacity-100">×</button>
       </div>

@@ -367,10 +367,10 @@ export function SessionChat({
     <div className={cn('flex flex-col h-full', className)}>
       {/* Header */}
       {showHeader && (
-        <div className="p-2 border-b border-tui-border bg-tui-dim/10 flex items-center justify-between shrink-0">
+        <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 text-xs font-bold">
             <Terminal size={14} />
-            {headerContent || 'SESSION_CHAT'}
+            {headerContent || 'SESSION CHAT'}
           </div>
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase">
             <span
@@ -391,7 +391,7 @@ export function SessionChat({
       {/* Messages */}
       <div 
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-3 md:p-4 bg-black/40 space-y-3 relative"
+        className="flex-1 overflow-y-auto p-3 md:p-4 bg-ctp-crust/60 space-y-3 relative"
       >
         {isLoadingMessages ? (
           <div className="flex items-center justify-center text-tui-dim text-xs uppercase tracking-widest">
@@ -419,16 +419,16 @@ export function SessionChat({
       </div>
 
       {/* Composer */}
-      <div className="border-t border-tui-border p-3 md:p-4 bg-tui-bg/60 shrink-0 relative">
+      <div className="border-t border-tui-border p-3 md:p-4 bg-ctp-mantle/40 shrink-0 relative">
         <div className="flex flex-col gap-2">
           {/* Autocomplete Menu */}
           {autocomplete.active && filteredSuggestions.length > 0 && (
             <div 
               ref={autocompleteRef}
               style={{ left: autocomplete.position.left }}
-              className="absolute bottom-full mb-1 w-64 max-h-[40vh] overflow-y-auto bg-tui-bg border border-tui-accent/40 shadow-xl z-50 font-mono text-xs"
+              className="absolute bottom-full mb-1 w-64 max-h-[40vh] overflow-y-auto bg-ctp-mantle border border-tui-accent/40 shadow-xl z-50 font-mono text-xs"
             >
-              <div className="p-1 border-b border-tui-border bg-tui-dim/10 text-[9px] uppercase tracking-widest text-tui-dim flex justify-between items-center">
+              <div className="p-1 border-b border-tui-border bg-ctp-crust/40 text-[9px] uppercase tracking-tui text-tui-dim flex justify-between items-center">
                 <span>Suggestions for {autocomplete.trigger}{autocomplete.query}</span>
                 <span>{filteredSuggestions.length} found</span>
               </div>
@@ -464,7 +464,7 @@ export function SessionChat({
             onChange={handleChatInputChange}
             onKeyDown={handleKeyDown}
             placeholder={isHistory ? "Type to reactivate session..." : "Type a message..."}
-            className="w-full min-h-[80px] bg-black/40 border border-tui-border p-3 text-sm focus:border-tui-accent outline-none font-mono resize-none"
+            className="w-full min-h-[80px] bg-ctp-crust border border-tui-border-dim p-3 text-sm focus:border-tui-accent outline-none font-mono resize-none placeholder:text-tui-dim/30"
           />
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -633,7 +633,7 @@ export function ChatMessage({ message }: { message: SessionMessageEntry }) {
               <summary className="cursor-pointer p-2 text-[10px] uppercase tracking-widest text-tui-accent hover:text-white transition-colors flex items-center justify-between select-none">
                 <div className="flex items-center gap-2">
                   <Zap size={12} className="animate-pulse" />
-                  <span>Neural_Link / Reasoning_HUD</span>
+                  <span>Neural Link / Reasoning HUD</span>
                 </div>
                 <div className="flex items-center gap-3">
                   {tokens?.reasoning ? (
@@ -645,7 +645,7 @@ export function ChatMessage({ message }: { message: SessionMessageEntry }) {
                   />
                 </div>
               </summary>
-              <div className="p-3 pt-1 text-[11px] text-tui-accent/90 font-mono whitespace-pre-wrap border-t border-tui-accent/10 mt-1 leading-relaxed bg-black/20">
+              <div className="p-3 pt-1 text-[11px] text-tui-accent/90 font-mono whitespace-pre-wrap border-t border-tui-accent/10 mt-1 leading-relaxed bg-ctp-crust/40">
                 {parts.reasoning.join('\n\n')}
               </div>
             </details>
@@ -813,7 +813,7 @@ function ToolPartBlock({ part }: { part: SessionMessagePart }) {
   return (
     <div
       className={`border rounded-sm overflow-hidden text-xs ${
-        isError ? 'border-red-900/50 bg-red-950/10' : 'border-tui-border/60 bg-black/20'
+        isError ? 'border-red-900/50 bg-red-950/10' : 'border-tui-border-dim bg-ctp-crust/40'
       }`}
     >
       <div className="px-3 py-2 bg-tui-dim/10 border-b border-tui-border/30 flex items-center justify-between">
@@ -838,7 +838,7 @@ function ToolPartBlock({ part }: { part: SessionMessagePart }) {
         {input && (
           <div>
             <div className="text-[9px] uppercase tracking-widest text-tui-dim mb-1">Input</div>
-            <div className="bg-black/40 p-2 rounded border border-tui-border/30 overflow-x-auto">
+            <div className="bg-ctp-crust/40 p-2 rounded border border-tui-border-dim overflow-x-auto">
               <pre>{formatJSON(input)}</pre>
             </div>
           </div>
@@ -846,7 +846,7 @@ function ToolPartBlock({ part }: { part: SessionMessagePart }) {
         {output && (
           <div>
             <div className="text-[9px] uppercase tracking-widest text-tui-dim mb-1">Output</div>
-            <div className="bg-black/40 p-2 rounded border border-tui-border/30 overflow-x-auto text-tui-text/90">
+            <div className="bg-ctp-crust/40 p-2 rounded border border-tui-border-dim overflow-x-auto text-tui-text/90">
               <pre>{output}</pre>
             </div>
           </div>

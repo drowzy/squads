@@ -61,34 +61,34 @@ function NodesPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           {isLoading ? (
-            <div className="p-8 border border-tui-border bg-black/20 text-center animate-pulse text-tui-dim font-bold">
-              SCANNING NETWORK...
+            <div className="p-8 border border-tui-border bg-ctp-mantle/50 text-center animate-pulse text-tui-dim font-bold text-[10px] tracking-tui uppercase">
+              Scanning Network...
             </div>
           ) : nodes?.length === 0 ? (
-            <div className="p-12 border border-tui-border bg-black/20 text-center space-y-4">
-              <p className="text-tui-dim uppercase tracking-widest text-xs">No external nodes detected</p>
+            <div className="p-12 border border-tui-border bg-ctp-mantle/50 text-center space-y-4">
+              <p className="text-tui-dim uppercase tracking-tui font-bold text-[10px]">No external nodes detected</p>
               <p className="text-[10px] text-tui-dim/60 italic max-w-xs mx-auto">
-                Nodes are discovered via local port scanning (lsof) or manual URL entry.
+                Nodes are discovered via local port scanning or manual URL entry.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                 <button
                   onClick={() => refetch()}
-                  className="px-3 py-1.5 border border-tui-border text-[10px] font-bold uppercase tracking-widest text-tui-dim hover:text-tui-text hover:border-tui-accent transition-colors"
+                  className="px-3 py-1.5 border border-tui-border text-[10px] font-bold uppercase tracking-tui text-tui-dim hover:text-tui-text hover:border-tui-accent transition-colors"
                 >
                   Rescan
                 </button>
                 <button
                   onClick={() => manualAttachRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-                  className="px-3 py-1.5 border border-tui-accent text-[10px] font-bold uppercase tracking-widest text-tui-accent hover:bg-tui-accent hover:text-tui-bg transition-colors"
+                  className="px-3 py-1.5 border border-tui-accent text-[10px] font-bold uppercase tracking-tui text-tui-accent hover:bg-tui-accent hover:text-tui-bg transition-colors"
                 >
-                  Manual_Attach
+                  Manual Attach
                 </button>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {nodes?.map((node) => (
-                <div key={node.base_url} className="border border-tui-border bg-black/20 group hover:border-tui-accent/50 transition-colors">
+                <div key={node.base_url} className="border border-tui-border bg-ctp-mantle/50 group hover:border-tui-accent transition-colors">
                   <div className="p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -100,7 +100,7 @@ function NodesPage() {
                           {node.base_url}
                         </span>
                       </div>
-                      <span className="text-[9px] font-bold uppercase tracking-tighter px-1 border border-tui-border text-tui-dim group-hover:border-tui-accent/30 group-hover:text-tui-accent/70 transition-colors">
+                      <span className="text-[9px] font-bold uppercase tracking-tui px-1.5 py-0.5 border border-tui-border text-tui-dim group-hover:border-tui-accent/30 group-hover:text-tui-accent transition-colors">
                         {node.source}
                       </span>
                     </div>
@@ -121,7 +121,7 @@ function NodesPage() {
                         <Link 
                          to="/sessions"
                          search={{ node: node.base_url }}
-                         className="flex-1 py-1.5 border border-tui-border text-[10px] font-bold uppercase tracking-widest text-center hover:bg-tui-dim/10 transition-colors"
+                         className="flex-1 py-1.5 border border-tui-border text-[10px] font-bold uppercase tracking-tui text-center hover:bg-tui-dim/10 transition-colors"
                        >
                          Browse Sessions
                        </Link>
@@ -143,8 +143,8 @@ function NodesPage() {
         </div>
 
         <aside className="space-y-6">
-          <section ref={manualAttachRef} className="border border-tui-border bg-black/20 p-4 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+          <section ref={manualAttachRef} className="border border-tui-border bg-ctp-mantle/50 p-4 space-y-4">
+            <h3 className="text-[10px] font-bold uppercase tracking-tui flex items-center gap-2 text-tui-dim">
               <Plus size={14} className="text-tui-accent" />
               Manual Attach
             </h3>
@@ -154,12 +154,12 @@ function NodesPage() {
                 placeholder="http://127.0.0.1:4096"
                 value={newUrl}
                 onChange={(e) => setNewUrl(e.target.value)}
-                className="w-full bg-black/40 border border-tui-border py-2 px-3 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-tui-accent"
+                className="w-full bg-ctp-crust border border-tui-border py-2 px-3 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-tui-accent placeholder:text-tui-dim/30"
               />
               <button 
                 type="submit"
                 disabled={probeNode.isPending || !newUrl}
-                className="w-full py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase tracking-widest hover:bg-tui-accent/90 transition-colors disabled:opacity-50"
+                className="w-full py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase tracking-tui hover:bg-tui-accent/90 transition-colors disabled:opacity-50"
               >
                 {probeNode.isPending ? 'Connecting...' : 'Connect Node'}
               </button>
@@ -167,7 +167,7 @@ function NodesPage() {
           </section>
 
           <section className="border border-tui-border p-4 space-y-3">
-             <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-tui-dim">
+             <h3 className="text-[10px] font-bold uppercase tracking-tui flex items-center gap-2 text-tui-dim">
               <Info size={14} />
               About Discovery
             </h3>

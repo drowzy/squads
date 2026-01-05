@@ -68,9 +68,9 @@ function TicketBoard() {
     return (
       <div className="h-full flex flex-col items-center justify-center text-tui-accent">
         <AlertCircle size={48} className="mb-4" />
-        <h3 className="text-xl font-bold">
-          {error.message === 'BEADS_NOT_INITIALIZED' ? 'BEADS_PROJECT_NOT_FOUND' : 'FAILED_TO_LOAD_BOARD'}
-        </h3>
+          <h3 className="text-xl font-bold">
+            {error.message === 'BEADS_NOT_INITIALIZED' ? 'Beads project not found' : 'Failed to load board'}
+          </h3>
         <p className="text-sm opacity-70">
           {error.message === 'BEADS_NOT_INITIALIZED' 
             ? 'No .beads directory found in this project. Please run "bd init" in the CLI.'
@@ -89,7 +89,7 @@ function TicketBoard() {
     <div className="h-full flex flex-col space-y-4 md:space-y-6">
       <div className="flex flex-col gap-4">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase">Mission_Control / Board</h2>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase">Mission Control / Board</h2>
           <p className="text-tui-dim text-xs md:text-sm italic">Status of all active and pending tickets</p>
         </div>
         
@@ -102,16 +102,16 @@ function TicketBoard() {
               value: assigneeFilter || '',
               onChange: (val) => setAssigneeFilter(val || null),
               options: assignees.map(a => ({ value: a, label: a })),
-              placeholder: "ALL_ASSIGNEES"
+              placeholder: "All assignees"
             }
           ]}
         >
-          <div className="flex border border-tui-border shrink-0 bg-tui-bg">
+          <div className="flex border border-tui-border shrink-0 bg-ctp-crust/40">
             <button 
               onClick={() => setIsCreateModalOpen(true)}
               className="px-3 md:px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase hover:bg-white transition-colors"
             >
-              New_Ticket
+              New Ticket
             </button>
             <div className="w-[1px] bg-tui-border"></div>
             <button 
@@ -131,17 +131,17 @@ function TicketBoard() {
       </div>
 
       {tickets.length === 0 && (
-        <div className="border border-tui-border bg-black/20 p-8 text-center">
-          <div className="text-xs font-bold uppercase tracking-widest text-tui-dim">No tickets yet</div>
+        <div className="border border-tui-border bg-ctp-mantle/50 p-8 text-center">
+          <div className="text-xs font-bold uppercase tracking-tui text-tui-dim">No tickets yet</div>
           <p className="text-[11px] text-tui-dim/70 mt-2">
             Create your first ticket to kick off the board.
           </p>
           <div className="mt-4 flex justify-center">
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase tracking-widest hover:bg-tui-accent/90 transition-colors"
+              className="px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase tracking-tui hover:bg-tui-accent/90 transition-colors"
             >
-              Create_First_Ticket
+              Create First Ticket
             </button>
           </div>
         </div>
@@ -151,7 +151,7 @@ function TicketBoard() {
         {viewMode === 'kanban' ? (
           <div className="h-full flex flex-col md:flex-row gap-4 md:gap-6 overflow-y-auto md:overflow-y-hidden md:overflow-x-auto pb-4 custom-scrollbar">
             {columns.map((col) => (
-              <div key={col.status} className="md:w-80 flex flex-col border border-tui-border bg-tui-bg/50 md:shrink-0">
+              <div key={col.status} className="md:w-80 flex flex-col border border-tui-border bg-ctp-mantle/50 md:shrink-0">
                 <div className={`p-3 border-b border-tui-border flex items-center justify-between bg-ctp-mantle ${col.color}`}>
                   <div className="flex items-center gap-2">
                     {col.icon}
@@ -170,7 +170,7 @@ function TicketBoard() {
                     ))}
                   {filteredTickets.filter(t => t.status === col.status).length === 0 && (
                     <div className="h-16 md:h-20 flex items-center justify-center border border-dashed border-tui-border/30 opacity-20">
-                      <span className="text-xs uppercase italic tracking-widest">No_Matches</span>
+                      <span className="text-xs uppercase italic tracking-tui">No matches</span>
                     </div>
                   )}
                 </div>
@@ -197,7 +197,7 @@ function TicketCard({ ticket }: { ticket: Ticket }) {
   const assigneeName = getAssigneeName(ticket)
 
   return (
-    <div className="border border-tui-border p-3 bg-tui-bg hover:border-tui-accent transition-colors group cursor-pointer">
+    <div className="border border-tui-border p-3 bg-ctp-mantle/50 hover:border-tui-accent transition-colors group cursor-pointer">
       <div className="flex justify-between items-start gap-2 mb-2">
         <span className="text-xs font-bold text-tui-dim group-hover:text-tui-accent">
           {ticket.id}
@@ -215,7 +215,7 @@ function TicketCard({ ticket }: { ticket: Ticket }) {
 
       {assigneeName && (
         <div className="flex items-center gap-2 mt-auto">
-          <div className="w-5 h-5 md:w-4 md:h-4 border border-tui-border flex items-center justify-center bg-tui-dim/20">
+          <div className="w-5 h-5 md:w-4 md:h-4 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40">
             <span className="text-[10px] font-bold">{assigneeName[0].toUpperCase()}</span>
           </div>
           <span className="text-xs text-tui-dim">{assigneeName}</span>

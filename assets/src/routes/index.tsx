@@ -89,7 +89,7 @@ function Dashboard() {
         <StatCard label="System Load" value="1.24" color="text-tui-dim" />
       </div>
 
-      <div className="border border-tui-border p-4 bg-tui-dim/5">
+      <div className="border border-tui-border p-4 bg-ctp-mantle/50">
         <div className="flex items-center gap-2 mb-4">
           <span className="w-2 h-2 bg-tui-accent" />
           <h3 className="font-bold uppercase tracking-tui text-[10px] text-tui-dim">Recent Activity</h3>
@@ -119,7 +119,7 @@ function ActionCard({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "border border-tui-border p-4 bg-tui-bg flex items-start justify-between gap-4 text-left transition-colors",
+        "border border-tui-border p-4 bg-ctp-mantle/50 flex items-start justify-between gap-4 text-left transition-colors",
         disabled
           ? "opacity-50 cursor-not-allowed"
           : "hover:border-tui-accent hover:bg-tui-dim/10"
@@ -143,7 +143,7 @@ function ActionCard({
 
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="border border-tui-border p-4 bg-tui-bg">
+    <div className="border border-tui-border p-4 bg-ctp-mantle/50">
       <div className="text-[10px] text-tui-dim mb-1 font-bold tracking-tui uppercase">{label}</div>
       <div className={cn("text-2xl md:text-3xl font-bold tracking-tighter", color)}>{value}</div>
     </div>

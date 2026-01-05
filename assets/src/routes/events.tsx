@@ -86,16 +86,16 @@ function EventsPage() {
         <button
           onClick={() => refetch()}
           disabled={isLoading || isRefetching}
-          className="p-2 border border-tui-border bg-tui-bg hover:bg-tui-dim/10 text-tui-dim hover:text-tui-text transition-colors disabled:opacity-50"
+          className="p-2 border border-tui-border-dim bg-ctp-crust hover:bg-tui-dim/10 text-tui-dim hover:text-tui-text transition-colors disabled:opacity-50"
           title="Refresh events"
         >
           <RefreshCcw size={18} className={cn(isRefetching && "animate-spin")} />
         </button>
       </ListToolbar>
 
-      <div className="bg-black/20 border border-tui-border overflow-hidden">
-        <div className="p-3 border-b border-tui-border bg-black/40 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-tui-dim">
+      <div className="bg-ctp-mantle/50 border border-tui-border overflow-hidden">
+        <div className="p-3 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-tui text-tui-dim">
             {filteredEvents.length} matching events
           </span>
         </div>

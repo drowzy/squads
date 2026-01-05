@@ -51,7 +51,7 @@ export function AgentOverview() {
         onSearchChange={setSearch}
         searchPlaceholder="Search agents by name, role, or slug..."
       >
-        <div className="flex items-center gap-1 border border-tui-border p-1 bg-tui-bg">
+        <div className="flex items-center gap-1 border border-tui-border p-1 bg-ctp-crust/40">
           <button 
             onClick={() => setViewMode('grid')}
             className={cn("p-1.5 transition-colors", viewMode === 'grid' ? "bg-tui-accent text-tui-bg" : "text-tui-dim hover:text-tui-text")}
@@ -85,7 +85,7 @@ export function AgentOverview() {
             ))}
           </div>
         ) : (
-          <div className="border border-tui-border divide-y divide-tui-border bg-tui-bg">
+          <div className="border border-tui-border divide-y divide-tui-border bg-ctp-mantle/50">
             {filteredAgents.map(agent => (
               <AgentRow key={agent.id} agent={agent} />
             ))}
@@ -120,10 +120,10 @@ function AgentCard({ agent }: { agent: Agent }) {
     <Link 
       to="/agent/$agentId" 
       params={{ agentId: agent.id }}
-      className="border border-tui-border bg-tui-bg p-4 hover:border-tui-accent transition-colors group flex flex-col gap-3"
+      className="border border-tui-border bg-ctp-mantle/50 p-4 hover:border-tui-accent transition-colors group flex flex-col gap-3"
     >
       <div className="flex justify-between items-start">
-        <div className="w-10 h-10 border border-tui-border flex items-center justify-center bg-tui-dim/10 group-hover:border-tui-accent transition-colors">
+        <div className="w-10 h-10 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40 group-hover:border-tui-accent transition-colors">
           <Cpu className="text-tui-accent" size={20} />
         </div>
         <div className={cn("text-[10px] font-bold tracking-widest uppercase px-1.5 py-0.5 border border-current", statusColors[agent.status])}>
@@ -136,7 +136,7 @@ function AgentCard({ agent }: { agent: Agent }) {
         <p className="text-xs text-tui-dim font-mono">{agent.slug}</p>
       </div>
 
-      <div className="pt-2 border-t border-tui-border/50">
+      <div className="pt-2 border-t border-tui-border-dim">
         <div className="text-[10px] text-tui-dim uppercase tracking-widest mb-1">Role</div>
         <div className="text-xs font-bold truncate">{agent.role.replace(/_/g, ' ').toUpperCase()}</div>
       </div>
@@ -163,7 +163,7 @@ function AgentRow({ agent }: { agent: Agent }) {
       params={{ agentId: agent.id }}
       className="flex items-center gap-4 p-3 hover:bg-tui-dim/5 transition-colors group"
     >
-      <div className="w-8 h-8 border border-tui-border flex items-center justify-center bg-tui-dim/10 shrink-0 group-hover:border-tui-accent transition-colors">
+      <div className="w-8 h-8 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40 shrink-0 group-hover:border-tui-accent transition-colors">
         <Cpu className="text-tui-accent" size={16} />
       </div>
       

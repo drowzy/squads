@@ -164,7 +164,7 @@ function SessionsPage() {
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-1 border border-tui-border p-1 bg-tui-bg">
+          <div className="flex items-center gap-1 border border-tui-border p-1 bg-ctp-crust/40">
             {(['active', 'history', 'all'] as const).map((f) => (
               <button
                 key={f}
@@ -193,7 +193,7 @@ function SessionsPage() {
 
       {/* Empty State */}
        {!isLoading && filteredSessions.length === 0 && (
-         <div className="text-center py-20 border border-tui-border bg-black/20">
+          <div className="text-center py-20 border border-tui-border bg-ctp-mantle/50">
            <Terminal className="mx-auto text-tui-dim mb-4" size={48} />
            <h3 className="text-lg font-bold uppercase tracking-widest mb-2">
              {filter === 'active' ? 'No active sessions' : filter === 'history' ? 'No session history' : 'No sessions found'}
@@ -219,12 +219,12 @@ function SessionsPage() {
       {!isLoading && groupedSessions.length > 0 && (
         <div className="space-y-6">
           {groupedSessions.map((group) => (
-            <section
-              key={group.squadId}
-              className="border border-tui-border bg-black/20"
-            >
+              <section
+                key={group.squadId}
+                className="border border-tui-border bg-ctp-mantle/50"
+              >
               {/* Group Header */}
-              <div className="p-3 border-b border-tui-border bg-tui-dim/10 flex items-center justify-between">
+              <div className="p-3 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Users size={16} className="text-tui-accent" />
                   <div>
@@ -315,12 +315,12 @@ function SessionRow({ session, agent, onOpenChat }: SessionRowProps) {
     },
     cancelled: {
       icon: StopCircle,
-      color: 'text-tui-dim border-tui-dim/30',
+      color: 'text-tui-dim border-tui-border-dim',
       bg: 'bg-tui-dim/5',
     },
     archived: {
       icon: Archive,
-      color: 'text-tui-dim border-tui-dim/30',
+      color: 'text-tui-dim border-tui-border-dim',
       bg: 'bg-tui-dim/5',
     },
   }

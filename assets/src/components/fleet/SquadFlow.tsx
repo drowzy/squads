@@ -105,10 +105,10 @@ export function SquadFlow({ squads, connections, onMessage }: SquadFlowProps) {
   }, [squads, connections, setNodes, setEdges, fitView])
 
   return (
-    <div className="h-[400px] w-full bg-black/20 border border-tui-border relative overflow-hidden font-mono mb-8">
+    <div className="h-[400px] w-full bg-ctp-mantle/50 border border-tui-border relative overflow-hidden font-mono mb-8">
       <div className="absolute top-2 left-2 z-10">
-        <span className="text-[10px] font-bold text-tui-accent bg-tui-bg px-2 py-1 border border-tui-accent/30 uppercase tracking-widest">
-          Squad_Network_Graph
+        <span className="text-[10px] font-bold text-tui-accent bg-ctp-crust/40 px-2 py-1 border border-tui-accent/30 uppercase tracking-tui">
+          Squad Network Graph
         </span>
       </div>
       <ReactFlow

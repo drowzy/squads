@@ -95,7 +95,7 @@ function MailSystem() {
         searchPlaceholder="Search threads..."
       />
 
-      <div className="flex-1 border border-tui-border flex flex-col md:flex-row bg-tui-bg/50 overflow-hidden relative">
+      <div className="flex-1 border border-tui-border flex flex-col md:flex-row bg-ctp-mantle/50 overflow-hidden relative">
         {/* Mobile folder toggle */}
         <button 
           aria-label="Toggle folders"
@@ -108,7 +108,7 @@ function MailSystem() {
         </button>
 
         {/* Sidebar Nav - hidden on mobile unless toggled */}
-        <div className={`${showFolders ? 'block' : 'hidden'} md:block w-full md:w-48 border-b md:border-b-0 md:border-r border-tui-border flex flex-col bg-tui-dim/5`}>
+        <div className={`${showFolders ? 'block' : 'hidden'} md:block w-full md:w-48 border-b md:border-b-0 md:border-r border-tui-border flex flex-col bg-ctp-crust/30`}>
           <nav className="p-2 space-y-1">
             <MailSidebarItem icon={<Inbox size={16} />} label="Inbox" count={threads.reduce((acc, t) => acc + t.unread_count, 0)} active onClick={() => setShowFolders(false)} />
             <MailSidebarItem icon={<Send size={16} />} label="Sent" onClick={() => setShowFolders(false)} />
@@ -219,7 +219,7 @@ function ThreadView({ threadId, onBack }: { threadId: string; onBack: () => void
 
   return (
     <div className="flex-1 flex flex-col">
-      <div className="h-12 border-b border-tui-border flex items-center px-2 bg-tui-dim/10">
+      <div className="h-12 border-b border-tui-border flex items-center px-2 bg-ctp-crust/40">
         <button 
           aria-label="Back to threads"
           onClick={onBack}
@@ -276,7 +276,7 @@ function ThreadView({ threadId, onBack }: { threadId: string; onBack: () => void
               value={replyBody}
               onChange={(e) => setReplyBody(e.target.value)}
               placeholder="Type your reply..."
-              className="w-full h-24 md:h-32 bg-black/40 border border-tui-border p-3 md:p-4 text-sm focus:border-tui-accent outline-none font-mono mb-4"
+              className="w-full h-24 md:h-32 bg-ctp-crust border border-tui-border-dim p-3 md:p-4 text-sm focus:border-tui-accent outline-none font-mono mb-4 placeholder:text-tui-dim/30"
             />
             <div className="flex justify-end">
               <button 
@@ -351,7 +351,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="w-full max-w-2xl border border-tui-accent bg-tui-bg shadow-[0_0_30px_rgba(255,0,255,0.1)] flex flex-col max-h-[95vh] md:max-h-[90vh]">
+    <div className="w-full max-w-2xl border border-tui-accent bg-ctp-mantle shadow-[0_0_30px_rgba(255,0,255,0.1)] flex flex-col max-h-[95vh] md:max-h-[90vh]">
       <div className="p-3 border-b border-tui-accent bg-tui-accent/10 flex justify-between items-center">
         <span className="text-xs font-bold text-tui-accent tracking-widest uppercase flex items-center gap-2">
           <Plus size={14} />
@@ -369,7 +369,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
         <div className="space-y-2">
           <label className="text-xs font-bold text-tui-dim uppercase tracking-widest">From</label>
-          <div className="flex flex-wrap gap-2 p-2 border border-tui-border bg-black/20 min-h-[44px]">
+          <div className="flex flex-wrap gap-2 p-2 border border-tui-border bg-ctp-crust/40 min-h-[44px]">
             <button
               onClick={() => setSender("Human")}
               className={`text-xs px-3 py-1.5 border transition-colors ${
@@ -398,7 +398,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
 
         <div className="space-y-2">
           <label className="text-xs font-bold text-tui-dim uppercase tracking-widest">Recipients</label>
-          <div className="flex flex-wrap gap-2 p-2 border border-tui-border bg-black/20 min-h-[44px]">
+          <div className="flex flex-wrap gap-2 p-2 border border-tui-border bg-ctp-crust/40 min-h-[44px]">
             {agents.filter(a => a.name !== sender).map(agent => (
               <button
                 key={agent.id}
@@ -425,7 +425,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Subject line..."
-            className="w-full bg-black/40 border border-tui-border p-3 text-sm focus:border-tui-accent outline-none font-mono"
+            className="w-full bg-ctp-crust border border-tui-border-dim p-3 text-sm focus:border-tui-accent outline-none font-mono placeholder:text-tui-dim/30"
           />
         </div>
 
@@ -435,7 +435,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Type your message in Markdown..."
-            className="w-full flex-1 min-h-[150px] md:min-h-[200px] bg-black/40 border border-tui-border p-3 text-sm focus:border-tui-accent outline-none font-mono"
+            className="w-full flex-1 min-h-[150px] md:min-h-[200px] bg-ctp-crust border border-tui-border-dim p-3 text-sm focus:border-tui-accent outline-none font-mono placeholder:text-tui-dim/30"
           />
         </div>
       </div>

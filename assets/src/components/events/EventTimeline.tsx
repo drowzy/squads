@@ -25,8 +25,8 @@ export function EventTimeline({ events, isLoading, className, showSessionLink }:
 
   if (events.length === 0) {
     return (
-      <div className={cn("py-12 text-center border border-tui-border bg-black/20", className)}>
-        <p className="text-xs text-tui-dim uppercase tracking-widest">No events found</p>
+      <div className={cn("py-12 text-center border border-tui-border bg-ctp-mantle/50", className)}>
+        <p className="text-[10px] text-tui-dim uppercase tracking-tui font-bold">No events found</p>
       </div>
     )
   }
@@ -56,7 +56,7 @@ function EventItem({ event, showSessionLink }: { event: Event, showSessionLink?:
   }
 
   return (
-    <div className="group border border-tui-border bg-black/20 hover:border-tui-accent/50 transition-colors">
+    <div className="group border border-tui-border bg-ctp-mantle/50 hover:border-tui-accent transition-colors">
       <div className="p-3 flex items-start gap-4">
         <div className={cn("p-2 border shrink-0", config.color, config.bg)}>
           <Icon size={16} />
@@ -64,12 +64,12 @@ function EventItem({ event, showSessionLink }: { event: Event, showSessionLink?:
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-tui-text">
-                {kind.replace(/[:.]/g, '_')}
+              <span className="text-[10px] font-bold uppercase tracking-tui text-tui-text">
+                {kind}
               </span>
               {showSessionLink && event.session_id && (
                 <span className="text-[9px] text-tui-accent font-mono bg-tui-accent/10 px-1 border border-tui-accent/30">
-                  SESSION:{event.session_id.slice(0, 8)}
+                  Session: {event.session_id.slice(0, 8)}
                 </span>
               )}
             </div>
@@ -83,20 +83,20 @@ function EventItem({ event, showSessionLink }: { event: Event, showSessionLink?:
           </div>
           
           <details className="mt-2 group/details">
-            <summary className="text-[9px] uppercase tracking-[0.2em] text-tui-dim hover:text-tui-text cursor-pointer list-none flex items-center gap-1 transition-colors">
+            <summary className="text-[9px] uppercase tracking-tui text-tui-dim hover:text-tui-text cursor-pointer list-none flex items-center gap-1 transition-colors">
               <span className="group-open/details:rotate-90 transition-transform">▶</span>
-              Inspect_Payload
+              Inspect Payload
             </summary>
             <div className="mt-2 flex justify-end">
               <button
                 type="button"
                 onClick={handleCopy}
-                className="text-[9px] uppercase tracking-[0.2em] text-tui-dim hover:text-tui-text"
+                className="text-[9px] uppercase tracking-tui text-tui-dim hover:text-tui-text"
               >
-                Copy_Payload
+                Copy Payload
               </button>
             </div>
-            <pre className="mt-2 p-2 bg-black/40 border border-tui-border/50 text-[10px] text-tui-accent/80 font-mono overflow-x-auto max-h-40">
+            <pre className="mt-2 p-2 bg-ctp-crust/40 border border-tui-border-dim text-[10px] text-tui-accent/80 font-mono overflow-x-auto max-h-40">
               {JSON.stringify(payload, null, 2)}
             </pre>
           </details>
