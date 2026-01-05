@@ -408,6 +408,18 @@ defmodule Squads.OpenCode.Client do
           |> Map.put(:noReply, no_reply)
       end
 
+    params =
+      case Map.get(params, :agent) || Map.get(params, "agent") do
+        nil ->
+          params
+
+        agent ->
+          params
+          |> Map.delete(:agent)
+          |> Map.delete("agent")
+          |> Map.put(:agent, filter_agent(agent))
+      end
+
     case Map.get(params, :model) || Map.get(params, "model") do
       model when is_binary(model) ->
         case split_model_string(model) do
@@ -424,6 +436,9 @@ defmodule Squads.OpenCode.Client do
   end
 
   defp normalize_message_params(params), do: params
+
+  defp filter_agent(agent) when agent in ["plan", "build"], do: "default"
+  defp filter_agent(agent), do: agent
 
   defp split_model_string(model) when is_binary(model) do
     case String.split(model, "/", parts: 2) do
