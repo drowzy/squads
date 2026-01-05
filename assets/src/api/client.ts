@@ -1,23 +1,6 @@
 const normalizeBase = (value: string) => value.replace(/\/$/, '')
 
 export const API_BASE = normalizeBase(import.meta.env.VITE_API_URL || '/api')
-export const WS_BASE = (() => {
-  const explicit = import.meta.env.VITE_WS_URL
-  if (explicit) return normalizeBase(explicit)
-
-  if (API_BASE.startsWith('http://') || API_BASE.startsWith('https://')) {
-    const apiUrl = new URL(API_BASE)
-    const protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${apiUrl.host}`
-  }
-
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${window.location.host}`
-  }
-
-  return 'ws://localhost'
-})()
 
 interface FetcherOptions extends RequestInit {
   timeout?: number

@@ -125,6 +125,11 @@ function AppShell() {
         const rawKind = payload.data.kind
         const kind = rawKind.replace(/^(\w+)\./, '$1:')
         
+        // Broadcast event internally for components like SessionChat and TerminalPanel
+        window.dispatchEvent(new CustomEvent('project-event', { 
+          detail: { ...payload.data, kind } 
+        }))
+
         addNotification({
           type: kind.includes('fail') || kind.includes('error') ? 'error' : 'success',
           title: kind.toUpperCase(),

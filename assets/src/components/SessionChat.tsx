@@ -134,7 +134,6 @@ export function SessionChat({
     {
       enabled: !!session.id,
       limit: 100,
-      refetchInterval: session.status === 'running' ? 2500 : false,
     }
   )
 
