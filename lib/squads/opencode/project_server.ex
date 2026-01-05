@@ -269,6 +269,20 @@ defmodule Squads.OpenCode.ProjectServer do
     end
   end
 
+  @impl true
+  def terminate(reason, state) do
+    if state.os_pid do
+      Logger.info(
+        "Stopping OpenCode server for project #{state.project_id} (os_pid=#{state.os_pid})",
+        reason: inspect(reason)
+      )
+
+      :exec.stop(state.os_pid)
+    end
+
+    :ok
+  end
+
   # Helpers
 
   defp find_available_port do
@@ -325,8 +339,6 @@ defmodule Squads.OpenCode.ProjectServer do
       {:stop, :process_exited, state}
     end
   end
-
-  defp log_stderr(project_id, data, startup? \\ false)
 
   defp log_stderr(project_id, data, startup?) when is_binary(data) do
     data
@@ -410,8 +422,6 @@ defmodule Squads.OpenCode.ProjectServer do
         :not_found
     end
   end
-
-  defp resolve_opencode_listener(nil, _lsof_runner), do: :not_found
 
   defp resolve_opencode_listener(port, lsof_runner) when is_integer(port) do
     case lsof_runner.("lsof", ["-nP", "-iTCP:#{port}", "-sTCP:LISTEN"]) do

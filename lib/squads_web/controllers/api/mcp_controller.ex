@@ -75,6 +75,7 @@ defmodule SquadsWeb.API.MCPController do
   end
 
   def connect(conn, %{"name" => name}) do
+    Logger.debug("MCP connect request for #{name}, headers: #{inspect(conn.req_headers)}")
     handle_mcp_rpc(conn, name)
   end
 
@@ -270,7 +271,9 @@ defmodule SquadsWeb.API.MCPController do
   end
 
   defp rpc_result(conn, id, result) do
-    json(conn, %{jsonrpc: "2.0", id: id, result: result})
+    conn
+    |> put_resp_header("content-encoding", "identity")
+    |> json(%{jsonrpc: "2.0", id: id, result: result})
   end
 
   defp rpc_error_from_reason(conn, id, %{code: code, message: message}) do

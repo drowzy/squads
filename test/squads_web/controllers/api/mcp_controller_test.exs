@@ -141,4 +141,21 @@ defmodule SquadsWeb.API.MCPControllerTest do
       assert json_response(conn, 200) == %{"status" => "ok"}
     end
   end
+
+  describe "agent_mail rpc" do
+    test "list_tools returns tools", %{conn: conn} do
+      payload = %{
+        jsonrpc: "2.0",
+        id: 1,
+        method: "list_tools"
+      }
+
+      conn = post(conn, ~p"/api/mcp/agent_mail/connect", payload)
+      response = json_response(conn, 200)
+
+      assert response["id"] == 1
+      assert response["result"]["tools"] |> is_list()
+      assert Enum.any?(response["result"]["tools"], &(&1["name"] == "send_message"))
+    end
+  end
 end
