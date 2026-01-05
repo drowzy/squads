@@ -50,13 +50,13 @@ function SquadOverview() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase">Squad Command</h2>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tighter">Squad Command</h2>
           <p className="text-tui-dim text-xs md:text-sm italic">Manage squads and their agents</p>
         </div>
         <div className="flex items-center gap-3">
           {activeProject && (
             <div className="text-xs text-tui-dim font-bold tracking-widest border border-tui-border px-2 py-1">
-              PROJECT: {activeProject.name.toUpperCase()}
+              Project: {activeProject.name}
             </div>
           )}
           <button
@@ -103,7 +103,7 @@ function SquadOverview() {
             </div>
           </div>
           <div className="space-y-2">
-            <h3 className="text-lg font-bold uppercase tracking-widest">No Squads Deployed</h3>
+            <h3 className="text-lg font-bold tracking-widest">No Squads Deployed</h3>
             <p className="text-tui-dim text-sm max-w-md mx-auto italic">
               Deploy your first squad to begin coordinating agent operations.
             </p>
@@ -410,10 +410,10 @@ function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: st
   }
 
   const statusLabels: Record<Agent['status'], string> = {
-    idle: 'IDLE',
-    working: 'WORKING',
-    blocked: 'BLOCKED',
-    offline: 'OFFLINE',
+    idle: 'Idle',
+    working: 'Working',
+    blocked: 'Blocked',
+    offline: 'Offline',
   }
 
   const handleStartSession = async (e: React.MouseEvent) => {
@@ -503,7 +503,7 @@ function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: st
         {activeSession ? (
           <>
             <div className="text-xs font-bold tracking-widest text-tui-accent animate-pulse hidden md:block">
-              ACTIVE
+              Active
             </div>
             <Link
               to="/agent/$agentId"
@@ -838,9 +838,9 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
     <div className="border-t border-tui-border">
         <div className="flex items-center justify-between px-3 md:px-4 py-3 bg-ctp-crust/40">
           <div className="flex items-center gap-2 text-xs uppercase tracking-tui text-tui-dim font-bold">
-          <Server size={14} aria-hidden="true" />
-          MCP Servers
-        </div>
+            <Server size={14} aria-hidden="true" />
+            MCP Servers
+          </div>
         <button
           onClick={() => setCatalogOpen(true)}
           className={cn(
@@ -924,10 +924,10 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
                   <div className="text-xs text-tui-dim truncate">ID: {server.name}</div>
                   <div className="flex items-center gap-2 text-xs text-tui-dim mt-1">
                     <span className={server.enabled ? 'text-tui-accent' : 'text-tui-dim'}>
-                      {server.enabled ? 'ENABLED' : 'DISABLED'}
+                      {server.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                     <span className="text-tui-border">•</span>
-                    <span>STATUS: {statusLabel}</span>
+                    <span>Status: {statusLabel.charAt(0) + statusLabel.slice(1).toLowerCase()}</span>
                   </div>
                   {(tags.length > 0 || authBadges.length > 0) && (
                     <div className="flex items-center flex-wrap gap-2 mt-2">

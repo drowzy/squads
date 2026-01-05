@@ -54,7 +54,7 @@ function Dashboard() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase">Mission Control / Dashboard</h2>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tighter">Mission Control / Dashboard</h2>
           <p className="text-tui-dim text-xs md:text-sm italic">System status and overview</p>
         </div>
         <div className="text-left sm:text-right text-[10px] text-tui-dim font-bold tracking-tui uppercase">
