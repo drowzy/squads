@@ -37,12 +37,12 @@ function EventsPage() {
   }, [events, kindFilter, filterText])
 
   const eventKinds = [
-    { value: 'all', label: 'ALL_EVENTS' },
-    { value: 'session:', label: 'SESSIONS' },
-    { value: 'message:', label: 'MESSAGES' },
-    { value: 'ticket:', label: 'TICKETS' },
-    { value: 'mail:', label: 'MAIL' },
-    { value: 'agent:', label: 'AGENTS' },
+    { value: 'all', label: 'All Events' },
+    { value: 'session:', label: 'Sessions' },
+    { value: 'message:', label: 'Messages' },
+    { value: 'ticket:', label: 'Tickets' },
+    { value: 'mail:', label: 'Mail' },
+    { value: 'agent:', label: 'Agents' },
   ]
 
   return (
@@ -51,7 +51,7 @@ function EventsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Terminal className="text-tui-accent" />
-            EVENT_LOG
+            Event Log
           </h1>
           <p className="text-tui-dim text-sm mt-1 uppercase tracking-widest">
             Audit trail for {activeProject?.name || 'active project'}
@@ -62,7 +62,7 @@ function EventsPage() {
       <ListToolbar
         searchQuery={filterText}
         onSearchChange={setFilterText}
-        searchPlaceholder="KEYWORDS..."
+        searchPlaceholder="Keywords..."
         filters={[
           {
             icon: <Filter size={14} className="text-tui-dim shrink-0" />,
@@ -75,10 +75,10 @@ function EventsPage() {
             value: limit.toString(),
             onChange: (val) => setLimit(Number(val)),
             options: [
-              { value: '20', label: 'LIMIT: 20' },
-              { value: '50', label: 'LIMIT: 50' },
-              { value: '100', label: 'LIMIT: 100' },
-              { value: '500', label: 'LIMIT: 500' },
+              { value: '20', label: 'Limit: 20' },
+              { value: '50', label: 'Limit: 50' },
+              { value: '100', label: 'Limit: 100' },
+              { value: '500', label: 'Limit: 500' },
             ]
           }
         ]}
@@ -96,7 +96,7 @@ function EventsPage() {
       <div className="bg-black/20 border border-tui-border overflow-hidden">
         <div className="p-3 border-b border-tui-border bg-black/40 flex items-center justify-between">
           <span className="text-[10px] font-bold uppercase tracking-widest text-tui-dim">
-            {filteredEvents.length} MATCHING_EVENTS
+            {filteredEvents.length} matching events
           </span>
         </div>
         <div className="p-4">

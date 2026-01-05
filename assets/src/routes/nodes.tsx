@@ -43,7 +43,7 @@ function NodesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Wifi className="text-tui-accent" />
-            EXTERNAL_NODES
+            External Nodes
           </h1>
           <p className="text-tui-dim text-sm mt-1 uppercase tracking-widest">
             Discover and connect to "Ronin" OpenCode instances
@@ -61,8 +61,8 @@ function NodesPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           {isLoading ? (
-            <div className="p-8 border border-tui-border bg-black/20 text-center animate-pulse text-tui-dim">
-              SCANNING_NETWORK...
+            <div className="p-8 border border-tui-border bg-black/20 text-center animate-pulse text-tui-dim font-bold">
+              SCANNING NETWORK...
             </div>
           ) : nodes?.length === 0 ? (
             <div className="p-12 border border-tui-border bg-black/20 text-center space-y-4">
@@ -105,25 +105,27 @@ function NodesPage() {
                       </span>
                     </div>
 
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[10px] font-mono">
-                        <span className="text-tui-dim">VERSION:</span>
-                        <span className="text-tui-text">{node.version || 'UNKNOWN'}</span>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] font-mono">
+                          <span className="text-tui-dim">Version:</span>
+                          <span className="text-tui-text">{node.version || 'Unknown'}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px] font-mono">
+                          <span className="text-tui-dim">Last seen:</span>
+                          <span className="text-tui-text">{new Date(node.last_seen_at).toLocaleTimeString()}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-[10px] font-mono">
-                        <span className="text-tui-dim">LAST_SEEN:</span>
-                        <span className="text-tui-text">{new Date(node.last_seen_at).toLocaleTimeString()}</span>
-                      </div>
-                    </div>
+
 
                     <div className="pt-2 flex gap-2">
-                       <Link 
-                        to="/sessions"
-                        search={{ node: node.base_url }}
-                        className="flex-1 py-1.5 border border-tui-border text-[10px] font-bold uppercase tracking-widest text-center hover:bg-tui-dim/10 transition-colors"
-                      >
-                        Browse_Sessions
-                      </Link>
+                        <Link 
+                         to="/sessions"
+                         search={{ node: node.base_url }}
+                         className="flex-1 py-1.5 border border-tui-border text-[10px] font-bold uppercase tracking-widest text-center hover:bg-tui-dim/10 transition-colors"
+                       >
+                         Browse Sessions
+                       </Link>
+
                       <a 
                         href={node.base_url}
                         target="_blank"
@@ -144,7 +146,7 @@ function NodesPage() {
           <section ref={manualAttachRef} className="border border-tui-border bg-black/20 p-4 space-y-4">
             <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
               <Plus size={14} className="text-tui-accent" />
-              Manual_Attach
+              Manual Attach
             </h3>
             <form onSubmit={handleManualAdd} className="space-y-2">
               <input 
@@ -159,7 +161,7 @@ function NodesPage() {
                 disabled={probeNode.isPending || !newUrl}
                 className="w-full py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase tracking-widest hover:bg-tui-accent/90 transition-colors disabled:opacity-50"
               >
-                {probeNode.isPending ? 'CONNECTING...' : 'CONNECT_NODE'}
+                {probeNode.isPending ? 'Connecting...' : 'Connect Node'}
               </button>
             </form>
           </section>
@@ -167,11 +169,11 @@ function NodesPage() {
           <section className="border border-tui-border p-4 space-y-3">
              <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-tui-dim">
               <Info size={14} />
-              About_Discovery
+              About Discovery
             </h3>
             <div className="space-y-2 text-[10px] text-tui-dim/80 leading-relaxed font-mono">
               <p>
-                <span className="text-tui-accent font-bold">Local_LSOF:</span> Scans your local machine for listening processes named "opencode".
+                <span className="text-tui-accent font-bold">Local LSOF:</span> Scans your local machine for listening processes named "opencode".
               </p>
               <p>
                 <span className="text-tui-accent font-bold">Config:</span> Static endpoints defined in the server configuration.

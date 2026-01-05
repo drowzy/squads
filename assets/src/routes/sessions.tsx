@@ -155,7 +155,7 @@ function SessionsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tighter uppercase flex items-center gap-3">
             <Terminal className="text-tui-accent" size={24} />
-            {filter === 'active' ? 'ACTIVE_SESSIONS' : filter === 'history' ? 'SESSION_HISTORY' : 'ALL_SESSIONS'}
+            {filter === 'active' ? 'Active Sessions' : filter === 'history' ? 'Session History' : 'All Sessions'}
           </h1>
           <p className="text-xs text-tui-dim mt-1 uppercase tracking-widest">
             {filter === 'active' ? 'Running, pending, and paused sessions across all projects' : 
@@ -196,7 +196,7 @@ function SessionsPage() {
          <div className="text-center py-20 border border-tui-border bg-black/20">
            <Terminal className="mx-auto text-tui-dim mb-4" size={48} />
            <h3 className="text-lg font-bold uppercase tracking-widest mb-2">
-             {filter === 'active' ? 'NO_ACTIVE_SESSIONS' : filter === 'history' ? 'NO_SESSION_HISTORY' : 'NO_SESSIONS_FOUND'}
+             {filter === 'active' ? 'No active sessions' : filter === 'history' ? 'No session history' : 'No sessions found'}
            </h3>
            <p className="text-sm text-tui-dim">
              {filter === 'active' ? 'No running, pending, or paused sessions found.' : 
@@ -208,7 +208,7 @@ function SessionsPage() {
                to="/agent"
                className="px-4 py-2 border border-tui-accent text-tui-accent text-xs font-bold uppercase tracking-widest hover:bg-tui-accent hover:text-tui-bg transition-colors"
              >
-               Start_New_Session
+               Start New Session
              </Link>
            </div>
          </div>

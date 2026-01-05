@@ -66,7 +66,7 @@ function MailSystem() {
     return (
       <div className="h-full flex flex-col items-center justify-center text-tui-accent">
         <AlertCircle size={48} className="mb-4" />
-        <h3 className="text-xl font-bold">MAIL_SUBSYSTEM_OFFLINE</h3>
+        <h3 className="text-xl font-bold">Mail Subsystem Offline</h3>
         <p className="text-sm opacity-70">Verify backend mail endpoints</p>
       </div>
     )
@@ -76,7 +76,7 @@ function MailSystem() {
     <div className="h-full flex flex-col space-y-4 md:space-y-6">
       <div className="flex justify-between items-start md:items-end gap-4">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase">Squad_Command / Mail</h2>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase">Squad Command / Mail</h2>
           <p className="text-tui-dim text-xs md:text-sm italic hidden sm:block">Secure inter-agent and mentor communication</p>
         </div>
         <button 
@@ -85,14 +85,14 @@ function MailSystem() {
           className="bg-tui-accent text-tui-bg px-3 md:px-4 py-2 text-xs font-bold flex items-center gap-2 hover:bg-tui-accent/90 transition-colors uppercase tracking-widest shrink-0"
         >
           <Plus size={16} />
-          <span className="hidden sm:inline">Compose_New</span>
+          <span className="hidden sm:inline">Compose New</span>
         </button>
       </div>
 
       <ListToolbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="SEARCH_THREADS..."
+        searchPlaceholder="Search threads..."
       />
 
       <div className="flex-1 border border-tui-border flex flex-col md:flex-row bg-tui-bg/50 overflow-hidden relative">
@@ -103,17 +103,17 @@ function MailSystem() {
           className="md:hidden p-3 border-b border-tui-border flex items-center gap-2 text-xs font-bold text-tui-dim"
         >
           <Inbox size={16} />
-          INBOX ({threads.reduce((acc, t) => acc + t.unread_count, 0)})
+          Inbox ({threads.reduce((acc, t) => acc + t.unread_count, 0)})
           <ChevronRight size={14} className={`ml-auto transition-transform ${showFolders ? 'rotate-90' : ''}`} />
         </button>
 
         {/* Sidebar Nav - hidden on mobile unless toggled */}
         <div className={`${showFolders ? 'block' : 'hidden'} md:block w-full md:w-48 border-b md:border-b-0 md:border-r border-tui-border flex flex-col bg-tui-dim/5`}>
           <nav className="p-2 space-y-1">
-            <MailSidebarItem icon={<Inbox size={16} />} label="INBOX" count={threads.reduce((acc, t) => acc + t.unread_count, 0)} active onClick={() => setShowFolders(false)} />
-            <MailSidebarItem icon={<Send size={16} />} label="SENT" onClick={() => setShowFolders(false)} />
-            <MailSidebarItem icon={<Archive size={16} />} label="ARCHIVE" onClick={() => setShowFolders(false)} />
-            <MailSidebarItem icon={<Trash2 size={16} />} label="TRASH" onClick={() => setShowFolders(false)} />
+            <MailSidebarItem icon={<Inbox size={16} />} label="Inbox" count={threads.reduce((acc, t) => acc + t.unread_count, 0)} active onClick={() => setShowFolders(false)} />
+            <MailSidebarItem icon={<Send size={16} />} label="Sent" onClick={() => setShowFolders(false)} />
+            <MailSidebarItem icon={<Archive size={16} />} label="Archive" onClick={() => setShowFolders(false)} />
+            <MailSidebarItem icon={<Trash2 size={16} />} label="Trash" onClick={() => setShowFolders(false)} />
           </nav>
         </div>
 
@@ -194,14 +194,14 @@ function ThreadView({ threadId, onBack }: { threadId: string; onBack: () => void
       setReplyBody('')
       addNotification({
         type: 'success',
-        title: 'MAIL_SENT',
+        title: 'Mail Sent',
         message: 'Reply delivered successfully.'
       })
     } catch (error) {
       console.error('Failed to send reply:', error)
       addNotification({
         type: 'error',
-        title: 'TRANSMISSION_FAILURE',
+        title: 'Transmission Failure',
         message: 'Failed to deliver reply. Check subsystem status.'
       })
     }
@@ -328,7 +328,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
       await sendMutation.mutateAsync({ to, subject, body_md: body, sender_name: sender, project_id: activeProject?.id })
       addNotification({
         type: 'success',
-        title: 'MAIL_SENT',
+        title: 'Mail Sent',
         message: 'Message delivered successfully.'
       })
       onClose()
@@ -336,7 +336,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
       console.error('Failed to send message:', error)
       addNotification({
         type: 'error',
-        title: 'TRANSMISSION_FAILURE',
+        title: 'Transmission Failure',
         message: 'Failed to deliver message. Check subsystem status.'
       })
     }
@@ -355,7 +355,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
       <div className="p-3 border-b border-tui-accent bg-tui-accent/10 flex justify-between items-center">
         <span className="text-xs font-bold text-tui-accent tracking-widest uppercase flex items-center gap-2">
           <Plus size={14} />
-          New_Message
+          New Message
         </span>
         <button 
           aria-label="Close compose modal"
@@ -378,7 +378,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
                   : 'border-tui-border text-tui-dim hover:border-tui-text'
               }`}
             >
-              HUMAN
+              Human
             </button>
             {agents.map(agent => (
               <button
@@ -390,7 +390,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
                     : 'border-tui-border text-tui-dim hover:border-tui-text'
                 }`}
               >
-                {agent.name.toUpperCase()}
+                {agent.name}
               </button>
             ))}
           </div>
@@ -409,11 +409,11 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
                     : 'border-tui-border text-tui-dim hover:border-tui-text'
                 }`}
               >
-                {agent.name.toUpperCase()}
+                {agent.name}
               </button>
             ))}
             {agents.filter(a => a.name !== sender).length === 0 && (
-              <span className="text-xs text-tui-dim italic uppercase">No_Recipients_Available</span>
+              <span className="text-xs text-tui-dim italic uppercase">No Recipients Available</span>
             )}
           </div>
         </div>
@@ -430,7 +430,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="space-y-2 flex-1 flex flex-col">
-          <label className="text-xs font-bold text-tui-dim uppercase tracking-widest">Message_Body</label>
+          <label className="text-xs font-bold text-tui-dim uppercase tracking-widest">Message Body</label>
           <textarea 
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -481,11 +481,11 @@ function ThreadItem({ thread, onClick }: { thread: MailThread; onClick: () => vo
         </h4>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-xs bg-tui-dim/20 px-1.5 py-0.5 rounded text-tui-dim">
-            {thread.message_count} MSGS
+            {thread.message_count} messages
           </span>
           {thread.unread_count > 0 && (
             <span className="text-xs bg-tui-accent text-tui-bg px-1.5 py-0.5 rounded font-bold">
-              {thread.unread_count} NEW
+              {thread.unread_count} new
             </span>
           )}
         </div>
