@@ -13,6 +13,7 @@ defmodule Squads.Sessions do
   alias Squads.Agents.Roles
   alias Squads.Sessions.Session
   alias Squads.Tickets.Ticket
+  alias Squads.OpenCode.Resolver
   alias Squads.OpenCode.Client, as: OpenCodeClient
 
   require Logger
@@ -217,38 +218,17 @@ defmodule Squads.Sessions do
   def create_and_start_session(attrs, opencode_opts \\ []) do
     Ecto.Multi.new()
     |> Ecto.Multi.insert(:session, Session.changeset(%Session{}, attrs))
-    |> Ecto.Multi.run(:opencode_server, fn _repo, %{session: session} ->
-      agent = Repo.get(Squads.Agents.Agent, session.agent_id) |> Repo.preload(squad: :project)
-      squad = agent && agent.squad
-
-      if agent && squad do
-        Squads.OpenCode.Server.ensure_running(squad.project_id, squad.project.path)
-      else
-        {:error, :agent_or_squad_not_found}
-      end
-    end)
-    |> Ecto.Multi.run(:opencode_session, fn _repo,
-                                            %{session: session, opencode_server: base_url} ->
-      title = attrs[:title] || "Session #{session.id}"
-      directory = resolve_session_directory(session, attrs[:worktree_path])
-
-      opts =
-        opencode_opts
-        |> Keyword.merge(title: title, base_url: base_url)
-        |> Keyword.put(:directory, directory)
-
-      case OpenCodeClient.create_session(opts) do
-        {:ok, %{"id" => opencode_id}} -> {:ok, opencode_id}
-        {:error, reason} -> {:error, reason}
-      end
+    |> Ecto.Multi.run(:opencode_startup, fn _repo, %{session: session} ->
+      start_opencode_session_orchestration(session, attrs, opencode_opts)
     end)
     |> Ecto.Multi.update(:updated_session, fn %{
                                                 session: session,
-                                                opencode_session: opencode_id,
-                                                opencode_server: base_url
+                                                opencode_startup: %{
+                                                  opencode_id: opencode_id,
+                                                  base_url: base_url,
+                                                  directory: directory
+                                                }
                                               } ->
-      directory = resolve_session_directory(session, attrs[:worktree_path])
-
       metadata = Map.put(session.metadata || %{}, "opencode_base_url", base_url)
 
       start_attrs = %{
@@ -265,7 +245,7 @@ defmodule Squads.Sessions do
       {:ok, %{updated_session: session}} ->
         {:ok, session}
 
-      {:error, :opencode_session, reason, _changes} ->
+      {:error, :opencode_startup, reason, _changes} ->
         Logger.error("Failed to start OpenCode session: #{inspect(reason)}")
         {:error, {:opencode_error, reason}}
 
@@ -285,41 +265,20 @@ defmodule Squads.Sessions do
     if session.status != "pending" do
       {:error, :already_started}
     else
-      agent = Repo.get(Squads.Agents.Agent, session.agent_id) |> Repo.preload(squad: :project)
-      squad = agent && agent.squad
+      case start_opencode_session_orchestration(session, opencode_opts, opencode_opts) do
+        {:ok, %{opencode_id: opencode_id, base_url: base_url, directory: directory}} ->
+          metadata = Map.put(session.metadata || %{}, "opencode_base_url", base_url)
 
-      if agent && squad do
-        case Squads.OpenCode.Server.ensure_running(squad.project_id, squad.project.path) do
-          {:ok, base_url} ->
-            title = opencode_opts[:title] || "Session #{session.id}"
-            directory = resolve_session_directory(session, opencode_opts[:worktree_path])
+          session
+          |> Session.start_changeset(%{
+            opencode_session_id: opencode_id,
+            worktree_path: directory,
+            metadata: metadata
+          })
+          |> Repo.update()
 
-            opts =
-              opencode_opts
-              |> Keyword.merge(title: title, base_url: base_url)
-              |> Keyword.put(:directory, directory)
-
-            case OpenCodeClient.create_session(opts) do
-              {:ok, %{"id" => opencode_id}} ->
-                metadata = Map.put(session.metadata || %{}, "opencode_base_url", base_url)
-
-                session
-                |> Session.start_changeset(%{
-                  opencode_session_id: opencode_id,
-                  worktree_path: directory,
-                  metadata: metadata
-                })
-                |> Repo.update()
-
-              {:error, reason} ->
-                {:error, {:opencode_error, reason}}
-            end
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-      else
-        {:error, :agent_or_squad_not_found}
+        {:error, reason} ->
+          {:error, {:opencode_error, reason}}
       end
     end
   end
@@ -343,7 +302,7 @@ defmodule Squads.Sessions do
         opencode_opts = with_base_url(session, [])
 
         # Abort OpenCode session first
-        case OpenCodeClient.abort_session(session.opencode_session_id, opencode_opts) do
+        case OpenCodeClient.client().abort_session(session.opencode_session_id, opencode_opts) do
           {:ok, _} ->
             session
             |> Session.finish_changeset(exit_code)
@@ -374,13 +333,10 @@ defmodule Squads.Sessions do
       not String.starts_with?(session.opencode_session_id, "ses") ->
         {:error, :no_opencode_session}
 
-      test_env?() ->
-        {:ok, true}
-
       true ->
         opts = with_base_url(session, opencode_opts)
 
-        case OpenCodeClient.abort_session(session.opencode_session_id, opts) do
+        case OpenCodeClient.client().abort_session(session.opencode_session_id, opts) do
           {:ok, response} ->
             {:ok, response}
 
@@ -416,14 +372,11 @@ defmodule Squads.Sessions do
       not String.starts_with?(session.opencode_session_id, "ses") ->
         apply_local_archive.()
 
-      test_env?() ->
-        apply_local_archive.()
-
       true ->
         opts = with_base_url(session, opencode_opts)
         payload = %{time: %{archived: DateTime.to_unix(archived_at, :millisecond)}}
 
-        case OpenCodeClient.update_session(session.opencode_session_id, payload, opts) do
+        case OpenCodeClient.client().update_session(session.opencode_session_id, payload, opts) do
           {:ok, _} ->
             apply_local_archive.()
 
@@ -514,7 +467,7 @@ defmodule Squads.Sessions do
     if session.opencode_session_id do
       opts = with_base_url(session, [])
 
-      case OpenCodeClient.get_sessions_status(opts) do
+      case OpenCodeClient.client().get_sessions_status(opts) do
         {:ok, statuses} ->
           case Map.get(statuses, session.opencode_session_id) do
             nil ->
@@ -574,7 +527,7 @@ defmodule Squads.Sessions do
           base_url: base_url
         )
 
-        result = OpenCodeClient.send_message(session.opencode_session_id, params, opts)
+        result = OpenCodeClient.client().send_message(session.opencode_session_id, params, opts)
 
         case result do
           {:ok, _} ->
@@ -606,7 +559,7 @@ defmodule Squads.Sessions do
     case ensure_session_running(session, opencode_opts) do
       {:ok, session} ->
         opts = with_base_url(session, opencode_opts)
-        OpenCodeClient.send_message_async(session.opencode_session_id, params, opts)
+        OpenCodeClient.client().send_message_async(session.opencode_session_id, params, opts)
 
       {:error, reason} ->
         {:error, reason}
@@ -619,7 +572,7 @@ defmodule Squads.Sessions do
   def get_messages(session, opts \\ []) do
     if session.opencode_session_id do
       opts = with_base_url(session, opts)
-      OpenCodeClient.list_messages(session.opencode_session_id, opts)
+      OpenCodeClient.client().list_messages(session.opencode_session_id, opts)
     else
       {:error, :no_opencode_session}
     end
@@ -631,7 +584,7 @@ defmodule Squads.Sessions do
   def get_diff(session, opts \\ []) do
     if session.opencode_session_id do
       opts = with_base_url(session, opts)
-      OpenCodeClient.get_session_diff(session.opencode_session_id, opts)
+      OpenCodeClient.client().get_session_diff(session.opencode_session_id, opts)
     else
       {:error, :no_opencode_session}
     end
@@ -643,7 +596,7 @@ defmodule Squads.Sessions do
   def get_todos(session, opts \\ []) do
     if session.opencode_session_id do
       opts = with_base_url(session, opts)
-      OpenCodeClient.get_session_todos(session.opencode_session_id, opts)
+      OpenCodeClient.client().get_session_todos(session.opencode_session_id, opts)
     else
       {:error, :no_opencode_session}
     end
@@ -652,6 +605,135 @@ defmodule Squads.Sessions do
   # ============================================================================
   # Session Commands and Dispatch
   # ============================================================================
+
+  @doc """
+  Dispatches a prompt to a session (local or external).
+  """
+  def dispatch_prompt(id, prompt, opts \\ []) do
+    with {:ok, target} <- resolve_target(id, opts) do
+      case target do
+        %Session{} = session ->
+          send_prompt(session, prompt, opts)
+
+        base_url when is_binary(base_url) ->
+          opencode_opts = Keyword.put(opts, :base_url, base_url)
+
+          OpenCodeClient.client().send_message(
+            id,
+            %{parts: [%{type: "text", text: prompt}]},
+            opencode_opts
+          )
+      end
+    end
+  end
+
+  @doc """
+  Dispatches a prompt asynchronously to a session (local or external).
+  """
+  def dispatch_prompt_async(id, prompt, opts \\ []) do
+    with {:ok, target} <- resolve_target(id, opts) do
+      case target do
+        %Session{} = session ->
+          send_prompt_async(session, prompt, opts)
+
+        base_url when is_binary(base_url) ->
+          opencode_opts = Keyword.put(opts, :base_url, base_url)
+
+          OpenCodeClient.client().send_message_async(
+            id,
+            %{parts: [%{type: "text", text: prompt}]},
+            opencode_opts
+          )
+      end
+    end
+  end
+
+  @doc """
+  Dispatches a command to a session (local or external).
+  """
+  def dispatch_command(id, command, opts \\ []) do
+    with {:ok, target} <- resolve_target(id, opts) do
+      case target do
+        %Session{} = session ->
+          execute_command(session, command, opts)
+
+        base_url when is_binary(base_url) ->
+          opencode_opts = Keyword.put(opts, :base_url, base_url)
+          OpenCodeClient.client().execute_command(id, command, opencode_opts)
+      end
+    end
+  end
+
+  @doc """
+  Dispatches a shell command to a session (local or external).
+  """
+  def dispatch_shell(id, command, opts \\ []) do
+    with {:ok, target} <- resolve_target(id, opts) do
+      case target do
+        %Session{} = session ->
+          run_shell(session, command, opts)
+
+        base_url when is_binary(base_url) ->
+          opencode_opts = Keyword.put(opts, :base_url, base_url)
+          OpenCodeClient.client().run_shell(id, command, opencode_opts)
+      end
+    end
+  end
+
+  @doc """
+  Dispatches an abort request to a session (local or external).
+  """
+  def dispatch_abort(id, opts \\ []) do
+    with {:ok, target} <- resolve_target(id, opts) do
+      case target do
+        %Session{} = session ->
+          abort_session(session, opts)
+
+        base_url when is_binary(base_url) ->
+          opencode_opts = Keyword.put(opts, :base_url, base_url)
+          OpenCodeClient.client().abort_session(id, opencode_opts)
+      end
+    end
+  end
+
+  @doc """
+  Dispatches an archive request to a session (local or external).
+  """
+  def dispatch_archive(id, opts \\ []) do
+    with {:ok, target} <- resolve_target(id, opts) do
+      case target do
+        %Session{} = session ->
+          archive_session(session, opts)
+
+        base_url when is_binary(base_url) ->
+          archived_at = DateTime.utc_now() |> DateTime.truncate(:second)
+          payload = %{time: %{archived: DateTime.to_unix(archived_at, :millisecond)}}
+          opencode_opts = Keyword.put(opts, :base_url, base_url)
+          OpenCodeClient.client().update_session(id, payload, opencode_opts)
+      end
+    end
+  end
+
+  defp resolve_target(id, opts) do
+    node_url = opts[:node_url]
+
+    cond do
+      is_binary(node_url) and node_url != "" ->
+        {:ok, node_url}
+
+      true ->
+        case get_session(id) do
+          nil ->
+            case get_session_by_opencode_id(id) do
+              nil -> {:error, :not_found}
+              session -> {:ok, session}
+            end
+
+          session ->
+            {:ok, session}
+        end
+    end
+  end
 
   def local_command?(command) when is_binary(command) do
     command in [
@@ -674,64 +756,121 @@ defmodule Squads.Sessions do
       "/squads-status" ->
         agent = Agents.get_agent(session.agent_id)
 
-        if agent do
-          status = get_squad_status(agent.squad_id)
-          {:ok, %{"output" => Jason.encode!(status, pretty: true)}}
-        else
-          {:error, :agent_not_found}
+        cond do
+          is_nil(session.opencode_session_id) or session.status == "pending" ->
+            if session.status == "pending" do
+              {:error, :session_not_active}
+            else
+              {:error, :no_opencode_session}
+            end
+
+          is_nil(agent) ->
+            {:error, :agent_not_found}
+
+          true ->
+            status = get_squad_status(agent.squad_id)
+            {:ok, %{"output" => Jason.encode!(status, pretty: true)}}
         end
 
       "/squads-tickets" ->
         agent = Agents.get_agent(session.agent_id)
         squad = agent && Squads.Squads.get_squad(agent.squad_id)
 
-        if squad do
-          summary = Squads.Tickets.get_tickets_summary(squad.project_id)
-          {:ok, %{"output" => Jason.encode!(summary, pretty: true)}}
-        else
-          {:error, :squad_not_found}
+        cond do
+          is_nil(session.opencode_session_id) or session.status == "pending" ->
+            if session.status == "pending" do
+              {:error, :session_not_active}
+            else
+              {:error, :no_opencode_session}
+            end
+
+          is_nil(squad) ->
+            {:error, :squad_not_found}
+
+          true ->
+            summary = Squads.Tickets.get_tickets_summary(squad.project_id)
+            {:ok, %{"output" => Jason.encode!(summary, pretty: true)}}
         end
 
       "/check-mail" ->
         agent = Agents.get_agent(session.agent_id)
 
-        if agent do
-          messages = Squads.Mail.list_inbox(agent.id, limit: 10)
+        cond do
+          is_nil(session.opencode_session_id) or session.status == "pending" ->
+            if session.status == "pending" do
+              {:error, :session_not_active}
+            else
+              {:error, :no_opencode_session}
+            end
 
-          output =
-            messages
-            |> Enum.map(fn m -> "[#{m.id}] From: #{m.sender.name} - #{m.subject}" end)
-            |> Enum.join("\n")
+          is_nil(agent) ->
+            {:error, :agent_not_found}
 
-          {:ok, %{"output" => output}}
-        else
-          {:error, :agent_not_found}
+          true ->
+            messages = Squads.Mail.list_inbox(agent.id, limit: 10)
+
+            output =
+              messages
+              |> Enum.map(fn m -> "[#{m.id}] From: #{m.sender.name} - #{m.subject}" end)
+              |> Enum.join("\n")
+
+            {:ok, %{"output" => output}}
         end
 
       "/sessions" ->
-        {:ok, %{"output" => format_session_listing(session.agent_id)}}
+        cond do
+          is_nil(session.opencode_session_id) or session.status == "pending" ->
+            if session.status == "pending" do
+              {:error, :session_not_active}
+            else
+              {:error, :no_opencode_session}
+            end
+
+          true ->
+            {:ok, %{"output" => format_session_listing(session.agent_id)}}
+        end
 
       "/compact" ->
-        {:ok, %{"output" => "Compaction is not available for Squads-managed sessions yet."}}
+        cond do
+          is_nil(session.opencode_session_id) or session.status == "pending" ->
+            if session.status == "pending" do
+              {:error, :session_not_active}
+            else
+              {:error, :no_opencode_session}
+            end
+
+          true ->
+            {:ok, %{"output" => "Compaction is not available for Squads-managed sessions yet."}}
+        end
 
       "/help" ->
-        output =
-          [
-            "Squads commands:",
-            "  /squads-status      Show current squad status",
-            "  /squads-tickets     Show ticket board summary",
-            "  /check-mail         Show agent inbox preview",
-            "",
-            "OpenCode commands:",
-            "  (Forwarded to OpenCode server; availability depends on that server/config)",
-            "",
-            "Notes:",
-            "  If Squads can’t find the correct OpenCode server for this project, it will attempt discovery",
-            "  (via local listening ports) and may start a server in the project directory if needed."
-          ]
-          |> Enum.join("\n")
+        cond do
+          is_nil(session.opencode_session_id) or session.status == "pending" ->
+            if session.status == "pending" do
+              {:error, :session_not_active}
+            else
+              {:error, :no_opencode_session}
+            end
 
-        {:ok, %{"output" => output}}
+          true ->
+            output =
+              [
+                "Squads commands:",
+                "  /squads-status      Show current squad status",
+                "  /squads-tickets     Show ticket board summary",
+                "  /check-mail         Show agent inbox preview",
+                "",
+                "OpenCode commands:",
+                "  (Forwarded to OpenCode server; availability depends on that server/config)",
+                "",
+                "Notes:",
+                "  If Squads can’t find the correct OpenCode server for this project, it will attempt discovery",
+                "  (via local listening ports) and may start a server in the project directory if needed."
+              ]
+              |> Enum.join("\n")
+
+            {:ok, %{"output" => output}}
+        end
 
       _ ->
         Logger.debug(
@@ -751,7 +890,7 @@ defmodule Squads.Sessions do
                   "Executing command #{command} on session #{session.opencode_session_id} with opts: #{inspect(opts)}"
                 )
 
-                case OpenCodeClient.execute_command(
+                case OpenCodeClient.client().execute_command(
                        session.opencode_session_id,
                        command,
                        opts
@@ -790,24 +929,18 @@ defmodule Squads.Sessions do
       Sessions.run_shell(session, "git status", agent: "coder")
   """
   def run_shell(session, command, params \\ [], opencode_opts \\ []) do
-    cond do
-      is_nil(session.opencode_session_id) ->
-        {:error, :no_opencode_session}
+    case ensure_session_running(session, opencode_opts) do
+      {:ok, session} ->
+        opts = with_base_url(session, Keyword.merge(params, opencode_opts))
 
-      true ->
-        case ensure_session_running(session, opencode_opts) do
-          {:ok, session} ->
-            opts = with_base_url(session, Keyword.merge(params, opencode_opts))
+        OpenCodeClient.client().run_shell(
+          session.opencode_session_id,
+          command,
+          opts
+        )
 
-            OpenCodeClient.run_shell(
-              session.opencode_session_id,
-              command,
-              opts
-            )
-
-          {:error, reason} ->
-            {:error, reason}
-        end
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -824,51 +957,55 @@ defmodule Squads.Sessions do
     * `:no_reply` - If true, don't wait for AI response.
   """
   def send_prompt(session, prompt, opts \\ []) when is_binary(prompt) do
-    parts = [%{type: "text", text: prompt}]
-    params = %{parts: parts}
+    if is_nil(prompt) || String.trim(prompt) == "" do
+      {:error, :missing_prompt}
+    else
+      parts = [%{type: "text", text: prompt}]
+      params = %{parts: parts}
 
-    agent =
-      case session.agent_id do
-        nil -> nil
-        agent_id -> Agents.get_agent(agent_id)
-      end
+      agent =
+        case session.agent_id do
+          nil -> nil
+          agent_id -> Agents.get_agent(agent_id)
+        end
 
-    model =
-      cond do
-        opts[:model] ->
-          opts[:model]
+      model =
+        cond do
+          opts[:model] ->
+            opts[:model]
 
-        agent && is_binary(agent.model) && String.trim(agent.model) != "" ->
-          String.trim(agent.model)
+          agent && is_binary(agent.model) && String.trim(agent.model) != "" ->
+            String.trim(agent.model)
 
-        true ->
-          nil
-      end
+          true ->
+            nil
+        end
 
-    system_override =
-      cond do
-        opts[:system] ->
-          opts[:system]
+      system_override =
+        cond do
+          opts[:system] ->
+            opts[:system]
 
-        agent && is_binary(agent.system_instruction) &&
-            String.trim(agent.system_instruction) != "" ->
-          String.trim(agent.system_instruction)
+          agent && is_binary(agent.system_instruction) &&
+              String.trim(agent.system_instruction) != "" ->
+            String.trim(agent.system_instruction)
 
-        agent ->
-          Roles.system_instruction(agent.role, agent.level)
+          agent ->
+            Roles.system_instruction(agent.role, agent.level)
 
-        true ->
-          nil
-      end
+          true ->
+            nil
+        end
 
-    params = if model, do: Map.put(params, :model, model), else: params
-    params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
+      params = if model, do: Map.put(params, :model, model), else: params
+      params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
 
-    params = if opts[:no_reply], do: Map.put(params, :no_reply, opts[:no_reply]), else: params
-    params = if system_override, do: Map.put(params, :system, system_override), else: params
+      params = if opts[:no_reply], do: Map.put(params, :no_reply, opts[:no_reply]), else: params
+      params = if system_override, do: Map.put(params, :system, system_override), else: params
 
-    opts = with_base_url(session, Keyword.drop(opts, [:model, :agent, :no_reply, :system]))
-    send_message(session, params, opts)
+      opts = with_base_url(session, Keyword.drop(opts, [:model, :agent, :no_reply, :system]))
+      send_message(session, params, opts)
+    end
   end
 
   @doc """
@@ -877,50 +1014,54 @@ defmodule Squads.Sessions do
   Same as `send_prompt/3` but doesn't wait for a response.
   """
   def send_prompt_async(session, prompt, opts \\ []) when is_binary(prompt) do
-    parts = [%{type: "text", text: prompt}]
-    params = %{parts: parts}
+    if is_nil(prompt) || String.trim(prompt) == "" do
+      {:error, :missing_prompt}
+    else
+      parts = [%{type: "text", text: prompt}]
+      params = %{parts: parts}
 
-    agent =
-      case session.agent_id do
-        nil -> nil
-        agent_id -> Agents.get_agent(agent_id)
-      end
+      agent =
+        case session.agent_id do
+          nil -> nil
+          agent_id -> Agents.get_agent(agent_id)
+        end
 
-    model =
-      cond do
-        opts[:model] ->
-          opts[:model]
+      model =
+        cond do
+          opts[:model] ->
+            opts[:model]
 
-        agent && is_binary(agent.model) && String.trim(agent.model) != "" ->
-          String.trim(agent.model)
+          agent && is_binary(agent.model) && String.trim(agent.model) != "" ->
+            String.trim(agent.model)
 
-        true ->
-          nil
-      end
+          true ->
+            nil
+        end
 
-    system_override =
-      cond do
-        opts[:system] ->
-          opts[:system]
+      system_override =
+        cond do
+          opts[:system] ->
+            opts[:system]
 
-        agent && is_binary(agent.system_instruction) &&
-            String.trim(agent.system_instruction) != "" ->
-          String.trim(agent.system_instruction)
+          agent && is_binary(agent.system_instruction) &&
+              String.trim(agent.system_instruction) != "" ->
+            String.trim(agent.system_instruction)
 
-        agent ->
-          Roles.system_instruction(agent.role, agent.level)
+          agent ->
+            Roles.system_instruction(agent.role, agent.level)
 
-        true ->
-          nil
-      end
+          true ->
+            nil
+        end
 
-    params = if model, do: Map.put(params, :model, model), else: params
-    params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
+      params = if model, do: Map.put(params, :model, model), else: params
+      params = if opts[:agent], do: Map.put(params, :agent, opts[:agent]), else: params
 
-    params = if system_override, do: Map.put(params, :system, system_override), else: params
+      params = if system_override, do: Map.put(params, :system, system_override), else: params
 
-    opts = with_base_url(session, Keyword.drop(opts, [:model, :agent, :system]))
-    send_message_async(session, params, opts)
+      opts = with_base_url(session, Keyword.drop(opts, [:model, :agent, :system]))
+      send_message_async(session, params, opts)
+    end
   end
 
   # ============================================================================
@@ -950,8 +1091,38 @@ defmodule Squads.Sessions do
   defp map_opencode_status(%{"status" => "aborted"}), do: "cancelled"
   defp map_opencode_status(_), do: "unknown"
 
+  defp start_opencode_session_orchestration(session, attrs, opencode_opts) do
+    agent = Repo.get(Squads.Agents.Agent, session.agent_id) |> Repo.preload(squad: :project)
+    squad = agent && agent.squad
+
+    with {:context, %{project_id: pid, path: path}} <-
+           if(squad, do: {:context, squad}, else: {:error, :agent_or_squad_not_found}),
+         {:ok, base_url} <- Squads.OpenCode.Server.ensure_running(pid, path) do
+      title = attrs[:title] || "Session #{session.id}"
+      directory = resolve_session_directory(session, attrs[:worktree_path])
+
+      opts =
+        opencode_opts
+        |> Keyword.merge(title: title, base_url: base_url)
+        |> Keyword.put(:directory, directory)
+
+      case OpenCodeClient.client().create_session(opts) do
+        {:ok, %{"id" => opencode_id}} ->
+          {:ok, %{opencode_id: opencode_id, base_url: base_url, directory: directory}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp ensure_session_running(session, opencode_opts) do
     cond do
+      session.status in ["completed", "failed", "cancelled", "pending"] ->
+        {:error, :session_not_active}
+
       is_nil(session.opencode_session_id) ->
         {:error, :no_opencode_session}
 
@@ -961,21 +1132,12 @@ defmodule Squads.Sessions do
       session.status == "running" ->
         {:ok, session}
 
-      test_env?() ->
-        # Keep unit tests deterministic (don't hit a real OpenCode server)
-        # unless explicitly bypassed for integration tests.
-        if Application.get_env(:squads, :bypass_test_session_block, false) do
-          {:ok, session}
-        else
-          {:error, :session_not_active}
-        end
-
       true ->
         # If the session is not running, we check OpenCode to see if it's still alive.
         # If it's aborted or not found, we attempt to resume it.
         opts = with_base_url(session, opencode_opts)
 
-        case OpenCodeClient.get_session(session.opencode_session_id, opts) do
+        case OpenCodeClient.client().get_session(session.opencode_session_id, opts) do
           {:ok, remote} ->
             if map_opencode_status(remote) in ["running", "paused"] do
               sync_local_to_running(session)
@@ -1032,7 +1194,7 @@ defmodule Squads.Sessions do
               |> Keyword.merge(title: title, base_url: base_url)
               |> Keyword.put(:directory, directory)
 
-            case OpenCodeClient.create_session(opts) do
+            case OpenCodeClient.client().create_session(opts) do
               {:ok, %{"id" => opencode_id}} ->
                 metadata = Map.put(session.metadata || %{}, "opencode_base_url", base_url)
 
@@ -1084,10 +1246,6 @@ defmodule Squads.Sessions do
   defp format_session_time(nil), do: "n/a"
   defp format_session_time(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
 
-  defp test_env? do
-    Code.ensure_loaded?(Mix) and function_exported?(Mix, :env, 0) and Mix.env() == :test
-  end
-
   defp get_base_url_for_session(session) do
     Logger.debug("Getting base URL for session #{session.id}")
 
@@ -1106,29 +1264,15 @@ defmodule Squads.Sessions do
             project_id: squad.project_id
           )
 
-          case discover_base_url(project.path, session.metadata) do
-            nil ->
-              Logger.info("No running OpenCode server discovered; starting one",
-                project_id: squad.project_id
-              )
-
-              case Squads.OpenCode.Server.ensure_running(squad.project_id, project.path) do
-                {:ok, base_url} ->
-                  maybe_persist_base_url(session, base_url)
-                  base_url
-
-                {:error, reason} ->
-                  Logger.error("Failed to start OpenCode server",
-                    project_id: squad.project_id,
-                    reason: inspect(reason)
-                  )
-
-                  nil
-              end
-
-            base_url ->
+          case Resolver.resolve_base_url(project.path,
+                 base_url: metadata_base_url(session.metadata)
+               ) do
+            {:ok, base_url} ->
               maybe_persist_base_url(session, base_url)
               base_url
+
+            _ ->
+              nil
           end
 
         {:error, reason} ->
@@ -1157,79 +1301,6 @@ defmodule Squads.Sessions do
     end
   end
 
-  defp discover_base_url(project_path, metadata) when is_binary(project_path) do
-    configured = configured_base_url()
-
-    case metadata_base_url(metadata) do
-      base_url when is_binary(base_url) and base_url != "" ->
-        probe_opencode_project(base_url, project_path) ||
-          discover_base_url_from_local(project_path) ||
-          probe_opencode_project(configured, project_path)
-
-      _ ->
-        discover_base_url_from_local(project_path) ||
-          probe_opencode_project(configured, project_path)
-    end
-  end
-
-  defp discover_base_url(_project_path, _metadata), do: nil
-
-  defp discover_base_url_from_local(project_path) do
-    local_opencode_candidates()
-    |> Enum.find_value(fn base_url -> probe_opencode_project(base_url, project_path) end)
-  end
-
-  defp probe_opencode_project(base_url, project_path) do
-    case OpenCodeClient.get_current_project(base_url: base_url) do
-      {:ok, project} when is_map(project) ->
-        path = project["worktree"] || project["path"]
-
-        if is_binary(path) and Path.expand(path) == Path.expand(project_path) do
-          Logger.info("Discovered OpenCode server for project", base_url: base_url)
-          base_url
-        else
-          nil
-        end
-
-      {:error, reason} ->
-        Logger.debug("Failed to probe OpenCode server",
-          base_url: base_url,
-          reason: inspect(reason)
-        )
-
-        nil
-
-      _ ->
-        nil
-    end
-  end
-
-  defp local_opencode_candidates do
-    case System.cmd("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"]) do
-      {output, 0} ->
-        output
-        |> String.split("\n", trim: true)
-        |> Enum.filter(&Regex.match?(~r/\bopencode\b/i, &1))
-        |> Enum.map(&extract_port/1)
-        |> Enum.filter(&is_integer/1)
-        |> Enum.map(&"http://127.0.0.1:#{&1}")
-        |> Enum.uniq()
-
-      {_, _} ->
-        []
-    end
-  rescue
-    _ ->
-      []
-  end
-
-  defp extract_port(line) do
-    case Regex.run(~r/:(\d+)\s+\(LISTEN\)/, line) do
-      [_, port] -> String.to_integer(port)
-      _ -> nil
-    end
-  end
-
   defp maybe_persist_base_url(session, base_url) do
     metadata = session.metadata || %{}
 
@@ -1252,13 +1323,6 @@ defmodule Squads.Sessions do
 
   defp metadata_base_url(%{"opencode_base_url" => base_url}), do: base_url
   defp metadata_base_url(_), do: nil
-
-  defp configured_base_url do
-    System.get_env("OPENCODE_BASE_URL") ||
-      :squads
-      |> Application.get_env(Squads.OpenCode.Client, [])
-      |> Keyword.get(:base_url, "http://127.0.0.1:4096")
-  end
 
   defp resolve_session_directory(session, explicit_worktree_path) do
     cond do

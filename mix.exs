@@ -59,6 +59,7 @@ defmodule Squads.MixProject do
       {:erlexec, "~> 2.0"},
       {:dns_cluster, "~> 0.2.0"},
       {:websock_adapter, "~> 0.5.8"},
+      {:mox, "~> 1.1", only: :test},
       {:bandit, "~> 1.5"}
     ]
   end

@@ -1,22 +1,67 @@
 defmodule Squads.OpenCode.Client do
   @moduledoc """
   HTTP client wrapper for OpenCode server communication.
-
-  Provides a configurable HTTP client with retry logic, error handling,
-  and typed helpers for common OpenCode API endpoints.
-
-  ## Configuration
-
-  Configure via application env:
-
-      config :squads, Squads.OpenCode.Client,
-        base_url: "http://127.0.0.1:4096",
-        timeout: 30_000,
-        retry_count: 3,
-        retry_delay: 1000
-
-  Or pass options at runtime to individual calls.
   """
+
+  @type response :: {:ok, map() | list() | boolean() | String.t()} | {:error, term()}
+
+  @callback health(keyword()) :: response()
+  @callback get_current_project(keyword()) :: response()
+  @callback list_sessions(keyword()) :: response()
+  @callback get_sessions_status(keyword()) :: response()
+  @callback get_session(String.t(), keyword()) :: response()
+  @callback create_session(keyword()) :: response()
+  @callback update_session(String.t(), map(), keyword()) :: response()
+  @callback abort_session(String.t(), keyword()) :: response()
+  @callback list_messages(String.t(), keyword()) :: response()
+  @callback send_message(String.t(), map(), keyword()) :: response()
+  @callback send_message_async(String.t(), map(), keyword()) :: response()
+  @callback execute_command(String.t(), String.t(), keyword()) :: response()
+  @callback run_shell(String.t(), String.t(), keyword()) :: response()
+  @callback get_session_diff(String.t(), keyword()) :: response()
+  @callback get_session_todos(String.t(), keyword()) :: response()
+
+  def client do
+    Application.get_env(:squads, :opencode_client, Squads.OpenCode.Client.HTTP)
+  end
+
+  defmodule HTTP do
+    @moduledoc false
+    @behaviour Squads.OpenCode.Client
+
+    alias Squads.OpenCode.Client
+
+    @impl true
+    defdelegate health(opts), to: Client
+    @impl true
+    defdelegate get_current_project(opts), to: Client
+    @impl true
+    defdelegate list_sessions(opts), to: Client
+    @impl true
+    defdelegate get_sessions_status(opts), to: Client
+    @impl true
+    defdelegate get_session(id, opts), to: Client
+    @impl true
+    defdelegate create_session(opts), to: Client
+    @impl true
+    defdelegate update_session(id, payload, opts), to: Client
+    @impl true
+    defdelegate abort_session(id, opts), to: Client
+    @impl true
+    defdelegate list_messages(id, opts), to: Client
+    @impl true
+    defdelegate send_message(id, payload, opts), to: Client
+    @impl true
+    defdelegate send_message_async(id, payload, opts), to: Client
+    @impl true
+    defdelegate execute_command(id, command, opts), to: Client
+    @impl true
+    defdelegate run_shell(id, command, opts), to: Client
+    @impl true
+    defdelegate get_session_diff(id, opts), to: Client
+    @impl true
+    defdelegate get_session_todos(id, opts), to: Client
+  end
 
   require Logger
 
@@ -34,9 +79,10 @@ defmodule Squads.OpenCode.Client do
           req_options: keyword()
         ]
 
-  @type response :: {:ok, map() | list() | boolean() | String.t()} | {:error, term()}
-
   # ============================================================================
+  # Core HTTP Methods
+  # ============================================================================
+
   # Core HTTP Methods
   # ============================================================================
 

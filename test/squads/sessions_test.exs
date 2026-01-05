@@ -8,7 +8,11 @@ defmodule Squads.SessionsTest do
   alias Squads.Squads, as: SquadsContext
   alias Squads.Tickets
 
+  import Mox
   # Helper to create an agent for testing
+  setup :set_mox_from_context
+  setup :verify_on_exit!
+
   defp create_test_agent(_context \\ %{}) do
     # Create a temp project and squad first
     tmp_dir = System.tmp_dir!() |> Path.join("squads_test_#{:rand.uniform(1_000_000)}")
@@ -325,7 +329,7 @@ defmodule Squads.SessionsTest do
       %{agent: agent} = create_test_agent()
       {:ok, session} = Sessions.create_session(%{agent_id: agent.id, status: "pending"})
 
-      assert {:error, :no_opencode_session} = Sessions.send_prompt(session, "Hello")
+      assert {:error, :session_not_active} = Sessions.send_prompt(session, "Hello")
     end
 
     test "returns error when session has no opencode_session_id" do
@@ -341,7 +345,7 @@ defmodule Squads.SessionsTest do
       %{agent: agent} = create_test_agent()
       {:ok, session} = Sessions.create_session(%{agent_id: agent.id, status: "pending"})
 
-      assert {:error, :no_opencode_session} = Sessions.send_prompt_async(session, "Hello")
+      assert {:error, :session_not_active} = Sessions.send_prompt_async(session, "Hello")
     end
   end
 

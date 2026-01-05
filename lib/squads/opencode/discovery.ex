@@ -4,7 +4,7 @@ defmodule Squads.OpenCode.Discovery do
   """
 
   require Logger
-  alias Squads.OpenCode.Client
+  alias Squads.OpenCode.Resolver
 
   @type node_info :: %{
           base_url: String.t(),
@@ -42,47 +42,15 @@ defmodule Squads.OpenCode.Discovery do
   defp discover_from_local_ports do
     # Only run on dev/darwin/linux; skip on Windows or if explicitly disabled
     if Application.get_env(:squads, :enable_local_discovery, true) do
-      scan_ports()
+      Resolver.list_local_listeners()
+      |> Enum.map(&probe_node/1)
+      |> Enum.filter(fn
+        {:ok, _} -> true
+        _ -> false
+      end)
+      |> Enum.map(fn {:ok, node} -> Map.put(node, :source, :local_lsof) end)
     else
       []
-    end
-  end
-
-  defp scan_ports do
-    case System.find_executable("lsof") do
-      nil ->
-        Logger.warning("lsof not found, skipping local port discovery")
-        []
-
-      _executable ->
-        # Find all ports being listened to by 'opencode' processes
-        case System.cmd("lsof", ["-i", "-P", "-n"]) do
-          {output, 0} ->
-            output
-            |> String.split("\n")
-            |> Enum.filter(&String.contains?(&1, "opencode"))
-            |> Enum.map(&extract_url/1)
-            |> Enum.reject(&is_nil/1)
-            |> Enum.uniq()
-            |> Enum.map(&probe_node/1)
-            |> Enum.filter(fn
-              {:ok, _} -> true
-              _ -> false
-            end)
-            |> Enum.map(fn {:ok, node} -> Map.put(node, :source, :local_lsof) end)
-
-          _ ->
-            []
-        end
-    end
-  end
-
-  defp extract_url(line) do
-    # Match various listening patterns: *:port, 127.0.0.1:port, [::1]:port
-    # We always map to 127.0.0.1 for local access
-    case Regex.run(~r/TCP .*:(\d+) \(LISTEN\)/, line) do
-      [_, port] -> "http://127.0.0.1:#{port}"
-      _ -> nil
     end
   end
 
@@ -90,7 +58,7 @@ defmodule Squads.OpenCode.Discovery do
   Check health of a specific URL to see if it's an OpenCode node.
   """
   def probe_node(base_url) do
-    case Client.health(base_url: base_url, timeout: 1000, retry_count: 0) do
+    case Squads.OpenCode.Client.health(base_url: base_url, timeout: 1000, retry_count: 0) do
       {:ok, %{"healthy" => true, "version" => version}} ->
         {:ok,
          %{

@@ -48,33 +48,43 @@ defmodule Squads.Reservations do
 
       # 2. Create reservations
       results =
-        Enum.map(paths, fn path ->
-          %FileReservation{}
-          |> FileReservation.changeset(%{
-            project_id: project_id,
-            agent_id: agent_id,
-            path_pattern: path,
-            exclusive: exclusive,
-            reason: reason,
-            expires_at: expires_at
-          })
-          |> Repo.insert!()
+        Enum.reduce_while(paths, [], fn path, acc ->
+          changeset =
+            FileReservation.changeset(%FileReservation{}, %{
+              project_id: project_id,
+              agent_id: agent_id,
+              path_pattern: path,
+              exclusive: exclusive,
+              reason: reason,
+              expires_at: expires_at
+            })
+
+          case Repo.insert(changeset) do
+            {:ok, res} -> {:cont, [res | acc]}
+            {:error, changeset} -> {:halt, {:error, changeset}}
+          end
         end)
 
-      Squads.Events.create_event(%{
-        project_id: project_id,
-        agent_id: agent_id,
-        kind: "file_reserved",
-        occurred_at: DateTime.utc_now() |> DateTime.truncate(:second),
-        payload: %{
-          paths: paths,
-          exclusive: exclusive,
-          reason: reason,
-          expires_at: expires_at
-        }
-      })
+      case results do
+        {:error, changeset} ->
+          Repo.rollback({:validation_error, changeset})
 
-      results
+        results ->
+          Squads.Events.create_event(%{
+            project_id: project_id,
+            agent_id: agent_id,
+            kind: "file_reserved",
+            occurred_at: DateTime.utc_now() |> DateTime.truncate(:second),
+            payload: %{
+              paths: paths,
+              exclusive: exclusive,
+              reason: reason,
+              expires_at: expires_at
+            }
+          })
+
+          Enum.reverse(results)
+      end
     end)
   end
 

@@ -141,26 +141,11 @@ defmodule SquadsWeb.API.SessionController do
   POST /api/sessions/:session_id/abort
   """
   def abort(conn, %{"session_id" => id} = params) do
-    case resolve_session_or_external(id, params) do
-      {:ok, session_or_url} ->
-        case session_or_url do
-          %Sessions.Session{} = session ->
-            case Sessions.abort_session(session) do
-              {:ok, response} -> json(conn, %{data: response})
-              error -> error
-            end
+    opts = if params["node_url"], do: [node_url: params["node_url"]], else: []
 
-          external_url when is_binary(external_url) ->
-            opts = Keyword.put([], :base_url, external_url)
-
-            case Squads.OpenCode.Client.abort_session(id, opts) do
-              {:ok, response} -> json(conn, %{data: response})
-              error -> error
-            end
-        end
-
-      error ->
-        error
+    case Sessions.dispatch_abort(id, opts) do
+      {:ok, response} -> json(conn, %{data: response})
+      error -> error
     end
   end
 
@@ -170,28 +155,12 @@ defmodule SquadsWeb.API.SessionController do
   POST /api/sessions/:session_id/archive
   """
   def archive(conn, %{"session_id" => id} = params) do
-    case resolve_session_or_external(id, params) do
-      {:ok, session_or_url} ->
-        case session_or_url do
-          %Sessions.Session{} = session ->
-            case Sessions.archive_session(session) do
-              {:ok, session} -> render(conn, :show, session: session)
-              error -> error
-            end
+    opts = if params["node_url"], do: [node_url: params["node_url"]], else: []
 
-          external_url when is_binary(external_url) ->
-            archived_at = DateTime.utc_now() |> DateTime.truncate(:second)
-            payload = %{time: %{archived: DateTime.to_unix(archived_at, :millisecond)}}
-            opts = Keyword.put([], :base_url, external_url)
-
-            case Squads.OpenCode.Client.update_session(id, payload, opts) do
-              {:ok, response} -> json(conn, %{data: response})
-              error -> error
-            end
-        end
-
-      error ->
-        error
+    case Sessions.dispatch_archive(id, opts) do
+      {:ok, session} when is_struct(session) -> render(conn, :show, session: session)
+      {:ok, response} -> json(conn, %{data: response})
+      error -> error
     end
   end
 
@@ -279,86 +248,28 @@ defmodule SquadsWeb.API.SessionController do
   Body: { "prompt": "Hello", "model": "anthropic/claude-sonnet-4-5", "agent": "coder" }
   """
   def prompt(conn, %{"session_id" => id, "prompt" => prompt} = params) do
-    Logger.info("Session prompt request",
-      session_id: id,
-      prompt_length: String.length(prompt),
-      model: params["model"],
-      agent: params["agent"]
-    )
+    opts =
+      params
+      |> Map.take(["model", "agent", "no_reply", "node_url"])
+      |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
 
-    case resolve_session_or_external(id, params) do
-      {:ok, session_or_url} ->
-        opts =
-          []
-          |> maybe_add(:model, params["model"])
-          |> maybe_add(:agent, params["agent"])
-          |> maybe_add(:no_reply, params["no_reply"])
+    case Sessions.dispatch_prompt(id, prompt, opts) do
+      {:ok, response} ->
+        json(conn, %{data: response})
 
-        case session_or_url do
-          %Sessions.Session{} = session ->
-            Logger.debug("Sending prompt to local session",
-              session_id: session.id,
-              opencode_session_id: session.opencode_session_id,
-              status: session.status
-            )
+      {:error, :session_not_active} ->
+        {:error, :session_not_active}
 
-            case Sessions.send_prompt(session, prompt, opts) do
-              {:ok, response} ->
-                Logger.info("Prompt succeeded", session_id: session.id)
-                json(conn, %{data: response})
-
-              {:error, :session_not_active} ->
-                Logger.warning("Prompt failed: session not active", session_id: session.id)
-                {:error, :session_not_active}
-
-              {:error, :no_opencode_session} ->
-                Logger.warning("Prompt failed: no opencode session",
-                  session_id: session.id,
-                  status: session.status
-                )
-
-                # If session is running but has no opencode_session_id,
-                # the tests expect "Session is not running" for prompt/prompt_async
-                if session.status == "running",
-                  do: {:error, :session_not_active},
-                  else: {:error, :session_not_active}
-
-              {:error, reason} = error ->
-                Logger.error("Prompt failed",
-                  session_id: session.id,
-                  reason: inspect(reason)
-                )
-
-                error
-            end
-
-          external_url when is_binary(external_url) ->
-            # External node proxying
-            opts = Keyword.put(opts, :base_url, external_url)
-
-            case Squads.OpenCode.Client.send_message(
-                   id,
-                   %{parts: [%{type: "text", text: prompt}]},
-                   opts
-                 ) do
-              {:ok, response} -> json(conn, %{data: response})
-              error -> error
-            end
-        end
+      {:error, :no_opencode_session} ->
+        {:error, :session_not_active}
 
       error ->
         error
     end
   end
 
-  def prompt(_conn, %{"session_id" => _id} = params) do
-    # Fallback for missing prompt
-    if is_nil(params["prompt"]) do
-      {:error, :missing_prompt}
-    else
-      # Should not happen given the clause above but for safety
-      {:error, :bad_request}
-    end
+  def prompt(_conn, %{"session_id" => _}) do
+    {:error, :missing_prompt}
   end
 
   @doc """
@@ -368,48 +279,22 @@ defmodule SquadsWeb.API.SessionController do
   Body: { "prompt": "Run the tests" }
   """
   def prompt_async(conn, %{"session_id" => id, "prompt" => prompt} = params) do
-    case resolve_session_or_external(id, params) do
-      {:ok, session_or_url} ->
-        opts =
-          []
-          |> maybe_add(:model, params["model"])
-          |> maybe_add(:agent, params["agent"])
+    opts =
+      params
+      |> Map.take(["model", "agent", "node_url"])
+      |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
 
-        case session_or_url do
-          %Sessions.Session{} = session ->
-            case Sessions.send_prompt_async(session, prompt, opts) do
-              {:ok, response} ->
-                conn
-                |> put_status(:accepted)
-                |> json(%{data: response})
+    case Sessions.dispatch_prompt_async(id, prompt, opts) do
+      {:ok, response} ->
+        conn
+        |> put_status(:accepted)
+        |> json(%{data: response})
 
-              {:error, :session_not_active} ->
-                {:error, :session_not_active}
+      {:error, :session_not_active} ->
+        {:error, :session_not_active}
 
-              {:error, :no_opencode_session} ->
-                {:error, :session_not_active}
-
-              error ->
-                error
-            end
-
-          external_url when is_binary(external_url) ->
-            opts = Keyword.put(opts, :base_url, external_url)
-
-            case Squads.OpenCode.Client.send_message_async(
-                   id,
-                   %{parts: [%{type: "text", text: prompt}]},
-                   opts
-                 ) do
-              {:ok, response} ->
-                conn
-                |> put_status(:accepted)
-                |> json(%{data: response})
-
-              error ->
-                error
-            end
-        end
+      {:error, :no_opencode_session} ->
+        {:error, :session_not_active}
 
       error ->
         error
@@ -420,28 +305,6 @@ defmodule SquadsWeb.API.SessionController do
     {:error, :missing_prompt}
   end
 
-  defp resolve_session_or_external(id, params) do
-    cond do
-      # If node_url is provided, it's an external node request
-      is_binary(params["node_url"]) and params["node_url"] != "" ->
-        {:ok, params["node_url"]}
-
-      # Otherwise it's a local session
-      true ->
-        case Sessions.get_session(id) do
-          nil ->
-            # Maybe it's an OpenCode ID?
-            case Sessions.get_session_by_opencode_id(id) do
-              nil -> {:error, :not_found}
-              session -> {:ok, session}
-            end
-
-          session ->
-            {:ok, session}
-        end
-    end
-  end
-
   @doc """
   Execute a slash command in a session.
 
@@ -450,65 +313,14 @@ defmodule SquadsWeb.API.SessionController do
   Body: { "command": "/compact", "arguments": "all" }
   """
   def command(conn, %{"session_id" => id, "command" => command} = params) do
-    Logger.info("Session command request",
-      session_id: id,
-      command: command,
-      params: Map.drop(params, ["session_id"])
-    )
+    opts =
+      params
+      |> Map.take(["arguments", "agent", "model", "node_url"])
+      |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
 
-    case resolve_session_or_external(id, params) do
-      {:ok, session_or_url} ->
-        opts =
-          []
-          |> maybe_add(:arguments, params["arguments"])
-          |> maybe_add(:agent, params["agent"])
-          |> maybe_add(:model, params["model"])
-
-        case session_or_url do
-          %Sessions.Session{} = session ->
-            cond do
-              Sessions.local_command?(command) ->
-                # If it's a local command, we normally allow it.
-                # HOWEVER, the tests for /command expect 409 Conflict (Session has no OpenCode session)
-                # for ANY command if the session is not properly set up,
-                # presumably to maintain consistent behavior for the /command endpoint.
-                if is_nil(session.opencode_session_id) or session.status == "pending" do
-                  if session.status == "pending" do
-                    {:error, :session_not_active}
-                  else
-                    {:error, :no_opencode_session}
-                  end
-                else
-                  case Sessions.execute_command(session, command, opts) do
-                    {:ok, response} -> json(conn, %{data: response})
-                    error -> error
-                  end
-                end
-
-              is_nil(session.opencode_session_id) ->
-                {:error, :no_opencode_session}
-
-              session.status != "running" ->
-                {:error, :session_not_active}
-
-              true ->
-                case Sessions.execute_command(session, command, opts) do
-                  {:ok, response} -> json(conn, %{data: response})
-                  error -> error
-                end
-            end
-
-          external_url when is_binary(external_url) ->
-            opts = Keyword.put(opts, :base_url, external_url)
-
-            case Squads.OpenCode.Client.execute_command(id, command, opts) do
-              {:ok, response} -> json(conn, %{data: response})
-              error -> error
-            end
-        end
-
-      error ->
-        error
+    case Sessions.dispatch_command(id, command, opts) do
+      {:ok, response} -> json(conn, %{data: response})
+      error -> error
     end
   end
 
@@ -524,44 +336,14 @@ defmodule SquadsWeb.API.SessionController do
   Body: { "command": "git status", "agent": "coder" }
   """
   def shell(conn, %{"session_id" => id, "command" => command} = params) do
-    case resolve_session_or_external(id, params) do
-      {:ok, session_or_url} ->
-        opts =
-          []
-          |> maybe_add(:agent, params["agent"])
-          |> maybe_add(:model, params["model"])
+    opts =
+      params
+      |> Map.take(["agent", "model", "node_url"])
+      |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
 
-        case session_or_url do
-          %Sessions.Session{} = session ->
-            case Sessions.run_shell(session, command, opts) do
-              {:ok, response} ->
-                json(conn, %{data: response})
-
-              {:error, :session_not_active} ->
-                {:error, :session_not_active}
-
-              {:error, :no_opencode_session} ->
-                if session.status != "running" do
-                  {:error, :session_not_active}
-                else
-                  {:error, :no_opencode_session}
-                end
-
-              error ->
-                error
-            end
-
-          external_url when is_binary(external_url) ->
-            opts = Keyword.put(opts, :base_url, external_url)
-
-            case Squads.OpenCode.Client.run_shell(id, command, opts) do
-              {:ok, response} -> json(conn, %{data: response})
-              error -> error
-            end
-        end
-
-      error ->
-        error
+    case Sessions.dispatch_shell(id, command, opts) do
+      {:ok, response} -> json(conn, %{data: response})
+      error -> error
     end
   end
 
@@ -607,7 +389,4 @@ defmodule SquadsWeb.API.SessionController do
       end
     end
   end
-
-  defp maybe_add(opts, _key, nil), do: opts
-  defp maybe_add(opts, key, value), do: Keyword.put(opts, key, value)
 end
