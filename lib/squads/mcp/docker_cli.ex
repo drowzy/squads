@@ -52,6 +52,18 @@ defmodule Squads.MCP.DockerCLI do
     run_cmd(["mcp", "oauth", "revoke", provider])
   end
 
+  def secret_list do
+    run_cmd(["mcp", "secret", "ls"])
+  end
+
+  def secret_set(key, value) do
+    run_cmd(["mcp", "secret", "set", key, value])
+  end
+
+  def secret_remove(key) do
+    run_cmd(["mcp", "secret", "rm", key])
+  end
+
   def tools_ls do
     run_json_cmd(["mcp", "tools", "ls", "--format=json"])
   end

@@ -113,12 +113,12 @@ function ReviewQueue() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 border-4 border-tui-accent border-t-transparent animate-spin" />
-        <div className="text-tui-accent font-mono text-sm animate-pulse uppercase tracking-[0.2em]">
-          Accessing_Secure_Vault...
+        <div className="h-full flex flex-col items-center justify-center space-y-4">
+          <div className="w-12 h-12 border-4 border-tui-accent border-t-transparent animate-spin" />
+          <div className="text-tui-accent font-mono text-sm animate-pulse">
+            Accessing secure vault...
+          </div>
         </div>
-      </div>
     )
   }
 
@@ -126,14 +126,14 @@ function ReviewQueue() {
     <div className="h-full flex flex-col space-y-4 md:space-y-6 font-mono">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold tracking-tighter uppercase flex items-center gap-3">
+          <h2 className="text-xl md:text-2xl font-bold tracking-tighter flex items-center gap-3">
             <CheckSquare className="text-tui-accent" size={20} />
             Review Queue
           </h2>
           <p className="text-tui-dim text-xs md:text-sm italic">Verification required for agent-generated deployments</p>
         </div>
         <div className="text-xs text-tui-dim bg-ctp-crust/40 px-2 py-1 border border-tui-border">
-          QUEUE: {reviews.length} PENDING
+          Queue: {reviews.length} pending
         </div>
       </div>
 
@@ -141,9 +141,9 @@ function ReviewQueue() {
         {/* Master: Review List - Full width on mobile, side panel on desktop */}
         <div className={`${selectedId ? 'hidden lg:flex' : 'flex'} lg:col-span-4 border border-tui-border flex-col bg-ctp-mantle/50 overflow-hidden`}>
           <div className="p-3 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-tui-dim">
+            <div className="flex items-center gap-2 text-xs font-bold text-tui-dim">
               <Hash size={12} />
-               Review Registry
+               Review registry
             </div>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -153,24 +153,24 @@ function ReviewQueue() {
                   <ShieldCheck size={48} className="text-tui-dim/20" />
                   <div className="absolute inset-0 border border-tui-dim/10 rounded-full scale-150 animate-pulse" />
                 </div>
-                <div className="space-y-2">
-                   <h3 className="text-sm font-bold text-tui-dim uppercase tracking-tui">No pending reviews</h3>
-                  <p className="text-[10px] text-tui-dim/60 italic max-w-[200px] leading-relaxed">
-                    System integrity verified. All agent deployments have been processed.
-                  </p>
-                </div>
-                <div className="pt-4 space-y-3">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 border border-tui-dim/20 text-[9px] text-tui-dim uppercase tracking-[0.2em] animate-pulse">
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                     Registry clean
-                  </div>
-                  <div className="flex flex-col items-center gap-2">
-                    <Link
-                      to="/sessions"
-                      className="px-3 py-1 border border-tui-accent text-tui-accent text-[9px] font-bold uppercase tracking-[0.2em] hover:bg-tui-accent hover:text-tui-bg transition-colors"
-                    >
-                       View sessions
-                    </Link>
+                 <div className="space-y-2">
+                    <h3 className="text-sm font-bold text-tui-dim">No pending reviews</h3>
+                   <p className="text-[10px] text-tui-dim/60 italic max-w-[200px] leading-relaxed">
+                     System integrity verified. All agent deployments have been processed.
+                   </p>
+                 </div>
+                 <div className="pt-4 space-y-3">
+                   <div className="inline-flex items-center gap-2 px-3 py-1 border border-tui-dim/20 text-[9px] text-tui-dim animate-pulse">
+                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                      Registry clean
+                   </div>
+                   <div className="flex flex-col items-center gap-2">
+                     <Link
+                       to="/sessions"
+                       className="px-3 py-1 border border-tui-accent text-tui-accent text-[9px] font-bold hover:bg-tui-accent hover:text-tui-bg transition-colors"
+                     >
+                        View sessions
+                     </Link>
                     <span className="text-[9px] text-tui-dim/60">
                       Reviews appear after agents submit changes.
                     </span>
@@ -193,8 +193,8 @@ function ReviewQueue() {
                   {selectedId === review.id && (
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-tui-accent" />
                   )}
-                  <div className="flex justify-between items-start mb-2">
-                    <span className={`text-xs font-bold tracking-widest px-1 ${
+                   <div className="flex justify-between items-start mb-2">
+                    <span className={`text-xs font-bold px-1 ${
                       selectedId === review.id ? 'text-tui-accent' : 'text-tui-dim group-hover:text-tui-text'
                     }`}>
                       {review.id}
@@ -204,20 +204,20 @@ function ReviewQueue() {
                       {new Date(review.inserted_at).toLocaleTimeString()}
                     </div>
                   </div>
-                  <h4 className="font-bold text-sm mb-3 uppercase group-hover:text-tui-accent transition-colors truncate">
+                  <h4 className="font-bold text-sm mb-3 group-hover:text-tui-accent transition-colors truncate">
                     {review.title}
                   </h4>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs text-tui-dim uppercase font-bold">
+                    <div className="flex items-center gap-2 text-xs text-tui-dim font-bold">
                       <User size={12} />
                       {review.author_name}
                     </div>
-                    <span className={`text-xs px-1.5 py-0.5 font-bold uppercase ${
+                    <span className={`text-xs px-1.5 py-0.5 font-bold ${
                       review.status === 'pending' 
                         ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' 
                         : 'bg-tui-text/10 text-tui-text border border-tui-border'
                     }`}>
-                      {review.status}
+                      {review.status.charAt(0).toUpperCase() + review.status.slice(1)}
                     </span>
                   </div>
                 </button>
@@ -233,32 +233,32 @@ function ReviewQueue() {
               {/* Detail Header */}
               <div className="p-3 md:p-4 border-b border-tui-border flex flex-col sm:flex-row justify-between items-start gap-3 bg-tui-accent/5 shrink-0">
                 <div className="space-y-1 min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    {/* Mobile back button */}
-                    <button 
-                      aria-label="Back to queue"
-                      onClick={() => setSelectedId(null)}
-                      className="lg:hidden p-1 -ml-1 text-tui-accent"
-                    >
-                      <ArrowLeft size={20} />
-                    </button>
-                    <span className="text-xs text-tui-accent font-bold px-1 border border-tui-accent hidden sm:inline">PR</span>
-                    <h3 className="text-base md:text-lg font-bold uppercase tracking-tight leading-none truncate">{selectedReview.title}</h3>
-                  </div>
-                  <div className="flex items-center gap-4 ml-0 lg:ml-0">
-                    <span className="text-xs text-tui-dim font-bold flex items-center gap-1 uppercase">
-                      <User size={12} className="text-tui-accent/50" />
-                      {selectedReview.author_name}
-                    </span>
-                    <span className="text-xs text-tui-dim font-bold hidden sm:flex items-center gap-1 uppercase">
-                      <Hash size={12} className="text-tui-accent/50" />
-                      {selectedReview.id}
-                    </span>
-                  </div>
+                    <div className="flex items-center gap-2">
+                      {/* Mobile back button */}
+                      <button 
+                        aria-label="Back to queue"
+                        onClick={() => setSelectedId(null)}
+                        className="lg:hidden p-1 -ml-1 text-tui-accent"
+                      >
+                        <ArrowLeft size={20} />
+                      </button>
+                      <span className="text-xs text-tui-accent font-bold px-1 border border-tui-accent hidden sm:inline">PR</span>
+                      <h3 className="text-base md:text-lg font-bold tracking-tight leading-none truncate">{selectedReview.title}</h3>
+                    </div>
+                    <div className="flex items-center gap-4 ml-0 lg:ml-0">
+                      <span className="text-xs text-tui-dim font-bold flex items-center gap-1">
+                        <User size={12} className="text-tui-accent/50" />
+                        {selectedReview.author_name}
+                      </span>
+                      <span className="text-xs text-tui-dim font-bold hidden sm:flex items-center gap-1">
+                        <Hash size={12} className="text-tui-accent/50" />
+                        {selectedReview.id}
+                      </span>
+                    </div>
                 </div>
-                 <button 
+                  <button 
                    aria-label="Checkout branch"
-                   className="text-xs font-bold text-tui-accent border border-tui-accent/30 px-3 py-1.5 hover:bg-tui-accent hover:text-tui-bg transition-all flex items-center gap-2 uppercase tracking-widest shrink-0"
+                   className="text-xs font-bold text-tui-accent border border-tui-accent/30 px-3 py-1.5 hover:bg-tui-accent hover:text-tui-bg transition-all flex items-center gap-2 shrink-0"
                  >
 
                   <ExternalLink size={12} />
@@ -270,12 +270,12 @@ function ReviewQueue() {
                 {/* Summary Section */}
                 <div className="p-4 md:p-6 space-y-6 md:space-y-8">
                   <section id="review-summary">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2 text-xs font-bold text-tui-accent uppercase tracking-[0.2em]">
+                    <div className="flex items-center justify-between mb-4 mt-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-tui-accent">
                         <FileText size={14} />
-                        Submission_Log
+                        Submission log
                       </div>
-                      <div className="h-px flex-1 bg-tui-accent/20 mx-4 hidden sm:block" />
+                      <div className="h-[2px] flex-1 bg-tui-accent/10 mx-4 hidden sm:block" />
                     </div>
                     <div className="border border-tui-border bg-ctp-mantle/50 p-3 md:p-4 rounded-sm relative overflow-hidden group">
                       <div className="text-sm leading-relaxed text-tui-text/90 italic whitespace-pre-wrap">
@@ -287,12 +287,12 @@ function ReviewQueue() {
                   {/* Diff Section */}
                   {files.length > 0 && (
                     <section id="review-diffs">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2 text-xs font-bold text-tui-accent uppercase tracking-[0.2em]">
+                      <div className="flex items-center justify-between mb-4 mt-8">
+                        <div className="flex items-center gap-2 text-xs font-bold text-tui-accent">
                           <GitPullRequest size={14} />
-                          Delta_Analysis
+                          Delta analysis
                         </div>
-                        <div className="h-px flex-1 bg-tui-accent/20 mx-4 hidden sm:block" />
+                        <div className="h-[2px] flex-1 bg-tui-accent/10 mx-4 hidden sm:block" />
                       </div>
                       
                       <div className="space-y-4 md:space-y-6">
@@ -368,12 +368,12 @@ function ReviewQueue() {
                                           const key = `${change.type}-${change.lineNumber || change.oldLineNumber || change.newLineNumber}`
                                           return {
                                             [key]: (
-                                              <div className="bg-tui-accent/5 border-y border-tui-accent/20 p-3">
-                                                <div className="flex flex-col gap-2">
-                                                  <div className="flex items-center gap-2 text-[8px] font-bold text-tui-accent uppercase mb-1">
-                                                    <Plus size={10} />
-                                                    Add_Inline_Feedback
-                                                  </div>
+                                               <div className="bg-tui-accent/5 border-y border-tui-accent/20 p-3">
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2 text-[8px] font-bold text-tui-accent mb-1">
+                            <Plus size={10} />
+                            Add inline feedback
+                          </div>
                                                   <div className="flex gap-2">
                                                     <input 
                                                       autoFocus
@@ -388,13 +388,13 @@ function ReviewQueue() {
                                                     />
                                                     <button 
                                                       onClick={() => addInlineComment(activeCommentLine)}
-                                                      className="bg-tui-accent text-tui-bg px-3 py-1 text-[10px] font-bold uppercase hover:opacity-80 flex items-center gap-2"
+                                                      className="bg-tui-accent text-tui-bg px-3 py-1 text-[10px] font-bold hover:opacity-80 flex items-center gap-2"
                                                     >
                                                       <Send size={12} />
                                                       Commit
                                                     </button>
                                                   </div>
-                                                  <div className="text-[8px] text-tui-dim uppercase italic">
+                                                  <div className="text-[8px] text-tui-dim italic">
                                                     Press ESC to cancel • Enter to commit
                                                   </div>
                                                 </div>
@@ -417,12 +417,12 @@ function ReviewQueue() {
 
                   {/* General Comments Section */}
                   <section id="review-comments" className="pb-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2 text-xs font-bold text-tui-accent uppercase tracking-[0.2em]">
+                    <div className="flex items-center justify-between mb-4 mt-8">
+                      <div className="flex items-center gap-2 text-xs font-bold text-tui-accent">
                         <MessageSquare size={14} />
-                        Review_Comments
+                        Review comments
                       </div>
-                      <div className="h-px flex-1 bg-tui-accent/20 mx-4 hidden sm:block" />
+                      <div className="h-[2px] flex-1 bg-tui-accent/10 mx-4 hidden sm:block" />
                     </div>
                     <div className="relative">
                       <textarea 
@@ -439,7 +439,7 @@ function ReviewQueue() {
               {/* Navigation Sidebar (Floating) - Hidden on mobile */}
               <div className="absolute right-6 top-24 w-48 space-y-2 hidden xl:block pointer-events-none">
                 <div className="bg-ctp-crust/90 border border-tui-border p-2 pointer-events-auto">
-                  <div className="text-[9px] font-bold text-tui-accent uppercase mb-2 flex items-center gap-2">
+                  <div className="text-[9px] font-bold text-tui-accent mb-2 flex items-center gap-2">
                     <Navigation size={10} />
                     Quick Nav
                   </div>
@@ -448,14 +448,14 @@ function ReviewQueue() {
                       onClick={() => scrollToSection('review-summary')}
                       className="w-full text-left px-2 py-1 text-[9px] text-tui-dim hover:text-tui-accent hover:bg-tui-accent/5 flex items-center justify-between group"
                     >
-                      SUMMARY
+                      Summary
                       <ChevronRight size={10} className="opacity-0 group-hover:opacity-100" />
                     </button>
                     <button 
                       onClick={() => scrollToSection('review-diffs')}
                       className="w-full text-left px-2 py-1 text-[9px] text-tui-dim hover:text-tui-accent hover:bg-tui-accent/5 flex items-center justify-between group"
                     >
-                      DIFF FILES ({files.length})
+                      Diff files ({files.length})
                       <ChevronRight size={10} className="opacity-0 group-hover:opacity-100" />
                     </button>
                     {files.slice(0, 5).map((f, i) => (
@@ -471,29 +471,29 @@ function ReviewQueue() {
                       onClick={() => scrollToSection('review-comments')}
                       className="w-full text-left px-2 py-1 text-[9px] text-tui-dim hover:text-tui-accent hover:bg-tui-accent/5 flex items-center justify-between group"
                     >
-                      FINAL COMMENTS
+                      Final comments
                       <ChevronRight size={10} className="opacity-0 group-hover:opacity-100" />
                     </button>
                   </div>
                 </div>
 
                 <div className="bg-ctp-crust/90 border border-tui-border p-2 pointer-events-auto">
-                  <div className="text-[9px] font-bold text-tui-accent uppercase mb-2 flex items-center gap-2">
+                  <div className="text-[9px] font-bold text-tui-accent mb-2 flex items-center gap-2">
                     <Clock size={10} />
                     Statistics
                   </div>
                   <div className="space-y-1 text-[8px] text-tui-dim">
-                    <div className="flex justify-between uppercase">
+                    <div className="flex justify-between">
                       <span>Additions:</span>
                       {/* @ts-ignore - additions property exists on File but not in types */}
                       <span className="text-green-500">+{files.reduce((a, f) => a + (f as any).additions, 0)}</span>
                     </div>
-                    <div className="flex justify-between uppercase">
+                    <div className="flex justify-between">
                       <span>Deletions:</span>
                       {/* @ts-ignore - deletions property exists on File but not in types */}
                       <span className="text-red-500">-{files.reduce((a, f) => a + (f as any).deletions, 0)}</span>
                     </div>
-                    <div className="flex justify-between uppercase">
+                    <div className="flex justify-between">
                       <span>Comments:</span>
                       <span className="text-tui-accent">{Object.keys(inlineComments).length}</span>
                     </div>
@@ -504,31 +504,31 @@ function ReviewQueue() {
                    {/* Action Bar */}
                    <div className="p-3 md:p-4 border-t border-tui-border bg-ctp-mantle flex flex-col sm:flex-row gap-3 md:gap-4 shrink-0">
                      {selectedReview.status === 'approved' ? (
-                       <button 
+                        <button 
                          onClick={() => handleAction('merged')}
                          disabled={submitReview.isPending}
-                         className="flex-1 group relative overflow-hidden border border-tui-accent bg-tui-accent/10 text-tui-accent py-3 md:py-4 text-xs font-bold hover:bg-tui-accent hover:text-tui-bg disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 uppercase tracking-widest transition-all"
+                         className="flex-1 group relative overflow-hidden border border-tui-accent bg-tui-accent/10 text-tui-accent py-3 md:py-4 text-xs font-bold hover:bg-tui-accent hover:text-tui-bg disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 transition-all"
                        >
                          <GitPullRequest size={18} className="transition-transform group-hover:scale-110" />
-                          {submitReview.isPending ? 'MERGING...' : 'Merge & Cleanup'}
+                          {submitReview.isPending ? 'Merging...' : 'Merge & Cleanup'}
                        </button>
                      ) : (
                        <>
                           <button 
                             onClick={() => handleAction('approved')}
                             disabled={submitReview.isPending}
-                            className="flex-1 group relative overflow-hidden border border-ctp-green bg-ctp-green/10 text-ctp-green py-3 md:py-4 text-xs font-bold hover:bg-ctp-green hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 uppercase tracking-widest transition-all"
+                            className="flex-1 group relative overflow-hidden border border-ctp-green bg-ctp-green/10 text-ctp-green py-3 md:py-4 text-xs font-bold hover:bg-ctp-green hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 transition-all"
                           >
                            <CheckSquare size={18} className="transition-transform group-hover:scale-110" />
-                           {submitReview.isPending ? 'APPROVING...' : 'Approve'}
+                           {submitReview.isPending ? 'Approving...' : 'Approve'}
                          </button>
                          <button 
                            onClick={() => handleAction('changes_requested')}
                            disabled={submitReview.isPending}
-                            className="flex-1 group relative overflow-hidden border border-ctp-red bg-ctp-red/10 text-ctp-red py-3 md:py-4 text-xs font-bold hover:bg-ctp-red hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 uppercase tracking-tui transition-all"
+                            className="flex-1 group relative overflow-hidden border border-ctp-red bg-ctp-red/10 text-ctp-red py-3 md:py-4 text-xs font-bold hover:bg-ctp-red hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 transition-all"
                          >
                            <XSquare size={18} className="transition-transform group-hover:scale-110" />
-                            {submitReview.isPending ? 'REQUESTING...' : 'Request Changes'}
+                            {submitReview.isPending ? 'Requesting...' : 'Request Changes'}
                          </button>
                        </>
                      )}
@@ -543,23 +543,23 @@ function ReviewQueue() {
                     <Search size={64} className="opacity-10" />
                     <div className="absolute inset-0 border border-tui-dim/5 rounded-full scale-150" />
                   </div>
-                  <div className="text-center space-y-2">
-                     <p className="text-xs font-bold tracking-tui uppercase opacity-40">Scanning for input</p>
-                    <p className="text-[10px] italic opacity-20 uppercase tracking-tui">No active signals detected</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="relative">
-                    <AlertCircle size={64} className="opacity-10 animate-pulse" />
-                    <div className="absolute inset-0 border-2 border-tui-dim/10 rounded-full animate-ping" />
-                  </div>
-                  <div className="text-center space-y-2">
-                    <p className="text-xs font-bold tracking-[0.3em] uppercase opacity-40">Awaiting Selection</p>
-                    <p className="text-[10px] italic opacity-20 uppercase tracking-widest">Registry Monitor Active</p>
-                  </div>
-                </>
-              )}
+                   <div className="text-center space-y-2">
+                      <p className="text-xs font-bold opacity-40">Scanning for input</p>
+                     <p className="text-[10px] italic opacity-20">No active signals detected</p>
+                   </div>
+                 </>
+               ) : (
+                 <>
+                   <div className="relative">
+                     <AlertCircle size={64} className="opacity-10 animate-pulse" />
+                     <div className="absolute inset-0 border-2 border-tui-dim/10 rounded-full animate-ping" />
+                   </div>
+                   <div className="text-center space-y-2">
+                     <p className="text-xs font-bold opacity-40">Awaiting selection</p>
+                     <p className="text-[10px] italic opacity-20">Registry monitor active</p>
+                   </div>
+                 </>
+               )}
             </div>
           )}
         </div>

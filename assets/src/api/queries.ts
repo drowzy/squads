@@ -1088,6 +1088,40 @@ export function useDisableMcpServer() {
   })
 }
 
+export function useMcpSecrets() {
+  return useQuery({
+    queryKey: ['mcp', 'secrets'],
+    queryFn: () => fetcher<{ data: string }>('/mcp/secrets'),
+  })
+}
+
+export function useSetMcpSecret() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { key: string; value: string }) =>
+      fetcher<void>('/mcp/secrets', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp', 'secrets'] })
+    },
+  })
+}
+
+export function useRemoveMcpSecret() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (key: string) =>
+      fetcher<void>(`/mcp/secrets/${encodeURIComponent(key)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp', 'secrets'] })
+    },
+  })
+}
+
 // --- Agent Queries ---
 
 

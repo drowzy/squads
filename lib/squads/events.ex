@@ -36,17 +36,6 @@ defmodule Squads.Events do
     end
   end
 
-  @doc """
-  Creates an event, raising on error.
-  """
-  @spec create_event!(map()) :: Event.t()
-  def create_event!(attrs) do
-    %Event{}
-    |> Event.changeset(attrs)
-    |> Repo.insert!()
-    |> broadcast()
-  end
-
   defp broadcast(%Event{} = event) do
     PubSub.broadcast(Squads.PubSub, "project:#{event.project_id}:events", {:event, event})
     event

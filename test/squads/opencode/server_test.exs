@@ -1,26 +1,30 @@
 defmodule Squads.OpenCode.ServerTest do
   use Squads.DataCase
-  alias Squads.OpenCode.Server
+  alias Squads.OpenCode.{Server, ProjectServer, ServerRegistry, ProjectSupervisor}
+  alias Squads.Projects.Project
+  alias Squads.Repo
 
-  # We need to mock the external command execution to test this properly without actually running opencode
-  # But for now, let's just test the process structure and blocking behavior if possible.
-  # Since :exec is used, it's hard to mock without dependency injection or Mox.
+  setup do
+    # Clear registry
+    Registry.unregister_match(ServerRegistry, :_, :_)
+    :ok
+  end
 
-  # However, the goal is to refactor. Let's start by observing the current blocking behavior.
-  # We can't easily reproduce the 60s block in a test without a slow command.
+  test "ensure_running returns error if project not found" do
+    assert {:error, :project_not_found} = Server.ensure_running(Ecto.UUID.generate())
+  end
 
-  # Instead of full integration test, let's trust the analysis:
-  # handle_call calls start_project_server which calls wait_for_healthy which sleeps.
-  # This definitely blocks the GenServer.
+  test "ensure_running returns url if already running" do
+    project_id = Ecto.UUID.generate()
+    url = "http://127.0.0.1:1234"
 
-  # The plan is:
-  # 1. Add Task.Supervisor to the supervision tree.
-  # 2. Modify Server to use Task.Supervisor.async_nolink (or simply start_child) to run the startup.
-  # 3. Handle the result in handle_info or similar.
-  # 4. Handle concurrent requests for the same project_id.
+    # Manually register in registry to simulate running
+    {:ok, _} = Registry.register(ServerRegistry, project_id, url)
 
-  test "starts successfully" do
-    # Just a placeholder to ensure the module compiles
-    assert Code.ensure_loaded?(Squads.OpenCode.Server)
+    # Mock project in DB
+    project = %Project{id: project_id, path: "/tmp/fake", name: "Fake Project"}
+    Repo.insert!(project)
+
+    assert {:ok, ^url} = Server.ensure_running(project_id)
   end
 end

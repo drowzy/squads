@@ -19,6 +19,7 @@ defmodule Squads.Squads.Squad do
           name: String.t(),
           description: String.t() | nil,
           project_id: Ecto.UUID.t(),
+          opencode_status: atom(),
           project: Project.t() | Ecto.Association.NotLoaded.t(),
           agents: [Agent.t()] | Ecto.Association.NotLoaded.t(),
           inserted_at: DateTime.t(),
@@ -28,6 +29,7 @@ defmodule Squads.Squads.Squad do
   schema "squads" do
     field :name, :string
     field :description, :string
+    field :opencode_status, :any, virtual: true, default: :idle
 
     belongs_to :project, Project
     has_many :agents, Agent

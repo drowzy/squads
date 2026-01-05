@@ -18,10 +18,8 @@ defmodule Squads.Application do
       {DynamicSupervisor, strategy: :one_for_one, name: Squads.OpenCode.ProjectSupervisor},
       {Task.Supervisor, name: Squads.OpenCode.TaskSupervisor},
       {Squads.OpenCode.Status, []},
-      {Squads.OpenCode.Server, []},
-      # Start a worker by calling: Squads.Worker.start_link(arg)
-      # {Squads.Worker, arg},
-      # Start to serve requests, typically the last entry
+      # Squads.OpenCode.Server is now a plain module facade
+      # SquadsWeb.Endpoint must be started last
       SquadsWeb.Endpoint
     ]
 

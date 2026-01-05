@@ -1,9 +1,9 @@
 defmodule Squads.OpenCode.Status do
   @moduledoc """
-  In-memory status store for OpenCode instances keyed by project path.
+  In-memory status store for OpenCode instances keyed by normalized project path.
   """
-
   use GenServer
+  alias Squads.OpenCode.Resolver
 
   @table __MODULE__
   @valid_statuses [:idle, :provisioning, :running, :error]
@@ -25,27 +25,52 @@ defmodule Squads.OpenCode.Status do
     {:ok, %{}}
   end
 
+  @doc """
+  Fetches the status for a project path.
+  Normalizes the path before lookup.
+  """
   def fetch(project_path) when is_binary(project_path) do
-    case :ets.lookup(@table, project_path) do
-      [{^project_path, status}] -> {:ok, status}
+    path = Resolver.canonicalize_path(project_path)
+
+    case :ets.lookup(@table, path) do
+      [{^path, status}] -> {:ok, status}
       [] -> :error
     end
   end
 
+  @doc """
+  Gets the status for a project path, defaulting to :idle if not found.
+  """
   def get(project_path) when is_binary(project_path) do
     case fetch(project_path) do
       {:ok, status} -> status
-      :error -> :provisioning
+      :error -> :idle
     end
   end
 
+  @doc """
+  Sets the status for a project path.
+  Normalizes the path before insertion.
+  """
   def set(project_path, status) when is_binary(project_path) and status in @valid_statuses do
-    :ets.insert(@table, {project_path, status})
+    path = Resolver.canonicalize_path(project_path)
+    :ets.insert(@table, {path, status})
     :ok
   end
 
+  @doc """
+  Clears the status for a project path.
+  """
   def clear(project_path) when is_binary(project_path) do
-    :ets.delete(@table, project_path)
+    path = Resolver.canonicalize_path(project_path)
+    :ets.delete(@table, path)
     :ok
+  end
+
+  @doc """
+  Returns all tracked statuses.
+  """
+  def list_all do
+    :ets.tab2list(@table)
   end
 end

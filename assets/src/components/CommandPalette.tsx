@@ -96,7 +96,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             </Command.Empty>
 
             {currentAgent && (
-              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-accent px-2 mt-2 mb-2 block uppercase">Current Context</span>}>
+              <Command.Group heading={<span className="text-[10px] font-bold text-tui-accent px-2 mt-2 mb-2 block">Current context</span>}>
                 <PaletteItem
                   onSelect={() => runCommand(async () => {
                     try {
@@ -125,7 +125,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
               </Command.Group>
             )}
 
-            <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Navigation</span>}>
+            <Command.Group heading={<span className="text-[10px] font-bold text-tui-dim px-2 mt-4 mb-2 block">Navigation</span>}>
               <PaletteItem
                 onSelect={() => runCommand(() => navigate({ to: '/' }))}
                 icon={<LayoutDashboard size={18} />}
@@ -165,7 +165,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             </Command.Group>
 
             {agents && agents.length > 0 && (
-              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Agents</span>}>
+              <Command.Group heading={<span className="text-[10px] font-bold text-tui-dim px-2 mt-4 mb-2 block">Agents</span>}>
                 {agents.slice(0, 5).map(agent => (
                   <PaletteItem
                     key={agent.id}
@@ -179,7 +179,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             )}
 
             {squads && squads.length > 0 && (
-              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Squads</span>}>
+              <Command.Group heading={<span className="text-[10px] font-bold text-tui-dim px-2 mt-4 mb-2 block">Squads</span>}>
                 {squads.slice(0, 3).map(squad => (
                   <PaletteItem
                     key={squad.id}
@@ -193,7 +193,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             )}
 
             {sessions && sessions.length > 0 && (
-              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Recent Sessions</span>}>
+              <Command.Group heading={<span className="text-[10px] font-bold text-tui-dim px-2 mt-4 mb-2 block">Recent sessions</span>}>
                 {Array.from(new Map(sessions.slice(0, 10).map(s => [s.agent_id, s])).values()).slice(0, 5).map(session => (
                   <PaletteItem
                     key={session.id}
@@ -207,7 +207,7 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             )}
 
             {projects && projects.length > 1 && (
-              <Command.Group heading={<span className="text-[10px] font-bold tracking-tui text-tui-dim px-2 mt-4 mb-2 block uppercase">Projects</span>}>
+              <Command.Group heading={<span className="text-[10px] font-bold text-tui-dim px-2 mt-4 mb-2 block">Projects</span>}>
                 {projects.map(project => (
                   <PaletteItem
                     key={project.id}
@@ -224,19 +224,19 @@ export function CommandPalette({ isOpen, setIsOpen, activeProjectId }: CommandPa
             )}
         </Command.List>
 
-        <div className="border-t border-tui-border p-3 bg-ctp-crust/40 flex items-center justify-between text-[10px] text-tui-dim uppercase tracking-tui font-bold">
+        <div className="border-t border-tui-border p-3 bg-ctp-crust/40 flex items-center justify-between text-[10px] text-tui-dim font-bold">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
               <kbd className="px-1 py-0.5 rounded border border-tui-border bg-tui-dim/10">↑↓</kbd>
               <span>Navigate</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <kbd className="px-1 py-0.5 rounded border border-tui-border bg-tui-dim/10">ENTER</kbd>
+              <kbd className="px-1 py-0.5 rounded border border-tui-border bg-tui-dim/10">Enter</kbd>
               <span>Execute</span>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <span>Uplink Active</span>
+            <span>Uplink active</span>
             <div className="w-1.5 h-1.5 rounded-full bg-tui-success animate-pulse" />
           </div>
         </div>

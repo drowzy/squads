@@ -9,6 +9,9 @@ defmodule SquadsWeb.API.MCPControllerTest do
     def available?, do: {:ok, true}
     def server_enable(_name), do: {:ok, "enabled"}
     def server_disable(_name), do: {:ok, "disabled"}
+    def secret_list, do: {:ok, "NOTION_API_KEY=********"}
+    def secret_set(_key, _value), do: {:ok, "Secret set"}
+    def secret_remove(_key), do: {:ok, "Secret removed"}
   end
 
   defmodule CatalogStub do
@@ -127,6 +130,26 @@ defmodule SquadsWeb.API.MCPControllerTest do
       response = json_response(conn, 200)
 
       assert response["available"] == true
+    end
+  end
+
+  describe "secrets" do
+    test "lists secrets", %{conn: conn} do
+      conn = get(conn, ~p"/api/mcp/secrets")
+      response = json_response(conn, 200)
+      assert response["data"] == "NOTION_API_KEY=********"
+    end
+
+    test "sets a secret", %{conn: conn} do
+      conn = post(conn, ~p"/api/mcp/secrets", %{key: "NOTION_API_KEY", value: "secret123"})
+      response = json_response(conn, 200)
+      assert response["data"] == "Secret set"
+    end
+
+    test "removes a secret", %{conn: conn} do
+      conn = delete(conn, ~p"/api/mcp/secrets/NOTION_API_KEY")
+      response = json_response(conn, 200)
+      assert response["data"] == "Secret removed"
     end
   end
 

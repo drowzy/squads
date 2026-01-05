@@ -48,14 +48,12 @@ defmodule SquadsWeb.API.SessionController do
   GET /api/sessions/:id
   """
   def show(conn, %{"id" => id}) do
-    case Ecto.UUID.cast(id) do
-      {:ok, uuid} ->
-        with_session(uuid, fn session ->
-          render(conn, :show, session: session)
-        end)
-
-      :error ->
-        {:error, :not_found}
+    with {:ok, uuid} <- Ecto.UUID.cast(id),
+         {:ok, session} <- Sessions.fetch_session(uuid) do
+      render(conn, :show, session: session)
+    else
+      :error -> {:error, :not_found}
+      {:error, :not_found} -> {:error, :not_found}
     end
   end
 
@@ -106,32 +104,26 @@ defmodule SquadsWeb.API.SessionController do
   POST /api/sessions/:session_id/start
   """
   def start_existing(conn, %{"session_id" => id} = params) do
-    with_session(id, fn session ->
+    with {:ok, session} <- resolve_session(id) do
       opts = if params["title"], do: [title: params["title"]], else: []
-      Sessions.start_session(session, opts)
-    end)
-    |> case do
-      {:ok, session} -> render(conn, :show, session: session)
-      error -> error
+
+      case Sessions.start_session(session, opts) do
+        {:ok, session} -> render(conn, :show, session: session)
+        error -> error
+      end
     end
   end
 
-  @doc """
-  Stop a running session.
-
-  POST /api/sessions/:session_id/stop
-  Body: { "exit_code": 0, "reason": "User requested" } (optional)
-  """
   def stop(conn, %{"session_id" => id} = params) do
-    with_session(id, fn session ->
+    with {:ok, session} <- resolve_session(id) do
       exit_code = params["exit_code"] || 0
       opts = [terminated_by: "user"]
       opts = if params["reason"], do: opts ++ [reason: params["reason"]], else: opts
-      Sessions.stop_session(session, exit_code, opts)
-    end)
-    |> case do
-      {:ok, session} -> render(conn, :show, session: session)
-      error -> error
+
+      case Sessions.stop_session(session, exit_code, opts) do
+        {:ok, session} -> render(conn, :show, session: session)
+        error -> error
+      end
     end
   end
 
@@ -170,69 +162,42 @@ defmodule SquadsWeb.API.SessionController do
   POST /api/sessions/:session_id/cancel
   """
   def cancel(conn, %{"session_id" => id}) do
-    with_session(id, fn session ->
-      Sessions.cancel_session(session)
-    end)
-    |> case do
-      {:ok, session} -> render(conn, :show, session: session)
-      error -> error
+    with {:ok, session} <- resolve_session(id),
+         {:ok, session} <- Sessions.cancel_session(session) do
+      render(conn, :show, session: session)
     end
   end
 
-  @doc """
-  Get messages from a session.
-
-  GET /api/sessions/:session_id/messages
-  GET /api/sessions/:session_id/messages?limit=50
-  """
   def messages(conn, %{"session_id" => id} = params) do
-    with_session(id, fn session ->
+    with {:ok, session} <- resolve_session(id) do
       opts = if params["limit"], do: [limit: String.to_integer(params["limit"])], else: []
-      Sessions.get_messages(session, opts)
-    end)
-    |> case do
-      {:ok, messages} -> json(conn, %{data: messages})
-      error -> error
+
+      case Sessions.get_messages(session, opts) do
+        {:ok, messages} -> json(conn, %{data: messages})
+        error -> error
+      end
     end
   end
 
-  @doc """
-  Get the diff for a session.
-
-  GET /api/sessions/:session_id/diff
-  """
   def diff(conn, %{"session_id" => id} = params) do
-    with_session(id, fn session ->
-      opts = []
+    with {:ok, session} <- resolve_session(id) do
+      opts = if params["node_url"], do: [base_url: params["node_url"]], else: []
 
-      opts =
-        if params["node_url"], do: Keyword.put(opts, :base_url, params["node_url"]), else: opts
-
-      Sessions.get_diff(session, opts)
-    end)
-    |> case do
-      {:ok, diff} -> json(conn, %{data: diff})
-      error -> error
+      case Sessions.get_diff(session, opts) do
+        {:ok, diff} -> json(conn, %{data: diff})
+        error -> error
+      end
     end
   end
 
-  @doc """
-  Get the todo list for a session.
-
-  GET /api/sessions/:session_id/todos
-  """
   def todos(conn, %{"session_id" => id} = params) do
-    with_session(id, fn session ->
-      opts = []
+    with {:ok, session} <- resolve_session(id) do
+      opts = if params["node_url"], do: [base_url: params["node_url"]], else: []
 
-      opts =
-        if params["node_url"], do: Keyword.put(opts, :base_url, params["node_url"]), else: opts
-
-      Sessions.get_todos(session, opts)
-    end)
-    |> case do
-      {:ok, todos} -> json(conn, %{data: todos})
-      error -> error
+      case Sessions.get_todos(session, opts) do
+        {:ok, todos} -> json(conn, %{data: todos})
+        error -> error
+      end
     end
   end
 
@@ -251,7 +216,7 @@ defmodule SquadsWeb.API.SessionController do
     opts =
       params
       |> Map.take(["model", "agent", "no_reply", "node_url"])
-      |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
+      |> normalize_opts()
 
     case Sessions.dispatch_prompt(id, prompt, opts) do
       {:ok, response} ->
@@ -282,7 +247,7 @@ defmodule SquadsWeb.API.SessionController do
     opts =
       params
       |> Map.take(["model", "agent", "node_url"])
-      |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
+      |> normalize_opts()
 
     case Sessions.dispatch_prompt_async(id, prompt, opts) do
       {:ok, response} ->
@@ -316,7 +281,7 @@ defmodule SquadsWeb.API.SessionController do
     opts =
       params
       |> Map.take(["arguments", "agent", "model", "node_url"])
-      |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
+      |> normalize_opts()
 
     case Sessions.dispatch_command(id, command, opts) do
       {:ok, response} -> json(conn, %{data: response})
@@ -339,7 +304,7 @@ defmodule SquadsWeb.API.SessionController do
     opts =
       params
       |> Map.take(["agent", "model", "node_url"])
-      |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
+      |> normalize_opts()
 
     case Sessions.dispatch_shell(id, command, opts) do
       {:ok, response} -> json(conn, %{data: response})
@@ -372,21 +337,19 @@ defmodule SquadsWeb.API.SessionController do
     end
   end
 
-  defp with_session(id, fun) do
-    # Check if id is an OpenCode session ID (e.g. ses-...)
+  defp resolve_session(id) do
     if is_binary(id) and String.starts_with?(id, "ses") do
-      # For Phase 2, if it's an OpenCode ID, we can wrap it in a pseudo-session
-      # so existing logic works, or handle it specially.
-      # For now, we still look it up in DB, but Phase 2 will allow proxying.
-      case Sessions.get_session_by_opencode_id(id) do
-        nil -> {:error, :not_found}
-        session -> fun.(session)
-      end
+      Sessions.fetch_session_by_opencode_id(id)
     else
-      case Sessions.get_session(id) do
-        nil -> {:error, :not_found}
-        session -> fun.(session)
+      with {:ok, uuid} <- Ecto.UUID.cast(id) do
+        Sessions.fetch_session(uuid)
+      else
+        :error -> {:error, :not_found}
       end
     end
+  end
+
+  defp normalize_opts(params) do
+    Enum.map(params, fn {k, v} -> {String.to_atom(k), v} end)
   end
 end

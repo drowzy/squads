@@ -21,6 +21,7 @@ defmodule Squads.Squads do
     |> where([s], s.project_id == ^project_id)
     |> Repo.all()
     |> Repo.preload(:project)
+    |> Enum.map(&populate_opencode_status/1)
   end
 
   @doc """
@@ -31,6 +32,19 @@ defmodule Squads.Squads do
     Squad
     |> Repo.get(id)
     |> Repo.preload(:project)
+    |> populate_opencode_status()
+  end
+
+  defp populate_opencode_status(nil), do: nil
+
+  defp populate_opencode_status(%Squad{project: %Squads.Projects.Project{path: path}} = squad) do
+    status = Status.get(path)
+    %{squad | opencode_status: status}
+  end
+
+  defp populate_opencode_status(%Squad{} = squad) do
+    squad = Repo.preload(squad, :project)
+    populate_opencode_status(squad)
   end
 
   @doc """

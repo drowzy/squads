@@ -162,6 +162,7 @@ defmodule Squads.OpenCode.ProjectServerTest do
   test "terminate does nothing if os_pid is nil" do
     state = %{
       project_id: "proj-term-nil",
+      project_path: "/tmp/term-nil",
       os_pid: nil
     }
 

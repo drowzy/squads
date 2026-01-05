@@ -195,6 +195,30 @@ defmodule Squads.MCP do
   end
 
   @doc """
+  Lists MCP secrets.
+  """
+  def secret_list do
+    case docker_cli().secret_list() do
+      {:ok, output} -> {:ok, output}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Sets an MCP secret.
+  """
+  def secret_set(key, value) do
+    docker_cli().secret_set(key, value)
+  end
+
+  @doc """
+  Removes an MCP secret.
+  """
+  def secret_remove(key) do
+    docker_cli().secret_remove(key)
+  end
+
+  @doc """
   Handles an MCP request.
   """
   def handle_request("agent_mail", %{"method" => "list_tools"}) do

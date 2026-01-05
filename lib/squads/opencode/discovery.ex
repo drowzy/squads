@@ -43,6 +43,7 @@ defmodule Squads.OpenCode.Discovery do
     # Only run on dev/darwin/linux; skip on Windows or if explicitly disabled
     if Application.get_env(:squads, :enable_local_discovery, true) do
       Resolver.list_local_listeners()
+      |> Enum.map(fn %{port: port} -> "http://127.0.0.1:#{port}" end)
       |> Enum.map(&probe_node/1)
       |> Enum.filter(fn
         {:ok, _} -> true

@@ -57,8 +57,8 @@ function Dashboard() {
           <h2 className="text-xl md:text-2xl font-bold tracking-tighter">Mission Control / Dashboard</h2>
           <p className="text-tui-dim text-xs md:text-sm italic">System status and overview</p>
         </div>
-        <div className="text-left sm:text-right text-[10px] text-tui-dim font-bold tracking-tui uppercase">
-          Last Sync: {new Date().toLocaleTimeString()}
+        <div className="text-left sm:text-right text-[10px] text-tui-dim font-bold">
+          Last sync: {new Date().toLocaleTimeString()}
         </div>
       </div>
 
@@ -92,7 +92,7 @@ function Dashboard() {
       <div className="border border-tui-border p-4 bg-ctp-mantle/50">
         <div className="flex items-center gap-2 mb-4">
           <span className="w-2 h-2 bg-tui-accent" />
-          <h3 className="font-bold uppercase tracking-tui text-[10px] text-tui-dim">Recent Activity</h3>
+          <h3 className="font-bold text-[10px] text-tui-dim">Recent activity</h3>
         </div>
         <EventTimeline events={events} isLoading={eventsLoading} />
       </div>
@@ -128,13 +128,13 @@ function ActionCard({
       <div className="flex items-start gap-3">
         <div className="mt-0.5">{icon}</div>
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-tui text-tui-dim">
+          <div className="text-[10px] font-bold text-tui-dim">
             {label}
           </div>
           <div className="text-[11px] text-tui-dim mt-1">{description}</div>
         </div>
       </div>
-      <span className="text-[10px] font-bold uppercase tracking-tui text-tui-dim">
+      <span className="text-[10px] font-bold text-tui-dim">
         {disabled ? 'Wait' : 'Open'}
       </span>
     </button>
@@ -144,7 +144,7 @@ function ActionCard({
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="border border-tui-border p-4 bg-ctp-mantle/50">
-      <div className="text-[10px] text-tui-dim mb-1 font-bold tracking-tui uppercase">{label}</div>
+      <div className="text-[10px] text-tui-dim mb-1 font-bold">{label}</div>
       <div className={cn("text-2xl md:text-3xl font-bold tracking-tighter", color)}>{value}</div>
     </div>
   )

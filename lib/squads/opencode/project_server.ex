@@ -7,6 +7,7 @@ defmodule Squads.OpenCode.ProjectServer do
 
   alias Squads.OpenCode.Client
   alias Squads.OpenCode.Status
+  alias Squads.OpenCode.Resolver
 
   @registry Squads.OpenCode.ServerRegistry
 
@@ -230,8 +231,12 @@ defmodule Squads.OpenCode.ProjectServer do
 
   @impl true
   def handle_info({:EXIT, _pid, :normal}, %{status: :running} = state) do
-    Logger.debug("OpenCode process exited after attach; ignoring", project_id: state.project_id)
-    {:noreply, state}
+    Logger.debug("OpenCode process exited normally after successful start; moving to idle",
+      project_id: state.project_id
+    )
+
+    Status.set(state.project_path, :idle)
+    {:noreply, %{state | status: :idle, os_pid: nil}}
   end
 
   @impl true
@@ -240,7 +245,7 @@ defmodule Squads.OpenCode.ProjectServer do
       case attach_to_local_instance(state) do
         {:ok, instance} ->
           Logger.warning(
-            "OpenCode process exited normally; attaching to existing instance",
+            "OpenCode process exited normally during startup; attaching to existing instance",
             project_id: state.project_id,
             port: instance.port,
             os_pid: instance.pid
@@ -260,7 +265,7 @@ defmodule Squads.OpenCode.ProjectServer do
       end
     else
       Logger.error(
-        "OpenCode process for project #{state.project_id} exited: #{inspect(reason)} (elapsed_ms=#{elapsed_ms(state)})"
+        "OpenCode process for project #{state.project_id} exited with error: #{inspect(reason)} (elapsed_ms=#{elapsed_ms(state)})"
       )
 
       Status.set(state.project_path, :error)
@@ -279,6 +284,16 @@ defmodule Squads.OpenCode.ProjectServer do
 
       :exec.stop(state.os_pid)
     end
+
+    status =
+      case reason do
+        :normal -> :idle
+        :shutdown -> :idle
+        {:shutdown, _} -> :idle
+        _ -> :error
+      end
+
+    Status.set(state.project_path, status)
 
     :ok
   end
@@ -380,7 +395,7 @@ defmodule Squads.OpenCode.ProjectServer do
 
         case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
           {:ok, project} when is_map(project) ->
-            if project_matches?(project_path, project) do
+            if Resolver.project_matches?(project_path, project) do
               {:ok,
                %{
                  url: base_url,
@@ -406,7 +421,7 @@ defmodule Squads.OpenCode.ProjectServer do
 
     case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
       {:ok, project} when is_map(project) ->
-        if project_matches?(project_path, project) do
+        if Resolver.project_matches?(project_path, project) do
           {:ok,
            %{
              url: base_url,
@@ -429,7 +444,7 @@ defmodule Squads.OpenCode.ProjectServer do
         output
         |> String.split("\n", trim: true)
         |> Enum.filter(&String.contains?(&1, "opencode"))
-        |> Enum.find_value(&parse_lsof_listener/1)
+        |> Enum.find_value(&Resolver.parse_lsof_listener/1)
         |> case do
           nil -> :not_found
           listener -> {:ok, listener}
@@ -445,13 +460,13 @@ defmodule Squads.OpenCode.ProjectServer do
   defp discover_instance_for_project(project_path, lsof_runner, client)
        when is_binary(project_path) do
     instance =
-      list_opencode_listeners(lsof_runner)
+      Resolver.list_local_listeners(lsof_runner)
       |> Enum.find_value(fn %{port: port, pid: pid} ->
         base_url = url_for_port(port)
 
         case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
           {:ok, project} when is_map(project) ->
-            if project_matches?(project_path, project) do
+            if Resolver.project_matches?(project_path, project) do
               %{
                 url: base_url,
                 port: port,
@@ -471,66 +486,8 @@ defmodule Squads.OpenCode.ProjectServer do
     end
   end
 
-  defp discover_instance_for_project(_project_path, _lsof_runner, _client) do
-    {:error, :invalid_project_path}
-  end
-
-  defp list_opencode_listeners(lsof_runner) do
-    case lsof_runner.("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"]) do
-      {output, 0} ->
-        output
-        |> String.split("\n", trim: true)
-        |> Enum.filter(&String.contains?(&1, "opencode"))
-        |> Enum.map(&parse_lsof_listener/1)
-        |> Enum.filter(& &1)
-        |> Enum.uniq_by(& &1.port)
-
-      _ ->
-        []
-    end
-  rescue
-    _ -> []
-  end
-
-  defp parse_lsof_listener(line) do
-    case Regex.run(~r/^\s*\S+\s+(\d+).*TCP\s+.*:(\d+)\s+\(LISTEN\)/, line) do
-      [_, pid, port] ->
-        %{pid: String.to_integer(pid), port: String.to_integer(port)}
-
-      _ ->
-        nil
-    end
-  end
-
   defp url_for_port(port) when is_integer(port) do
     "http://127.0.0.1:#{port}"
-  end
-
-  defp project_matches?(project_path, project) do
-    path = project["worktree"] || project["path"]
-
-    project_path = canonicalize_path(project_path)
-    opencode_path = canonicalize_path(path)
-
-    is_binary(project_path) and is_binary(opencode_path) and project_path == opencode_path
-  end
-
-  defp canonicalize_path(path) when is_binary(path) do
-    path
-    |> Path.expand()
-    |> normalize_macos_volume()
-  end
-
-  defp canonicalize_path(_), do: nil
-
-  defp normalize_macos_volume(path) do
-    data_prefix = "/System/Volumes/Data"
-
-    if String.starts_with?(path, data_prefix <> "/") do
-      String.replace_prefix(path, data_prefix, "")
-    else
-      path
-    end
   end
 
   defp elapsed_ms(%{started_at_ms: nil}), do: "unknown"

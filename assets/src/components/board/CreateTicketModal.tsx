@@ -41,7 +41,7 @@ export function CreateTicketModal({ isOpen, onClose, projectId }: CreateTicketMo
     <Modal isOpen={isOpen} onClose={onClose} title="Create Ticket">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-bold text-tui-dim uppercase mb-1">Title</label>
+          <label className="block text-xs font-bold text-tui-dim mb-1">Title</label>
           <input
             type="text"
             value={title}
@@ -54,7 +54,7 @@ export function CreateTicketModal({ isOpen, onClose, projectId }: CreateTicketMo
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-tui-dim uppercase mb-1">Type</label>
+            <label className="block text-xs font-bold text-tui-dim mb-1">Type</label>
             <select
               value={issueType}
               onChange={(e) => setIssueType(e.target.value)}
@@ -69,7 +69,7 @@ export function CreateTicketModal({ isOpen, onClose, projectId }: CreateTicketMo
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-tui-dim uppercase mb-1">Priority</label>
+            <label className="block text-xs font-bold text-tui-dim mb-1">Priority</label>
             <select
               value={priority}
               onChange={(e) => setPriority(Number(e.target.value))}
@@ -88,16 +88,16 @@ export function CreateTicketModal({ isOpen, onClose, projectId }: CreateTicketMo
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold uppercase text-tui-dim hover:text-tui-text mr-2"
+            className="px-4 py-2 text-xs font-bold text-tui-dim hover:text-tui-text mr-2"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={createTicket.isPending || !title.trim()}
-            className="px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase hover:bg-white transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold hover:bg-white transition-colors disabled:opacity-50"
           >
-            {createTicket.isPending ? 'Creating...' : 'Create Ticket'}
+            {createTicket.isPending ? 'Creating...' : 'Create ticket'}
           </button>
         </div>
       </form>

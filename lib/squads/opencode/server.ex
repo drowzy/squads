@@ -13,6 +13,9 @@ defmodule Squads.OpenCode.Server do
   @registry Squads.OpenCode.ServerRegistry
 
   def child_spec(opts) do
+    # We remove the id: __MODULE__ so it doesn't get started by the supervisor
+    # Or we can just return a spec that does nothing.
+    # Actually, let's just make it :ignore so application.ex doesn't have to change immediately.
     %{
       id: __MODULE__,
       start: {__MODULE__, :start_link, [opts]}
@@ -20,12 +23,8 @@ defmodule Squads.OpenCode.Server do
   end
 
   def start_link(_opts) do
-    # This module is now just a facade, but we keep the GenServer structure if we want 
-    # to maintain the singleton-facade pattern or we can just make it a plain module.
-    # For compatibility with Squads.Application, we'll make it a simple Supervisor or Task.
-    # Actually, the easiest is to just let it be a plain module and remove it from application.ex children.
-    # But to minimize changes to application.ex, we can make it a :ignore worker.
-    # Or even better, just remove it from application.ex and call it as a module.
+    # This module is now just a facade. Returning :ignore means the supervisor won't 
+    # keep track of it, and we don't need a running process for this module.
     :ignore
   end
 
@@ -44,25 +43,38 @@ defmodule Squads.OpenCode.Server do
   def ensure_running(project_id, project_path \\ nil) do
     case get_url(project_id) do
       {:ok, url} ->
-        path = project_path || get_project_path(project_id)
-        Status.set(path, :running)
+        if path = project_path || get_project_path(project_id) do
+          Status.set(path, :running)
+        end
+
         {:ok, url}
 
       {:error, :not_running} ->
         path = project_path || get_project_path(project_id)
 
-        case DynamicSupervisor.start_child(
-               ProjectSupervisor,
-               {ProjectServer, project_id: project_id, project_path: path}
-             ) do
-          {:ok, pid} ->
-            ProjectServer.ensure_running(pid)
+        if is_nil(path) do
+          {:error, :project_not_found}
+        else
+          case DynamicSupervisor.start_child(
+                 ProjectSupervisor,
+                 {ProjectServer, project_id: project_id, project_path: path}
+               ) do
+            {:ok, pid} ->
+              ProjectServer.ensure_running(pid)
 
-          {:error, {:already_started, pid}} ->
-            ProjectServer.ensure_running(pid)
+            {:error, {:already_started, pid}} ->
+              ProjectServer.ensure_running(pid)
 
-          {:error, reason} ->
-            {:error, reason}
+            {:error, reason} ->
+              {:error, reason}
+          end
+        end
+
+      {:error, :starting} ->
+        # If it's starting, we can find the pid in the registry and wait for it
+        case Registry.lookup(@registry, project_id) do
+          [{pid, _}] -> ProjectServer.ensure_running(pid)
+          [] -> ensure_running(project_id, project_path)
         end
     end
   end
@@ -79,6 +91,9 @@ defmodule Squads.OpenCode.Server do
   end
 
   defp get_project_path(project_id) do
-    Repo.get!(Project, project_id).path
+    case Repo.get(Project, project_id) do
+      nil -> nil
+      project -> project.path
+    end
   end
 end

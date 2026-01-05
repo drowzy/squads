@@ -21,6 +21,9 @@ import {
   useCreateMcpServer,
   useEnableMcpServer,
   useDisableMcpServer,
+  useMcpSecrets,
+  useSetMcpSecret,
+  useRemoveMcpSecret,
   type Squad,
   type Agent,
   type SquadConnection,
@@ -215,7 +218,7 @@ function SquadCard({ squad, projectId, sessions }: { squad: Squad; projectId: st
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3">
-            <h3 className="font-bold text-lg uppercase truncate">{squad.name}</h3>
+            <h3 className="font-bold text-lg truncate">{squad.name}</h3>
             <span className="text-xs px-2 py-0.5 border border-tui-border text-tui-dim">
               {agents.length} agent{agents.length !== 1 ? 's' : ''}
             </span>
@@ -490,7 +493,7 @@ function AgentRow({ agent, squadId, activeSession }: { agent: Agent; squadId: st
 
         <div className="flex-1 min-w-0">
           <div className="flex flex-col md:flex-row md:items-center gap-0 md:gap-2">
-            <span className="font-bold uppercase truncate text-sm md:text-base">{agent.name}</span>
+            <span className="font-bold truncate text-sm md:text-base">{agent.name}</span>
             <span className="text-xs text-tui-dim truncate">({agent.slug})</span>
           </div>
           {agent.model && (
@@ -764,12 +767,19 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
   const disableMcpServer = useDisableMcpServer()
   const { addNotification } = useNotifications()
   const [catalogOpen, setCatalogOpen] = useState(false)
+  const [secretsModalOpen, setSecretsModalOpen] = useState(false)
+  const [activeServerForSecrets, setActiveServerForSecrets] = useState<McpServer | null>(null)
   const [pendingName, setPendingName] = useState<string | null>(null)
 
   const cliAvailable = cliStatus?.available ?? true
   const cliMessage = cliStatus?.message
 
   const existingNames = new Set(servers.map(server => server.name))
+
+  const handleOpenSecrets = (server: McpServer) => {
+    setActiveServerForSecrets(server)
+    setSecretsModalOpen(true)
+  }
 
   const handleAdd = async (entry: McpCatalogEntry) => {
     try {
@@ -916,7 +926,8 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold uppercase text-sm truncate">{displayTitle}</span>
+                        <span className="font-bold text-sm truncate">{displayTitle}</span>
+
                     {meta?.category && (
                       <span className="text-xs text-tui-dim">{meta.category}</span>
                     )}
@@ -956,30 +967,40 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
                   )}
                 </div>
 
-                <button
-                  onClick={() => handleToggle(server)}
-                  disabled={!cliAvailable || pendingName === server.name}
-                  title={
-                    !cliAvailable
-                      ? cliMessage || 'Docker MCP Toolkit not detected.'
-                      : undefined
-                  }
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 text-xs font-bold tracking-widest uppercase",
-                    "border border-tui-border",
-                    server.enabled
-                      ? "text-ctp-red hover:bg-ctp-red/10"
-                      : "text-tui-accent hover:bg-tui-accent/10",
-                    (!cliAvailable || pendingName === server.name) && "opacity-60 cursor-not-allowed"
+                <div className="flex items-center gap-2">
+                  {secrets.length > 0 && (
+                    <button
+                      onClick={() => handleOpenSecrets(server)}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold tracking-widest uppercase border border-tui-border text-tui-text hover:bg-tui-dim/20 transition-colors"
+                    >
+                      Configure
+                    </button>
                   )}
-                >
-                  {server.enabled ? (
-                    <StopCircle size={12} aria-hidden="true" />
-                  ) : (
-                    <Play size={12} aria-hidden="true" />
-                  )}
-                  {server.enabled ? 'Disable' : 'Enable'}
-                </button>
+                  <button
+                    onClick={() => handleToggle(server)}
+                    disabled={!cliAvailable || pendingName === server.name}
+                    title={
+                      !cliAvailable
+                        ? cliMessage || 'Docker MCP Toolkit not detected.'
+                        : undefined
+                    }
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 text-xs font-bold tracking-widest uppercase",
+                      "border border-tui-border",
+                      server.enabled
+                        ? "text-ctp-red hover:bg-ctp-red/10"
+                        : "text-tui-accent hover:bg-tui-accent/10",
+                      (!cliAvailable || pendingName === server.name) && "opacity-60 cursor-not-allowed"
+                    )}
+                  >
+                    {server.enabled ? (
+                      <StopCircle size={12} aria-hidden="true" />
+                    ) : (
+                      <Play size={12} aria-hidden="true" />
+                    )}
+                    {server.enabled ? 'Disable' : 'Enable'}
+                  </button>
+                </div>
               </div>
             )
           })}
@@ -1002,7 +1023,163 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
         existingNames={existingNames}
         onAdd={handleAdd}
       />
+
+      {activeServerForSecrets && (
+        <McpSecretsModal
+          isOpen={secretsModalOpen}
+          onClose={() => {
+            setSecretsModalOpen(false)
+            setActiveServerForSecrets(null)
+          }}
+          server={activeServerForSecrets}
+        />
+      )}
     </div>
+  )
+}
+
+interface McpSecretsModalProps {
+  isOpen: boolean
+  onClose: () => void
+  server: McpServer
+}
+
+function McpSecretsModal({ isOpen, onClose, server }: McpSecretsModalProps) {
+  const { data: secretsData } = useMcpSecrets()
+  const setSecret = useSetMcpSecret()
+  const removeSecret = useRemoveMcpSecret()
+  const { addNotification } = useNotifications()
+  const [values, setValues] = useState<Record<string, string>>({})
+
+  const meta = server.catalog_meta as {
+    secrets?: { name: string; description?: string }[]
+    raw?: { config?: { secrets?: { name: string; description?: string }[] } }
+  } | null
+
+  const requiredSecrets = Array.isArray(meta?.secrets)
+    ? meta?.secrets
+    : Array.isArray(meta?.raw?.config?.secrets)
+      ? meta?.raw?.config?.secrets
+      : []
+
+  const currentSecrets = secretsData?.data || ''
+  const secretLines = currentSecrets.split('\n').filter(line => line.includes('='))
+  const secretMap = Object.fromEntries(
+    secretLines.map(line => {
+      const [k, ...v] = line.split('=')
+      return [k, v.join('=')]
+    })
+  )
+
+  const handleSave = async (key: string) => {
+    const val = values[key]
+    if (!val) return
+
+    try {
+      await setSecret.mutateAsync({ key, value: val })
+      addNotification({
+        type: 'success',
+        title: 'Secret Set',
+        message: `Secret ${key} has been updated.`,
+      })
+      setValues(prev => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'Action Failed',
+        message: err instanceof Error ? err.message : 'Failed to set secret',
+      })
+    }
+  }
+
+  const handleRemove = async (key: string) => {
+    if (!confirm(`Remove secret ${key}?`)) return
+
+    try {
+      await removeSecret.mutateAsync(key)
+      addNotification({
+        type: 'success',
+        title: 'Secret Removed',
+        message: `Secret ${key} has been removed.`,
+      })
+    } catch (err) {
+      addNotification({
+        type: 'error',
+        title: 'Action Failed',
+        message: err instanceof Error ? err.message : 'Failed to remove secret',
+      })
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Configure ${server.name}`} size="md">
+      <div className="space-y-6">
+        <p className="text-xs text-tui-dim italic">
+          These secrets are stored in the host's Docker MCP configuration and are shared across all squads.
+        </p>
+
+        <div className="space-y-4">
+          {requiredSecrets.map(s => {
+            const isSet = !!secretMap[s.name]
+            return (
+              <div key={s.name} className="space-y-2 p-3 border border-tui-border-dim bg-ctp-crust/20">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs uppercase tracking-widest">{s.name}</span>
+                  {isSet ? (
+                    <span className="text-[10px] text-ctp-green border border-ctp-green px-1">SET</span>
+                  ) : (
+                    <span className="text-[10px] text-ctp-peach border border-ctp-peach px-1">MISSING</span>
+                  )}
+                </div>
+                {s.description && <p className="text-[10px] text-tui-dim">{s.description}</p>}
+                
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    value={values[s.name] ?? ''}
+                    onChange={(e) => setValues(prev => ({ ...prev, [s.name]: e.target.value }))}
+                    placeholder={isSet ? '********' : 'Enter value...'}
+                    className="flex-1 h-8 text-xs"
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleSave(s.name)}
+                    disabled={!values[s.name] || setSecret.isPending}
+                  >
+                    Save
+                  </Button>
+                  {isSet && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleRemove(s.name)}
+                      disabled={removeSecret.isPending}
+                    >
+                      <Trash2 size={12} />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          {requiredSecrets.length === 0 && (
+            <div className="text-center p-8 border border-dashed border-tui-border text-tui-dim text-xs uppercase tracking-widest">
+              No secrets required for this server
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -1090,7 +1267,8 @@ function McpCatalogModal({ isOpen, onClose, existingNames, onAdd }: McpCatalogMo
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold uppercase text-sm truncate">{displayTitle}</span>
+                    <span className="font-bold text-sm truncate">{displayTitle}</span>
+
                         {entry.category && (
                           <span className="text-xs text-tui-dim">{entry.category}</span>
                         )}

@@ -177,6 +177,36 @@ defmodule SquadsWeb.API.MCPController do
     end
   end
 
+  def secret_list(conn, _params) do
+    case MCP.secret_list() do
+      {:ok, output} ->
+        json(conn, %{data: output})
+
+      {:error, reason} ->
+        cli_error(conn, reason)
+    end
+  end
+
+  def secret_set(conn, %{"key" => key, "value" => value}) do
+    case MCP.secret_set(key, value) do
+      {:ok, output} ->
+        json(conn, %{data: output})
+
+      {:error, reason} ->
+        cli_error(conn, reason)
+    end
+  end
+
+  def secret_remove(conn, %{"key" => key}) do
+    case MCP.secret_remove(key) do
+      {:ok, output} ->
+        json(conn, %{data: output})
+
+      {:error, reason} ->
+        cli_error(conn, reason)
+    end
+  end
+
   def auth(conn, _params) do
     json(conn, %{status: "ok"})
   end

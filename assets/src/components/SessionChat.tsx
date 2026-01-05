@@ -372,14 +372,14 @@ export function SessionChat({
             <Terminal size={14} />
             {headerContent || 'SESSION CHAT'}
           </div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase">
+          <div className="flex items-center gap-2 text-xs font-bold">
             <span
               className={cn(
                 'px-2 py-0.5 border',
                 isActive ? 'border-ctp-green/30 text-ctp-green' : isHistory ? 'border-tui-dim/30 text-tui-dim' : 'border-tui-accent/30 text-tui-accent'
               )}
             >
-              {isActive ? 'LIVE' : isHistory ? 'HISTORY' : session.status}
+              {isActive ? 'Live' : isHistory ? 'History' : session.status}
             </span>
             <span className="text-tui-dim hidden sm:inline font-mono">
               session/{session.id.slice(0, 8)}

@@ -353,8 +353,8 @@ function AgentDetail() {
             </button>
           </div>
           <div className="text-left sm:text-right space-y-1 hidden xs:block">
-            <div className="text-xs text-tui-dim uppercase tracking-widest">
-              {currentSession?.status === 'running' ? 'Active Session' : 'Historical Session'}
+            <div className="text-xs text-tui-dim tracking-widest">
+              {currentSession?.status === 'running' ? 'Active session' : 'Historical session'}
             </div>
             <div className="text-sm font-bold text-tui-text font-mono truncate max-w-[200px] sm:max-w-none">
               {currentSession?.id || 'NONE'}
@@ -392,10 +392,11 @@ function AgentDetail() {
           )}>
             <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold tracking-widest">
-                  <Archive size={14} />
-                  Session History
-                </div>
+                  <div className="flex items-center gap-2 text-xs font-bold tracking-widest">
+                    <Archive size={14} />
+                    Session history
+                  </div>
+
               <div className="flex items-center gap-1">
                 <button
                   onClick={handleStartSession}
@@ -591,7 +592,7 @@ function AgentDetail() {
         )}>
           {mobileSidebar === 'info' && (
             <div className="flex justify-between items-center mb-4 lg:hidden">
-                 <div className="text-xs font-bold uppercase tracking-tui flex items-center gap-2">
+                 <div className="text-xs font-bold tracking-tui flex items-center gap-2">
                 <Info size={16} className="text-tui-accent" />
                 Agent information
               </div>
@@ -604,10 +605,10 @@ function AgentDetail() {
             </div>
           )}
           <section className="border border-tui-border">
-            <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center gap-2 text-xs font-bold">
-              <Activity size={14} />
-              Statistics
-            </div>
+              <div className="flex items-center gap-2 text-xs font-bold tracking-tui">
+                <Activity size={14} />
+                Statistics
+              </div>
             <div className="p-3 md:p-4 space-y-4">
               <StatItem label="Total sessions" value={sessions.length.toString()} />
               <StatItem label="Last active" value={agent.last_active} />
@@ -682,9 +683,9 @@ function AgentDetail() {
 
           {currentSession?.status !== 'running' && currentSession?.metadata && (
             <section className="border border-tui-border shrink-0">
-              <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center gap-2 text-xs font-bold uppercase">
+              <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center gap-2 text-xs font-bold">
                 <Archive size={14} />
-                Termination Metadata
+                Termination metadata
               </div>
               <div className="p-3 space-y-2 text-[10px] font-mono">
                 {currentSession.metadata.terminated_by ? (
