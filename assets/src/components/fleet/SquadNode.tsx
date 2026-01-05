@@ -1,6 +1,6 @@
 import { Handle, Position, NodeProps } from '@xyflow/react'
 import { Squad } from '../../api/queries'
-import { Box, Activity, Shield, Cpu } from 'lucide-react'
+import { Box, Activity, Shield, Cpu, Mail } from 'lucide-react'
 
 const statusIcons = {
   idle: <Box size={12} className="text-tui-dim" />,
@@ -11,6 +11,7 @@ const statusIcons = {
 
 export function SquadNode({ data }: NodeProps) {
   const squad = data.squad as Squad
+  const onMessage = data.onMessage as (to: Squad) => void
   
   return (
     <div className="bg-tui-bg border border-tui-border p-3 w-64 shadow-[0_0_15px_rgba(0,255,0,0.05)] hover:border-tui-accent transition-colors group relative font-mono">
@@ -20,7 +21,19 @@ export function SquadNode({ data }: NodeProps) {
         <span className="text-[10px] font-bold text-tui-dim group-hover:text-tui-accent">
           {squad.id}
         </span>
-        <div className="flex gap-1">
+        <div className="flex gap-1 items-center">
+          {onMessage && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation()
+                onMessage(squad)
+              }}
+              className="p-1 hover:text-tui-accent text-tui-dim transition-colors"
+              title="Message Squad"
+            >
+              <Mail size={12} />
+            </button>
+          )}
           {statusIcons[squad.status as keyof typeof statusIcons] || statusIcons.idle}
         </div>
       </div>

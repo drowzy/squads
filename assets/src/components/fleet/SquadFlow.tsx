@@ -27,6 +27,7 @@ const nodeTypes = {
 interface SquadFlowProps {
   squads: Squad[]
   connections: SquadConnection[]
+  onMessage?: (to: Squad) => void
 }
 
 const elkOptions = {
@@ -36,7 +37,7 @@ const elkOptions = {
   'elk.spacing.nodeNode': '100',
 }
 
-export function SquadFlow({ squads, connections }: SquadFlowProps) {
+export function SquadFlow({ squads, connections, onMessage }: SquadFlowProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const { fitView } = useReactFlow()
@@ -80,7 +81,10 @@ export function SquadFlow({ squads, connections }: SquadFlowProps) {
         id: node.id,
         type: 'squad',
         position: { x: node.x, y: node.y },
-        data: { squad: squads.find(s => s.id === node.id) },
+        data: { 
+          squad: squads.find(s => s.id === node.id),
+          onMessage
+        },
       })) || []
 
       const newEdges: Edge[] = layoutedGraph.edges?.map((edge: any) => ({

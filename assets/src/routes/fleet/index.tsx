@@ -3,7 +3,7 @@ import { useProjects, useSquadConnections, useCreateSquadConnection, useDeleteSq
 import { useState, useMemo } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
-import { Plus, Link, Trash2, ArrowRight } from 'lucide-react'
+import { Plus, Link, Trash2, ArrowRight, Mail } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Label } from '../../components/ui/label'
@@ -12,6 +12,7 @@ import { useQueries } from '@tanstack/react-query'
 import { fetcher } from '../../api/client'
 import { SquadFlow } from '../../components/fleet/SquadFlow'
 import { ReactFlowProvider } from '@xyflow/react'
+import { MessageSquadModal } from '../../components/fleet/MessageSquadModal'
 
 export const Route = createFileRoute('/fleet/')({
   component: FleetIndex,
@@ -19,6 +20,8 @@ export const Route = createFileRoute('/fleet/')({
 
 function FleetIndex() {
   const { data: projects = [], isLoading: isProjectsLoading } = useProjects()
+  
+  const [messageConfig, setMessageConfig] = useState<{ from: Squad, to: Squad } | null>(null)
   
   const squadQueries = useQueries({
     queries: projects.map((project) => ({
@@ -71,19 +74,53 @@ function FleetIndex() {
       </div>
 
       <ReactFlowProvider>
-        <SquadFlow squads={allSquads} connections={allConnections} />
+        <SquadFlow 
+          squads={allSquads} 
+          connections={allConnections} 
+          onMessage={(to) => {
+            // Find a reasonable 'from' squad - ideally one that is connected
+            const connection = allConnections.find(c => c.to_squad_id === to.id || c.from_squad_id === to.id)
+            if (connection) {
+              const from = connection.from_squad_id === to.id ? connection.to_squad : connection.from_squad
+              if (from) setMessageConfig({ from, to })
+            } else if (allSquads.length > 1) {
+              // Fallback to first other squad if no connection exists but we have squads
+              const from = allSquads.find(s => s.id !== to.id)
+              if (from) setMessageConfig({ from, to })
+            }
+          }}
+        />
       </ReactFlowProvider>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {projectsWithData.map((projectData) => (
-          <ProjectFleetCard key={projectData.id} projectData={projectData} />
+          <ProjectFleetCard 
+            key={projectData.id} 
+            projectData={projectData} 
+            onMessage={(from, to) => setMessageConfig({ from, to })}
+          />
         ))}
       </div>
+
+      {messageConfig && (
+        <MessageSquadModal
+          fromSquad={messageConfig.from}
+          toSquad={messageConfig.to}
+          isOpen={!!messageConfig}
+          onClose={() => setMessageConfig(null)}
+        />
+      )}
     </div>
   )
 }
 
-function ProjectFleetCard({ projectData }: { projectData: Project & { squads: Squad[], connections: SquadConnection[], isLoading: boolean } }) {
+function ProjectFleetCard({ 
+  projectData, 
+  onMessage 
+}: { 
+  projectData: Project & { squads: Squad[], connections: SquadConnection[], isLoading: boolean },
+  onMessage: (from: Squad, to: Squad) => void
+}) {
   const { squads, connections } = projectData
 
   return (
@@ -122,7 +159,12 @@ function ProjectFleetCard({ projectData }: { projectData: Project & { squads: Sq
                     <h4 className="text-sm font-medium text-muted-foreground mb-2">Active Connections</h4>
                     <div className="space-y-2">
                         {connections.map(conn => (
-                            <ConnectionItem key={conn.id} connection={conn} currentProjectId={projectData.id} />
+                            <ConnectionItem 
+                                key={conn.id} 
+                                connection={conn} 
+                                currentProjectId={projectData.id} 
+                                onMessage={onMessage}
+                            />
                         ))}
                     </div>
                 </div>
@@ -133,7 +175,15 @@ function ProjectFleetCard({ projectData }: { projectData: Project & { squads: Sq
   )
 }
 
-function ConnectionItem({ connection, currentProjectId }: { connection: SquadConnection, currentProjectId: string }) {
+function ConnectionItem({ 
+    connection, 
+    currentProjectId,
+    onMessage
+}: { 
+    connection: SquadConnection, 
+    currentProjectId: string,
+    onMessage: (from: Squad, to: Squad) => void
+}) {
     const { mutate: deleteConnection } = useDeleteSquadConnection()
     
     // Determine direction relative to current project
@@ -161,14 +211,24 @@ function ConnectionItem({ connection, currentProjectId }: { connection: SquadCon
                     )}
                 </div>
             </div>
-            <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity -mr-1"
-                onClick={() => deleteConnection(connection.id)}
-            >
-                <Trash2 className="w-3 h-3 text-destructive" />
-            </Button>
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity -mr-1">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => onMessage(mySquad, otherSquad)}
+                >
+                    <Mail className="w-3 h-3" />
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => deleteConnection(connection.id)}
+                >
+                    <Trash2 className="w-3 h-3 text-destructive" />
+                </Button>
+            </div>
         </div>
     )
 }
