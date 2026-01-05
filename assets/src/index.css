@@ -40,12 +40,34 @@
   --color-tui-warning: var(--color-ctp-yellow);
   
   --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* Typography Scales */
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.875rem;    /* 14px */
+  --font-size-base: 1rem;      /* 16px */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.875rem;   /* 30px */
+
+  --tracking-tighter: -0.05em;
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.025em;
+  --tracking-wider: 0.05em;
+  --tracking-widest: 0.1em;
+  --tracking-tui: 0.2em;
 }
 
 @layer base {
   body {
-    @apply bg-tui-bg text-tui-text font-mono antialiased;
+    @apply bg-tui-bg text-tui-text font-mono antialiased leading-relaxed;
   }
+
+  h1 { @apply text-2xl font-bold tracking-tighter mb-4; }
+  h2 { @apply text-xl font-bold tracking-tight mb-3; }
+  h3 { @apply text-lg font-bold mb-2; }
+  h4 { @apply text-base font-bold mb-1; }
 
   /* Custom Scrollbar Catppuccin Style */
   .custom-scrollbar::-webkit-scrollbar {

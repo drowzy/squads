@@ -309,14 +309,14 @@ function AppShell() {
         
         <nav className="flex-1 p-2 space-y-4 overflow-y-auto">
           <div className="space-y-1">
-            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.3em] text-tui-dim">
+            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-tui text-tui-dim">
               Primary
             </div>
-            <NavItem to="/" icon={<LayoutDashboard size={20} />} label="OVERVIEW" />
-            <NavItem to="/sessions" icon={<Play size={20} />} label="SESSIONS" />
-            <NavItem to="/squad" icon={<Users size={20} />} label="SQUAD" />
-            <NavItem to="/board" icon={<ClipboardList size={20} />} label="BOARD" />
-            <NavItem to="/mail" icon={<Mail size={20} />} label="MAIL" />
+            <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Overview" />
+            <NavItem to="/sessions" icon={<Play size={20} />} label="Sessions" />
+            <NavItem to="/squad" icon={<Users size={20} />} label="Squad" />
+            <NavItem to="/board" icon={<ClipboardList size={20} />} label="Board" />
+            <NavItem to="/mail" icon={<Mail size={20} />} label="Mail" />
           </div>
 
           <div className="space-y-1">
@@ -324,7 +324,7 @@ function AppShell() {
               type="button"
               onClick={() => setOpsExpanded((prev) => !prev)}
               aria-expanded={opsExpanded}
-              className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-[0.3em] text-tui-dim hover:text-tui-text transition-colors"
+              className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-tui text-tui-dim hover:text-tui-text transition-colors"
             >
               <span>Operations</span>
               <ChevronDown
@@ -334,11 +334,11 @@ function AppShell() {
             </button>
             {opsExpanded && (
               <div className="space-y-1">
-                <NavItem to="/agent" icon={<UserCircle size={20} />} label="AGENTS" />
-                <NavItem to="/review" icon={<ClipboardList size={20} />} label="REVIEW" />
-                <NavItem to="/events" icon={<Terminal size={20} />} label="EVENTS" />
-                <NavItem to="/nodes" icon={<Wifi size={20} />} label="NODES" />
-                <NavItem to="/fleet" icon={<Network size={20} />} label="FLEET" />
+                <NavItem to="/agent" icon={<UserCircle size={20} />} label="Agents" />
+                <NavItem to="/review" icon={<ClipboardList size={20} />} label="Review" />
+                <NavItem to="/events" icon={<Terminal size={20} />} label="Events" />
+                <NavItem to="/nodes" icon={<Wifi size={20} />} label="Nodes" />
+                <NavItem to="/fleet" icon={<Network size={20} />} label="Fleet" />
               </div>
             )}
           </div>
@@ -350,8 +350,8 @@ function AppShell() {
                 onClick={() => setUtilitiesOpen(!utilitiesOpen)}
                 className={cn(
                   "w-full flex items-center justify-between gap-2 px-3 py-2",
-                  "text-left text-xs border border-tui-border rounded",
-                  "hover:bg-tui-dim/10 transition-colors uppercase font-bold tracking-widest",
+                  "text-left text-[10px] border border-tui-border rounded",
+                  "hover:bg-tui-dim/10 transition-colors uppercase font-bold tracking-tui",
                   utilitiesOpen && "bg-tui-dim/10"
                 )}
              >
@@ -364,13 +364,13 @@ function AppShell() {
 
              {utilitiesOpen && (
                <div className="absolute bottom-full left-0 right-0 mb-1 z-20 bg-tui-bg border border-tui-border rounded shadow-lg p-1 space-y-1">
-                  <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-tui-dim border-b border-tui-border/50 mb-1">System_Tools</div>
+                  <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-tui text-tui-dim border-b border-tui-border/50 mb-1">System Tools</div>
                   <button 
                     onClick={() => {
                       setUtilitiesOpen(false)
                       setCommandPaletteOpen(true)
                     }}
-                    className="w-full flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-widest hover:bg-tui-dim/20 transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-tui hover:bg-tui-dim/20 transition-colors text-left"
                   >
                     <Search size={14} />
                     <span>Command Palette (⌘K)</span>
@@ -380,15 +380,15 @@ function AppShell() {
                       setUtilitiesOpen(false)
                       window.dispatchEvent(new CustomEvent('toggle-terminal'))
                     }}
-                    className="w-full flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-widest hover:bg-tui-dim/20 transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-tui hover:bg-tui-dim/20 transition-colors text-left"
                   >
                     <Terminal size={14} />
                     <span>Toggle Terminal</span>
                   </button>
                   {import.meta.env.DEV && (
                     <div className="pt-1 mt-1 border-t border-tui-border/50">
-                      <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-tui-accent">Dev_Mode</div>
-                      <div className="flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-widest text-tui-dim">
+                      <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-tui text-tui-accent">Dev Mode</div>
+                      <div className="flex items-center gap-2 px-2 py-2 text-[10px] uppercase font-bold tracking-tui text-tui-dim">
                         <Bug size={14} />
                         <span>Devtools Active</span>
                       </div>
@@ -399,8 +399,8 @@ function AppShell() {
            </div>
         </div>
 
-        <div className="p-4 border-t border-tui-border text-[10px] text-tui-dim flex items-center justify-between">
-          <span>SYSTEM_READY</span>
+        <div className="p-4 border-t border-tui-border text-[10px] text-tui-dim flex items-center justify-between tracking-tui font-bold">
+          <span>System Ready</span>
           <span>V0.1.0</span>
         </div>
       </aside>
@@ -417,8 +417,8 @@ function AppShell() {
             >
               <Menu size={24} aria-hidden="true" />
             </button>
-            <span className="text-tui-dim hidden sm:inline">PROJECT:</span>
-            <span className="text-tui-text text-sm sm:text-base truncate max-w-[200px]">
+            <span className="text-tui-dim hidden sm:inline text-[10px] font-bold tracking-tui uppercase">Project:</span>
+            <span className="text-tui-text text-sm sm:text-base font-bold truncate max-w-[200px]">
               {activeProject?.name || 'No Project'}
             </span>
           </div>
@@ -430,7 +430,7 @@ function AppShell() {
              >
                 <div className="flex items-center gap-2">
                   <Search size={14} className="group-hover:text-tui-accent" />
-                  <span className="text-xs font-bold tracking-widest uppercase">Search_Commands...</span>
+                  <span className="text-[10px] font-bold tracking-tui uppercase">Search Commands...</span>
                 </div>
                 <div className="flex items-center gap-1">
                    <kbd className="px-1.5 py-0.5 rounded border border-tui-border bg-tui-dim/10 text-[10px] group-hover:border-tui-accent group-hover:text-tui-accent transition-colors">⌘K</kbd>
@@ -444,7 +444,7 @@ function AppShell() {
                 type="button"
                 onClick={() => setStatusOpen((open) => !open)}
                 aria-expanded={statusOpen}
-                className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-tui-dim hover:text-tui-text transition-colors"
+                className="flex items-center gap-2 text-[10px] font-bold tracking-tui uppercase text-tui-dim hover:text-tui-text transition-colors"
               >
                 <span className="hidden sm:inline">Uplink</span>
                 <div className={cn(
