@@ -1,6 +1,6 @@
 defmodule Squads.OpenCode.ServerTest do
   use Squads.DataCase
-  alias Squads.OpenCode.{Server, ProjectServer, ServerRegistry, ProjectSupervisor}
+  alias Squads.OpenCode.{Server, ServerRegistry}
   alias Squads.Projects.Project
   alias Squads.Repo
 

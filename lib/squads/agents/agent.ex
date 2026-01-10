@@ -12,7 +12,6 @@ defmodule Squads.Agents.Agent do
   alias Squads.Squads.Squad
   alias Squads.Sessions.Session
   alias Squads.Events.Event
-  alias Squads.Tickets.Ticket
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -33,7 +32,6 @@ defmodule Squads.Agents.Agent do
     has_many :mentees, Squads.Agents.Agent, foreign_key: :mentor_id
     has_many :sessions, Session
     has_many :events, Event
-    has_many :assigned_tickets, Ticket, foreign_key: :assignee_id
 
     timestamps(type: :utc_datetime)
   end

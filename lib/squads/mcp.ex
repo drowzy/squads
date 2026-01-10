@@ -11,7 +11,6 @@ defmodule Squads.MCP do
   alias Squads.Mail
   alias Squads.Repo
   alias Squads.Sessions
-  alias Squads.Tickets
 
   @doc """
   Lists MCP servers for a squad.
@@ -304,8 +303,8 @@ defmodule Squads.MCP do
         }
       },
       %{
-        name: "squads_tickets",
-        description: "Gets a summary of the ticket board status.",
+        name: "squads_board",
+        description: "Gets a summary of the board status.",
         inputSchema: %{
           type: "object",
           properties: %{
@@ -417,10 +416,10 @@ defmodule Squads.MCP do
 
   def handle_request("agent_mail", %{
         "method" => "call_tool",
-        "params" => %{"name" => "squads_tickets", "arguments" => args}
+        "params" => %{"name" => "squads_board", "arguments" => args}
       }) do
     project_id = args["project_id"]
-    summary = Tickets.get_tickets_summary(project_id)
+    summary = Squads.Board.board_summary(project_id)
     {:ok, %{content: [%{type: "text", text: Jason.encode!(summary, pretty: true)}]}}
   end
 

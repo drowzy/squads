@@ -21,7 +21,8 @@ import {
   Search
 } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useReviews, useSubmitReview, Review } from '../api/queries'
+import { useReviews, useReview, useSubmitReview, Review } from '../api/queries'
+import { useActiveProject } from './__root'
 import { parseDiff, Diff, Hunk } from 'react-diff-view'
 import 'react-diff-view/style/index.css'
 
@@ -41,12 +42,16 @@ function ReviewQueue() {
   const [commentBuffer, setCommentBuffer] = useState('')
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   
-  const { data: reviews = [], isLoading } = useReviews()
+  const { activeProject } = useActiveProject()
+  const projectId = activeProject?.id
+
+  const { data: reviews = [], isLoading } = useReviews(projectId)
+  const { data: selectedReviewDetail } = useReview(selectedId || '')
   const submitReview = useSubmitReview()
 
   const selectedReview = useMemo(() => 
-    reviews.find(r => r.id === selectedId) || null,
-  [reviews, selectedId])
+    selectedReviewDetail || reviews.find(r => r.id === selectedId) || null,
+  [selectedReviewDetail, reviews, selectedId])
 
   const files = useMemo(() => {
     if (!selectedReview?.diff) return []
@@ -79,7 +84,7 @@ function ReviewQueue() {
     }
   }
 
-  const handleAction = (status: 'approved' | 'changes_requested' | 'merged') => {
+  const handleAction = (status: 'approved' | 'changes_requested') => {
     if (!selectedId) return
     
     // Combine general feedback with inline comments
@@ -503,35 +508,23 @@ function ReviewQueue() {
 
                    {/* Action Bar */}
                    <div className="p-3 md:p-4 border-t border-tui-border bg-ctp-mantle flex flex-col sm:flex-row gap-3 md:gap-4 shrink-0">
-                     {selectedReview.status === 'approved' ? (
-                        <button 
-                         onClick={() => handleAction('merged')}
-                         disabled={submitReview.isPending}
-                         className="flex-1 group relative overflow-hidden border border-tui-accent bg-tui-accent/10 text-tui-accent py-3 md:py-4 text-xs font-bold hover:bg-tui-accent hover:text-tui-bg disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 transition-all"
-                       >
-                         <GitPullRequest size={18} className="transition-transform group-hover:scale-110" />
-                          {submitReview.isPending ? 'Merging...' : 'Merge & Cleanup'}
-                       </button>
-                     ) : (
-                       <>
-                          <button 
-                            onClick={() => handleAction('approved')}
-                            disabled={submitReview.isPending}
-                            className="flex-1 group relative overflow-hidden border border-ctp-green bg-ctp-green/10 text-ctp-green py-3 md:py-4 text-xs font-bold hover:bg-ctp-green hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 transition-all"
-                          >
-                           <CheckSquare size={18} className="transition-transform group-hover:scale-110" />
-                           {submitReview.isPending ? 'Approving...' : 'Approve'}
-                         </button>
-                         <button 
-                           onClick={() => handleAction('changes_requested')}
-                           disabled={submitReview.isPending}
-                            className="flex-1 group relative overflow-hidden border border-ctp-red bg-ctp-red/10 text-ctp-red py-3 md:py-4 text-xs font-bold hover:bg-ctp-red hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 transition-all"
-                         >
-                           <XSquare size={18} className="transition-transform group-hover:scale-110" />
-                            {submitReview.isPending ? 'Requesting...' : 'Request Changes'}
-                         </button>
-                       </>
-                     )}
+                      <button 
+                        onClick={() => handleAction('approved')}
+                        disabled={submitReview.isPending}
+                        className="flex-1 group relative overflow-hidden border border-ctp-green bg-ctp-green/10 text-ctp-green py-3 md:py-4 text-xs font-bold hover:bg-ctp-green hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 transition-all"
+                      >
+                        <CheckSquare size={18} className="transition-transform group-hover:scale-110" />
+                        {submitReview.isPending ? 'Approving...' : 'Approve'}
+                      </button>
+                      <button 
+                        onClick={() => handleAction('changes_requested')}
+                        disabled={submitReview.isPending}
+                        className="flex-1 group relative overflow-hidden border border-ctp-red bg-ctp-red/10 text-ctp-red py-3 md:py-4 text-xs font-bold hover:bg-ctp-red hover:text-ctp-base disabled:opacity-50 flex items-center justify-center gap-2 md:gap-3 transition-all"
+                      >
+                        <XSquare size={18} className="transition-transform group-hover:scale-110" />
+                        {submitReview.isPending ? 'Requesting...' : 'Request Changes'}
+                      </button>
+
                    </div>
 
             </>

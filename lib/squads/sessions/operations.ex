@@ -148,7 +148,6 @@ defmodule Squads.Sessions.Operations do
   def local_command?(command) when is_binary(command) do
     command in [
       "/squads-status",
-      "/squads-tickets",
       "/check-mail",
       "/sessions",
       "/compact",
@@ -180,26 +179,6 @@ defmodule Squads.Sessions.Operations do
           true ->
             status = get_squad_status(agent.squad_id)
             {:ok, %{"output" => Jason.encode!(status, pretty: true)}}
-        end
-
-      "/squads-tickets" ->
-        agent = Agents.get_agent(session.agent_id)
-        squad = agent && Squads.Squads.get_squad(agent.squad_id)
-
-        cond do
-          is_nil(session.opencode_session_id) or session.status == "pending" ->
-            if session.status == "pending" do
-              {:error, :session_not_active}
-            else
-              {:error, :no_opencode_session}
-            end
-
-          is_nil(squad) ->
-            {:error, :squad_not_found}
-
-          true ->
-            summary = Squads.Tickets.get_tickets_summary(squad.project_id)
-            {:ok, %{"output" => Jason.encode!(summary, pretty: true)}}
         end
 
       "/check-mail" ->
@@ -267,7 +246,6 @@ defmodule Squads.Sessions.Operations do
               [
                 "Squads commands:",
                 "  /squads-status      Show current squad status",
-                "  /squads-tickets     Show ticket board summary",
                 "  /check-mail         Show agent inbox preview",
                 "",
                 "OpenCode commands:",

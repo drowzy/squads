@@ -2,9 +2,9 @@ defmodule Squads.Sessions do
   @moduledoc """
   The Sessions context manages OpenCode session lifecycle.
 
-  Sessions represent work being done on tickets by agents. This context
-  provides functions to create, start, stop, and query sessions, integrating
-  with the OpenCode server via the HTTP client.
+  Sessions represent work being done by agents. This context provides
+  functions to create, start, stop, and query sessions, integrating with the
+  OpenCode server via the HTTP client.
   """
 
   alias Squads.Sessions.Queries
@@ -12,6 +12,7 @@ defmodule Squads.Sessions do
   alias Squads.Sessions.Messages
   alias Squads.Sessions.Operations
   alias Squads.Sessions.Helpers
+  alias Squads.Sessions.Transcripts
 
   # ============================================================================
   # Public API Redirections
@@ -32,11 +33,8 @@ defmodule Squads.Sessions do
   defdelegate get_session!(id), to: Queries
   defdelegate get_session(id), to: Queries
   defdelegate get_session_by_opencode_id(opencode_session_id), to: Queries
-  defdelegate get_session_with_ticket(session_id), to: Queries
   defdelegate fetch_session(id), to: Queries
   defdelegate fetch_session_by_opencode_id(opencode_session_id), to: Queries
-  defdelegate fetch_session_with_ticket(session_id), to: Queries
-  defdelegate list_sessions_for_ticket(ticket_id), to: Queries
 
   # ============================================================================
   # Lifecycle
@@ -44,7 +42,6 @@ defmodule Squads.Sessions do
 
   defdelegate normalize_params(params), to: Lifecycle
   defdelegate create_session(attrs), to: Lifecycle
-  defdelegate create_session_for_ticket(ticket_id, attrs), to: Lifecycle
   defdelegate create_and_start_session(attrs, opencode_opts \\ []), to: Lifecycle
   defdelegate start_session(session, opencode_opts \\ []), to: Lifecycle
   defdelegate stop_session(session, exit_code \\ 0, opts \\ []), to: Lifecycle
@@ -56,8 +53,6 @@ defmodule Squads.Sessions do
   defdelegate new_session_for_agent(agent_id, attrs \\ %{}), to: Lifecycle
   defdelegate ensure_session_running(session, opencode_opts \\ []), to: Lifecycle
   defdelegate sync_session_status(session), to: Lifecycle
-  defdelegate link_session_to_ticket(session_id, ticket_id), to: Lifecycle
-  defdelegate unlink_session_from_ticket(session_id), to: Lifecycle
 
   # ============================================================================
   # Session Messages
@@ -68,6 +63,20 @@ defmodule Squads.Sessions do
   defdelegate get_messages(session, opts \\ []), to: Messages
   defdelegate get_diff(session, opts \\ []), to: Messages
   defdelegate get_todos(session, opts \\ []), to: Messages
+
+  # ==========================================================================
+  # Persisted transcripts
+  # ==========================================================================
+
+  defdelegate sync_session_transcript(session, opts \\ []), to: Transcripts
+
+  defdelegate list_transcript_entries(session_id, opts \\ []),
+    to: Transcripts,
+    as: :list_entries_for_session
+
+  defdelegate list_transcript_entries_for_sessions(session_ids, opts \\ []),
+    to: Transcripts,
+    as: :list_entries_for_sessions
 
   # ============================================================================
   # Operations & Commands

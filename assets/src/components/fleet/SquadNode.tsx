@@ -6,13 +6,14 @@ const statusIcons = {
   idle: <Box size={12} className="text-tui-dim" />,
   provisioning: <Cpu size={12} className="text-tui-accent animate-pulse" />,
   running: <Activity size={12} className="text-tui-accent" />,
-  failed: <Shield size={12} className="text-red-500" />,
+  error: <Shield size={12} className="text-red-500" />,
 }
 
 export function SquadNode({ data }: NodeProps) {
   const squad = data.squad as Squad
   const onMessage = data.onMessage as (to: Squad) => void
-  
+  const status = squad.opencode_status ?? 'idle'
+
   return (
     <div className="bg-tui-bg border border-tui-border p-3 w-64 shadow-[0_0_15px_rgba(0,255,0,0.05)] hover:border-tui-accent transition-colors group relative font-mono">
       <Handle type="target" position={Position.Top} className="!bg-tui-border !w-2 !h-2" />
@@ -34,7 +35,7 @@ export function SquadNode({ data }: NodeProps) {
               <Mail size={12} />
             </button>
           )}
-          {statusIcons[squad.status as keyof typeof statusIcons] || statusIcons.idle}
+          {statusIcons[status as keyof typeof statusIcons] || statusIcons.idle}
         </div>
       </div>
       
@@ -49,9 +50,10 @@ export function SquadNode({ data }: NodeProps) {
       )}
 
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-tui-border/30">
-        <span className="text-[8px] border border-tui-border px-1 uppercase text-tui-dim">
-          {squad.status}
-        </span>
+          <span className="text-[8px] border border-tui-border px-1 uppercase text-tui-dim">
+            {status}
+          </span>
+
         {squad.description && (
             <span className="text-[8px] text-tui-dim truncate ml-2 italic">
                 {squad.description}

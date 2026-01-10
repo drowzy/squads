@@ -1,194 +1,101 @@
 defmodule Squads.Reviews do
   @moduledoc """
-  Context for managing code reviews with mentor-based reviewer assignment.
+  Human review queue for board cards.
+
+  Cards enter the REVIEW lane where an AI review is produced.
+  This module surfaces cards that are ready for a human decision.
   """
+
   import Ecto.Query, warn: false
 
   alias Squads.Repo
-  alias Squads.Reviews.Review
-  alias Squads.Agents.Agent, as: AgentModel
+  alias Squads.Board
+  alias Squads.Board.Card
 
   @doc """
-  Creates a review for a ticket, generating a summary from the associated worktree if available.
-  """
-  def request_review(project_id, author_id, ticket_id, worktree_name) do
-    with {:ok, summary_data} <- Squads.Worktrees.generate_pr_summary(project_id, worktree_name),
-         {:ok, reviewer_id} <- suggest_reviewer(author_id),
-         {:ok, review} <-
-           create_review(%{
-             project_id: project_id,
-             author_id: author_id,
-             ticket_id: ticket_id,
-             reviewer_id: reviewer_id,
-             summary: summary_data.summary,
-             status: "pending",
-             metadata: %{
-               test_results: summary_data.test_results,
-               generated_at: summary_data.generated_at
-             }
-           }) do
-      # Notify reviewer
-      if reviewer_id do
-        Squads.Mail.send_message(%{
-          project_id: project_id,
-          sender_id: author_id,
-          subject: "Review Request: #{ticket_id}",
-          body_md:
-            "Please review my changes for #{ticket_id}.\n\nSummary:\n#{summary_data.summary}",
-          importance: "normal",
-          ack_required: true,
-          to: [reviewer_id]
-        })
-      end
+  Lists cards ready for human review for a project.
 
-      {:ok, review}
-    end
-  end
-
-  @doc """
-  Lists all reviews for a ticket.
+  Criteria:
+  - lane == review
+  - ai_review is present
+  - human_review_status is nil or pending
   """
-  def list_reviews_for_ticket(ticket_id) do
-    Review
-    |> where([r], r.ticket_id == ^ticket_id)
-    |> order_by([r], desc: r.inserted_at)
-    |> preload([:author, :reviewer])
+  def list_reviews(project_id) do
+    Card
+    |> where([c], c.project_id == ^project_id)
+    |> where([c], c.lane == "review")
+    |> where([c], not is_nil(c.ai_review))
+    |> where([c], is_nil(c.human_review_status) or c.human_review_status == "pending")
+    |> order_by([c], desc: c.updated_at)
     |> Repo.all()
+    |> Repo.preload([:build_agent])
+    |> Enum.map(&to_review_summary/1)
   end
 
-  @doc """
-  Gets a review by ID.
-  """
   def get_review(id) do
-    Review
-    |> Repo.get(id)
-    |> Repo.preload([:ticket, :author, :reviewer])
-  end
+    case Repo.get(Card, id) do
+      nil ->
+        {:error, :not_found}
 
-  @doc """
-  Fetches a review by ID with a tuple result.
-  """
-  def fetch_review(id) do
-    case get_review(id) do
-      nil -> {:error, :not_found}
-      review -> {:ok, review}
+      card ->
+        card = Repo.preload(card, [:build_agent, :squad])
+        {:ok, to_review_detail(card)}
     end
   end
 
-  @doc """
-  Gets a review by ID, raising if not found.
-  """
-  def get_review!(id) do
-    case get_review(id) do
-      nil -> raise Ecto.NoResultsError, queryable: Review
-      review -> review
-    end
+  def submit_review(id, status, feedback \\ "")
+      when status in ["approved", "changes_requested"] do
+    Board.submit_human_review(id, status, feedback)
   end
 
-  @doc """
-  Creates a review with mentor-based reviewer assignment.
-  If author has a mentor, assigns mentor as reviewer. Otherwise requires explicit reviewer_id.
-  """
-  def create_review(attrs) do
-    attrs = Map.put(attrs, :status, "pending")
-
-    %Review{}
-    |> Review.changeset(attrs)
-    |> Repo.insert()
+  defp to_review_summary(card) do
+    %{
+      id: card.id,
+      title: card.title || "(untitled)",
+      summary: ai_summary(card.ai_review),
+      status: card.human_review_status || "pending",
+      author_name: card.build_agent && card.build_agent.name,
+      project_id: card.project_id,
+      inserted_at: card.inserted_at
+    }
   end
 
-  @doc """
-  Starts review (moves from pending to in_review).
-  """
-  def start_review(review) do
-    Review.update_status(review, "in_review")
+  defp to_review_detail(card) do
+    %{
+      id: card.id,
+      title: card.title || "(untitled)",
+      summary: ai_summary(card.ai_review),
+      diff: git_diff(card),
+      status: card.human_review_status || "pending",
+      author_name: card.build_agent && card.build_agent.name,
+      project_id: card.project_id,
+      inserted_at: card.inserted_at,
+      pr_url: card.pr_url,
+      ai_review: card.ai_review
+    }
   end
 
-  @doc """
-  Approves a review, and if successful, triggers worktree cleanup for the ticket.
-  """
-  def approve_review(review) do
-    review = Repo.preload(review, [:ticket, author: :squad])
+  defp ai_summary(%{"summary" => summary}) when is_binary(summary), do: summary
+  defp ai_summary(%{summary: summary}) when is_binary(summary), do: summary
+  defp ai_summary(review) when is_map(review), do: Jason.encode!(review)
+  defp ai_summary(_), do: ""
 
-    with {:ok, updated} <- Review.approve(review) do
-      # Notify author
-      Squads.Mail.send_message(%{
-        project_id: review.ticket.project_id,
-        sender_id: updated.reviewer_id,
-        subject: "Review Approved: #{updated.ticket_id}",
-        body_md: "Your changes have been approved. You can now merge.",
-        to: [updated.author_id]
-      })
+  defp git_diff(%Card{build_worktree_path: path, base_branch: base})
+       when is_binary(path) and path != "" do
+    if File.exists?(path) do
+      base = if is_binary(base) and base != "", do: base, else: "main"
 
-      # Cleanup worktree
-      if review.author && review.author.squad do
-        worktree_name = "#{review.author.slug}-#{review.ticket.id}"
-        Squads.Worktrees.merge_and_cleanup(review.author.squad.project_id, worktree_name)
+      case System.cmd("git", ["diff", "--patch", "#{base}...HEAD"],
+             cd: path,
+             stderr_to_stdout: true
+           ) do
+        {output, 0} -> output
+        {output, _} -> output
       end
-
-      {:ok, updated}
-    end
-  end
-
-  @doc """
-  Requests changes on a review.
-  """
-  def request_changes(review, summary) do
-    review = Repo.preload(review, :ticket)
-
-    with {:ok, updated} <-
-           review
-           |> Ecto.Changeset.change()
-           |> Ecto.Changeset.put_change(:summary, summary)
-           |> Ecto.Changeset.put_change(:status, "changes_requested")
-           |> Repo.update() do
-      # Notify author
-      Squads.Mail.send_message(%{
-        project_id: review.ticket.project_id,
-        sender_id: updated.reviewer_id,
-        subject: "Changes Requested: #{updated.ticket_id}",
-        body_md: "Reviewer has requested changes:\n\n#{summary}",
-        to: [updated.author_id]
-      })
-
-      {:ok, updated}
-    end
-  end
-
-  @doc """
-  Gets pending reviews for a reviewer.
-  """
-  def pending_reviews_for_reviewer(reviewer_id) do
-    Review
-    |> where([r], r.reviewer_id == ^reviewer_id)
-    |> where([r], r.status in ["pending", "in_review"])
-    |> order_by([r], asc: r.inserted_at)
-    |> preload([:ticket, :author])
-    |> Repo.all()
-  end
-
-  @doc """
-  Gets reviews authored by an agent.
-  """
-  def reviews_by_author(author_id) do
-    Review
-    |> where([r], r.author_id == ^author_id)
-    |> order_by([r], desc: r.inserted_at)
-    |> preload([:ticket, :reviewer])
-    |> Repo.all()
-  end
-
-  @doc """
-  Suggests a reviewer for a ticket based on mentor mapping.
-  Returns mentor_id if author has one, otherwise nil.
-  """
-  def suggest_reviewer(author_id) do
-    author = Repo.get(AgentModel, author_id)
-
-    if author && author.mentor_id do
-      {:ok, author.mentor_id}
     else
-      {:ok, nil}
+      ""
     end
   end
+
+  defp git_diff(_), do: ""
 end

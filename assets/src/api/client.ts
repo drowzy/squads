@@ -31,16 +31,18 @@ export async function fetcher<T>(path: string, options?: FetcherOptions): Promis
     if (!response.ok) {
       const errorText = await response.text()
       let errorMessage = response.statusText
+      let errorCode: string | undefined
   
       try {
         const errorJson = JSON.parse(errorText)
         errorMessage = errorJson.message || errorMessage
+        errorCode = errorJson.error
       } catch {
         // ignore JSON parse errors
       }
       
       if (response.status === 428) {
-        throw new Error("BEADS_NOT_INITIALIZED")
+        throw new Error(errorCode || 'github_not_configured')
       }
       
       console.error(`API Error: ${response.status} ${errorMessage}`, {

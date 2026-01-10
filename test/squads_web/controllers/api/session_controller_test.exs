@@ -6,6 +6,10 @@ defmodule SquadsWeb.API.SessionControllerTest do
   alias Squads.Agents
   alias Squads.Sessions
 
+  import Mox
+  setup :set_mox_from_context
+  setup :verify_on_exit!
+
   # Helper to create an agent for testing
   defp create_test_agent(context) do
     tmp_dir =
@@ -179,6 +183,80 @@ defmodule SquadsWeb.API.SessionControllerTest do
       response = json_response(conn, 409)
 
       assert response["errors"]["detail"] == "Session has no OpenCode session"
+    end
+  end
+
+  describe "GET /api/sessions/:session_id/transcript" do
+    @tag :tmp_dir
+    test "syncs and returns persisted transcript entries", %{conn: conn} = context do
+      %{agent: agent} = create_test_agent(context)
+
+      {:ok, session} =
+        Sessions.create_session(%{
+          agent_id: agent.id,
+          status: "running",
+          opencode_session_id: "oc-123"
+        })
+
+      messages = [
+        %{
+          "id" => "msg-1",
+          "createdAt" => "2026-01-09T00:00:00Z",
+          "info" => %{"role" => "user"},
+          "parts" => [%{"type" => "text", "text" => "hello"}]
+        },
+        %{
+          "id" => "msg-2",
+          "createdAt" => "2026-01-09T00:00:01Z",
+          "info" => %{"role" => "assistant"},
+          "parts" => [
+            %{"type" => "tool_call", "name" => "bash", "input" => %{"command" => "echo ok"}},
+            %{"type" => "tool_result", "output" => "ok"}
+          ]
+        }
+      ]
+
+      expect(Squads.OpenCode.ClientMock, :list_messages, fn "oc-123", _opts ->
+        {:ok, messages}
+      end)
+
+      conn = get(conn, ~p"/api/sessions/#{session.id}/transcript?node_url=http://example")
+      response = json_response(conn, 200)
+
+      assert response["meta"]["next_after_position"] == 1
+      assert length(response["data"]) == 2
+
+      assert Enum.at(response["data"], 0)["opencode_message_id"] == "msg-1"
+      assert Enum.at(response["data"], 1)["opencode_message_id"] == "msg-2"
+
+      # Pagination by after_position, no additional sync
+      conn = get(conn, ~p"/api/sessions/#{session.id}/transcript?sync=false&limit=1")
+      page1 = json_response(conn, 200)
+
+      assert page1["meta"]["next_after_position"] == 0
+      assert [entry] = page1["data"]
+      assert entry["opencode_message_id"] == "msg-1"
+
+      conn =
+        get(conn, ~p"/api/sessions/#{session.id}/transcript?sync=false&limit=10&after_position=0")
+
+      page2 = json_response(conn, 200)
+
+      assert page2["meta"]["next_after_position"] == 1
+      assert [entry2] = page2["data"]
+      assert entry2["opencode_message_id"] == "msg-2"
+    end
+
+    @tag :tmp_dir
+    test "sync=false works for sessions without opencode session", %{conn: conn} = context do
+      %{agent: agent} = create_test_agent(context)
+      {:ok, session} = Sessions.create_session(%{agent_id: agent.id})
+
+      conn = get(conn, ~p"/api/sessions/#{session.id}/transcript?sync=false")
+      response = json_response(conn, 200)
+
+      assert response["data"] == []
+      assert response["meta"]["next_after_position"] == nil
     end
   end
 

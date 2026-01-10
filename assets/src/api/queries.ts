@@ -106,7 +106,7 @@ export interface SessionMessageInfo {
   modelID?: string
   mode?: string
   finish?: string
-  summary?: boolean | { title?: string; body?: string }
+  summary?: boolean | { title?: string; body?: string; diffs?: SessionDiffEntry[]; [key: string]: unknown }
   error?: string | { message?: string; type?: string }
   cost?: number
   tokens?: {
@@ -199,6 +199,25 @@ export interface SessionMessageEntry {
   parts: SessionMessagePart[]
 }
 
+export interface SessionDiffEntry {
+  path?: string
+  file?: string
+  filename?: string
+  additions?: number
+  deletions?: number
+  before?: string
+  after?: string
+  diff?: string
+  patch?: string
+  [key: string]: unknown
+}
+
+export type SessionDiffResponse =
+  | string
+  | SessionDiffEntry[]
+  | { diff?: string; patch?: string; diffs?: SessionDiffEntry[]; [key: string]: unknown }
+  | null
+
 export interface Event {
   id: string
   kind: string
@@ -217,27 +236,73 @@ export interface ExternalNode {
   last_seen_at: string
 }
 
-export interface Ticket {
+export type BoardLane = 'todo' | 'plan' | 'build' | 'review' | 'done'
+
+export interface BoardLaneAssignment {
   id: string
-  title: string
-  description: string
-  status: 'open' | 'in_progress' | 'closed' | 'blocked'
-  priority: number
-  issue_type: string
-  created_at: string
+  project_id: string
+  squad_id: string
+  lane: BoardLane
+  agent_id: string | null
+  inserted_at: string
   updated_at: string
-  assignee?: string // Deprecated, mapped from assignee_name
-  assignee_name?: string
-  assignee_id?: string
-  parent_id?: string
-  dependencies?: string[]
 }
 
-export interface BoardSummary {
-  ready: Ticket[]
-  in_progress: Ticket[]
-  blocked: Ticket[]
-  closed: Ticket[]
+export interface BoardIssueRef {
+  repo: string
+  number: number
+  url: string
+  title?: string
+  github_state?: 'open' | 'closed'
+  soft_state?: 'open' | 'soft_closed'
+}
+
+export interface BoardCard {
+  id: string
+  project_id: string
+  squad_id: string
+  lane: BoardLane
+  position: number
+
+  title: string | null
+  body: string
+
+  prd_path?: string | null
+
+  issue_plan?: Record<string, unknown> | null
+  issue_refs?: { issues?: BoardIssueRef[] } | null
+
+  pr_url?: string | null
+  pr_opened_at?: string | null
+
+  plan_agent_id?: string | null
+  build_agent_id?: string | null
+  review_agent_id?: string | null
+
+  plan_session_id?: string | null
+  build_session_id?: string | null
+  review_session_id?: string | null
+
+  build_worktree_name?: string | null
+  build_worktree_path?: string | null
+  build_branch?: string | null
+  base_branch?: string | null
+
+  ai_review?: Record<string, unknown> | null
+  ai_review_session_id?: string | null
+
+  human_review_status?: 'pending' | 'approved' | 'changes_requested' | null
+  human_review_feedback?: string | null
+  human_reviewed_at?: string | null
+
+  inserted_at: string
+  updated_at: string
+}
+
+export interface BoardData {
+  squads: Squad[]
+  lane_assignments: BoardLaneAssignment[]
+  cards: BoardCard[]
 }
 
 export interface MailMessage {
@@ -272,11 +337,13 @@ export interface Review {
   id: string
   title: string
   summary: string
-  diff: string
-  status: 'pending' | 'approved' | 'changes_requested' | 'merged'
-  author_name: string
+  diff?: string
+  status: 'pending' | 'approved' | 'changes_requested'
+  author_name?: string | null
   project_id: string
   inserted_at: string
+  pr_url?: string | null
+  ai_review?: Record<string, unknown> | null
 }
 
 export interface SquadConnection {
@@ -330,6 +397,52 @@ export interface McpCliStatus {
   message?: string
 }
 
+export interface Workflow {
+  id: string
+  path: string
+  definition: Record<string, unknown> | null
+  error: string | null
+}
+
+export interface FleetStep {
+  id: string
+  task_name: string
+  task_pointer?: string | null
+  task_kind?: string | null
+  position?: number | null
+  status: 'queued' | 'running' | 'waiting_on_user' | 'blocked' | 'failed' | 'succeeded'
+  output?: Record<string, unknown> | null
+  error?: Record<string, unknown> | null
+  started_at?: string | null
+  finished_at?: string | null
+  inserted_at: string
+  updated_at: string
+}
+
+export interface FleetRun {
+  id: string
+  project_id: string
+  workflow_path: string
+  status: 'queued' | 'running' | 'waiting_on_user' | 'blocked' | 'failed' | 'succeeded'
+  inputs: Record<string, unknown>
+  output?: Record<string, unknown> | null
+  error?: Record<string, unknown> | null
+  started_at?: string | null
+  finished_at?: string | null
+  inserted_at: string
+  updated_at: string
+  steps: FleetStep[]
+}
+
+export interface TranscriptEntry {
+  opencode_message_id: string
+  payload: Record<string, unknown>
+  role: string
+  occurred_at: string
+  session_id: string
+  agent_id: string
+}
+
 // --- Queries ---
 
 export function useProjects() {
@@ -365,6 +478,72 @@ export function useSquads(projectId: string) {
         return 2000
       }
       return false
+    },
+  })
+}
+
+export function useFleetStepTranscript(stepId: string, params: { sync?: boolean; limit?: number; cursor?: string } = {}) {
+  const queryKey = ['fleet', 'steps', stepId, 'transcript', params]
+  return useQuery({
+    queryKey,
+    queryFn: () => {
+      const searchParams = new URLSearchParams()
+      if (params.sync) searchParams.append('sync', 'true')
+      if (params.limit) searchParams.append('limit', params.limit.toString())
+      if (params.cursor) searchParams.append('cursor', params.cursor)
+      
+      const url = searchParams.toString() 
+        ? `/fleet/steps/${stepId}/transcript?${searchParams.toString()}`
+        : `/fleet/steps/${stepId}/transcript`
+        
+      return fetcher<{ entries: TranscriptEntry[]; next_cursor: string | null }>(url)
+    },
+    enabled: !!stepId,
+  })
+}
+
+export function useCreateFleetRun() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { project_id: string; workflow_path: string; inputs?: Record<string, unknown> }) =>
+      fetcher<FleetRun>(`/projects/${data.project_id}/fleet/runs`, {
+        method: 'POST',
+        body: JSON.stringify({ workflow_path: data.workflow_path, inputs: data.inputs ?? {} }),
+      }),
+    onSuccess: (run) => {
+      queryClient.invalidateQueries({ queryKey: ['projects', run.project_id, 'fleet', 'runs'] })
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'runs', run.id] })
+    },
+  })
+}
+
+export function useEmitFleetRunEvent() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { run_id: string; type: string; data?: Record<string, unknown>; step_name?: string }) =>
+      fetcher<unknown>(`/fleet/runs/${data.run_id}/events`, {
+        method: 'POST',
+        body: JSON.stringify({ type: data.type, step_name: data.step_name, data: data.data ?? {} }),
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'runs', variables.run_id] })
+    },
+  })
+}
+
+export function useAttachFleetStepSession() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { step_id: string; session_id: string }) =>
+      fetcher<unknown>(`/fleet/steps/${data.step_id}/sessions`, {
+        method: 'POST',
+        body: JSON.stringify({ session_id: data.session_id }),
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'steps', variables.step_id, 'transcript'] })
     },
   })
 }
@@ -517,30 +696,128 @@ export function useProjectFiles(projectId: string) {
   })
 }
 
-export function useTickets(projectId?: string) {
+export function useBoard(projectId?: string) {
   return useQuery({
-    queryKey: projectId ? ['projects', projectId, 'tickets'] : ['tickets'],
-    queryFn: () => {
-      // If we don't have a projectId, we can't load the board yet
-      // This prevents the global /api/board 400 error by not calling it
-      if (!projectId) return [] as Ticket[]
-
-      const url = `/projects/${projectId}/board`
-      return fetcher<BoardSummary | Ticket[]>(url).then(res => {
-          // Flatten the board structure into a list of tickets for the frontend to consume
-          if (res && typeof res === 'object' && !Array.isArray(res)) {
-            const summary = res as BoardSummary
-              return [
-                  ...(summary.ready || []),
-                  ...(summary.in_progress || []),
-                  ...(summary.blocked || []),
-                  ...(summary.closed || [])
-              ]
-          }
-          return (res as Ticket[]) || []
-      })
+    queryKey: projectId ? ['projects', projectId, 'board'] : ['board'],
+    queryFn: async () => {
+      if (!projectId) {
+        return { squads: [], lane_assignments: [], cards: [] } as BoardData
+      }
+      return fetcher<BoardData>(`/projects/${projectId}/board`)
     },
     enabled: !!projectId,
+  })
+}
+
+export function useCreateBoardCard(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { squad_id: string; body: string }) => {
+      if (!projectId) throw new Error('missing_project_id')
+      return fetcher<BoardCard>(`/projects/${projectId}/board/cards`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+    },
+    onSuccess: () => {
+      if (projectId) queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'board'] })
+    },
+  })
+}
+
+export function useAssignBoardLane(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { squad_id: string; lane: BoardLane; agent_id?: string | null }) => {
+      if (!projectId) throw new Error('missing_project_id')
+      return fetcher<BoardLaneAssignment>(`/projects/${projectId}/board/lanes/assign`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      })
+    },
+    onSuccess: () => {
+      if (projectId) queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'board'] })
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    },
+  })
+}
+
+export function useMoveBoardCard(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { id: string; lane: BoardLane }) =>
+      fetcher<BoardCard>(`/board/cards/${data.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ lane: data.lane }),
+      }),
+    onSuccess: () => {
+      if (projectId) queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'board'] })
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+    },
+  })
+}
+
+export function useSetBoardCardPrUrl(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { id: string; pr_url: string }) =>
+      fetcher<BoardCard>(`/board/cards/${data.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pr_url: data.pr_url }),
+      }),
+    onSuccess: () => {
+      if (projectId) queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'board'] })
+    },
+  })
+}
+
+export function useSyncBoardCardArtifacts(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetcher<BoardCard>(`/board/cards/${id}/actions/sync`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      if (projectId) queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'board'] })
+    },
+  })
+}
+
+export function useCreateBoardCardIssues(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetcher<BoardCard>(`/board/cards/${id}/actions/create_issues`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      if (projectId) queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'board'] })
+    },
+  })
+}
+
+export function useCreateBoardCardPr() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetcher<void>(`/board/cards/${id}/actions/create_pr`, {
+        method: 'POST',
+      }),
+  })
+}
+
+export function useSubmitBoardHumanReview(projectId?: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { id: string; status: 'approved' | 'changes_requested'; feedback?: string }) =>
+      fetcher<BoardCard>(`/board/cards/${data.id}/human_review`, {
+        method: 'POST',
+        body: JSON.stringify({ status: data.status, feedback: data.feedback || '' }),
+      }),
+    onSuccess: () => {
+      if (projectId) queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'board'] })
+      queryClient.invalidateQueries({ queryKey: ['reviews'] })
+    },
   })
 }
 
@@ -675,7 +952,7 @@ export function useSessionTodos(sessionId: string) {
 export function useSessionDiff(sessionId: string) {
   return useQuery({
     queryKey: ['sessions', sessionId, 'diff'],
-    queryFn: () => fetcher<string>(`/sessions/${sessionId}/diff`),
+    queryFn: () => fetcher<SessionDiffResponse>(`/sessions/${sessionId}/diff`),
     enabled: !!sessionId,
   })
 }
@@ -731,10 +1008,14 @@ export function useRunSessionShell() {
   })
 }
 
-export function useReviews() {
+export function useReviews(projectId?: string) {
   return useQuery({
-    queryKey: ['reviews'],
-    queryFn: () => fetcher<Review[]>('/reviews'),
+    queryKey: projectId ? ['reviews', projectId] : ['reviews'],
+    queryFn: () => {
+      if (!projectId) return [] as Review[]
+      return fetcher<Review[]>(`/reviews?project_id=${projectId}`)
+    },
+    enabled: !!projectId,
   })
 }
 
@@ -836,88 +1117,23 @@ export function useArchiveSession() {
   })
 }
 
-const invalidateTicketQueries = (queryClient: ReturnType<typeof useQueryClient>, projectId?: string) => {
-  if (projectId) {
-    queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tickets'] })
-    return
-  }
-  queryClient.invalidateQueries({
-    predicate: (query) => {
-      const key = query.queryKey
-      return Array.isArray(key) && key[0] === 'projects' && key[2] === 'tickets'
-    },
-  })
-}
-
-export function useUpdateTicketStatus(projectId?: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (data: { id: string; status: Ticket['status']; project_id?: string }) =>
-      fetcher<Ticket>(`/tickets/${data.id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: data.status }),
-      }),
-    onSuccess: (_, variables) => {
-      const actualProjectId = variables.project_id || projectId
-      invalidateTicketQueries(queryClient, actualProjectId)
-    },
-  })
-}
-
-export function useClaimTicket(projectId?: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (data: { id: string; agent_id: string; agent_name?: string; project_id?: string }) =>
-      fetcher<Ticket>(`/tickets/${data.id}/claim`, {
-        method: 'POST',
-        body: JSON.stringify({ agent_id: data.agent_id, agent_name: data.agent_name }),
-      }),
-    onSuccess: (_, variables) => {
-      const actualProjectId = variables.project_id || projectId
-      invalidateTicketQueries(queryClient, actualProjectId)
-    },
-  })
-}
-
-export function useUnclaimTicket(projectId?: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (data: { id: string; project_id?: string }) =>
-      fetcher<Ticket>(`/tickets/${data.id}/unclaim`, {
-        method: 'POST',
-      }),
-    onSuccess: (_, variables) => {
-      const actualProjectId = variables.project_id || projectId
-      invalidateTicketQueries(queryClient, actualProjectId)
-    },
-  })
-}
-
-export function useCreateTicket() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (data: { project_id: string; title: string; issue_type?: string; priority?: number; parent_beads_id?: string }) =>
-      fetcher<Ticket>(`/projects/${data.project_id}/tickets`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    onSuccess: (_, variables) => {
-      invalidateTicketQueries(queryClient, variables.project_id)
-    },
-  })
-}
 
 export function useSubmitReview() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: { id: string; status: 'approved' | 'changes_requested' | 'merged'; feedback?: string }) =>
+    mutationFn: (data: { id: string; status: 'approved' | 'changes_requested'; feedback?: string }) =>
       fetcher<Review>(`/reviews/${data.id}/submit`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews'] })
-      invalidateTicketQueries(queryClient)
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey
+          return Array.isArray(key) && key[0] === 'projects' && key[2] === 'board'
+        },
+      })
     },
   })
 }

@@ -22,8 +22,9 @@ defmodule Squads.Config.ProjectConfig do
       "opencode" => %{
         "enabled" => true
       },
-      "beads" => %{
-        "enabled" => true
+      "github" => %{
+        "enabled" => true,
+        "repo" => nil
       },
       "mail" => %{
         "enabled" => true,

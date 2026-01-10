@@ -2,40 +2,82 @@ import { useState, useEffect } from 'react'
 import { X, Terminal, Loader2 } from 'lucide-react'
 import { cn } from '../lib/cn'
 import { SessionChat, type AgentMode } from './SessionChat'
-import type { Session, Agent } from '../api/queries'
+import { type Session, type Agent, useSession, useAgents } from '../api/queries'
 
 interface SessionChatFlyoutProps {
-  session: Session
+  sessionId?: string
+  session?: Session // For backward compat if full object is passed
   agent?: Agent
-  onClose: () => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onClose?: () => void // Deprecated, use onOpenChange
 }
 
 export function SessionChatFlyout({
-  session,
-  agent,
+  sessionId,
+  session: initialSession,
+  agent: initialAgent,
+  open,
+  onOpenChange,
   onClose,
 }: SessionChatFlyoutProps) {
   // Sticky mode per session (runtime only)
   const [mode, setMode] = useState<AgentMode>('plan')
+  
+  // Handle both controlled (open prop) and uncontrolled (internal state + onClose) usage
+  const isOpen = open !== undefined ? open : true
+  const handleClose = () => {
+      onOpenChange?.(false)
+      onClose?.()
+  }
+
+  // Fetch session details if we only have an ID
+  const { data: fetchedSession, isLoading: isSessionLoading } = useSession(sessionId || '')
+  
+  // Resolve session and agent
+  const session = initialSession || fetchedSession
+  
+  // We might need to fetch the agent if not provided
+  const { data: agents = [] } = useAgents()
+  const agent = initialAgent || (session ? agents.find(a => a.id === session.agent_id) : undefined)
 
   // Close on ESC key
   useEffect(() => {
+    if (!isOpen) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose()
+        handleClose()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [isOpen, handleClose])
 
   // Prevent body scroll when flyout is open
   useEffect(() => {
+    if (!isOpen) return
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = ''
     }
-  }, [])
+  }, [isOpen])
+
+  if (!isOpen) return null
+  
+  if (isSessionLoading) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+             <div className="p-4 bg-tui-bg border border-tui-border rounded flex flex-col items-center gap-2">
+                 <Loader2 className="animate-spin text-tui-accent" size={24} />
+                 <span className="text-sm text-tui-dim">Loading session...</span>
+             </div>
+        </div>
+      )
+  }
+
+  if (!session) {
+      return null // Should handle error state better in real app
+  }
 
   const isActive = session.status === 'running' || session.status === 'pending'
 
@@ -44,7 +86,7 @@ export function SessionChatFlyout({
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/60 z-40"
-        onClick={onClose}
+        onClick={handleClose}
         aria-hidden="true"
       />
 
@@ -93,7 +135,7 @@ export function SessionChatFlyout({
 
             {/* Close Button */}
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-1.5 text-tui-dim hover:text-tui-text transition-colors"
               aria-label="Close chat"
             >

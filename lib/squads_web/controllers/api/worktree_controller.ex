@@ -19,8 +19,8 @@ defmodule SquadsWeb.API.WorktreeController do
     end
   end
 
-  def create(conn, %{"project_id" => project_id, "agent_id" => agent_id, "ticket_id" => ticket_id}) do
-    with {:ok, path} <- Worktrees.ensure_worktree(project_id, agent_id, ticket_id) do
+  def create(conn, %{"project_id" => project_id, "agent_id" => agent_id, "work_key" => work_key}) do
+    with {:ok, path} <- Worktrees.ensure_worktree(project_id, agent_id, work_key) do
       conn
       |> put_status(:created)
       |> render(:show, path: path)

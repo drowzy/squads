@@ -1,21 +1,25 @@
 defmodule Squads.Worktrees do
   @moduledoc """
-  Manages git worktrees for agents working on specific tickets.
+  Manages git worktrees for agent work.
+
+  Worktrees provide filesystem isolation by giving an agent a dedicated checkout
+  directory under `<project_path>/.squads/worktrees/`.
   """
   alias Squads.Repo
   alias Squads.Projects.Project
   alias Squads.Agents.Agent
-  alias Squads.Tickets.Ticket
 
   @doc """
-  Ensures a worktree exists for the given agent and ticket.
-  Path format: <project_path>/.squads/worktrees/<agent_slug>-<ticket_id>
+  Ensures a worktree exists for the given agent and work key.
+
+  The work key should be stable for a unit of work (e.g. a board card ID).
+  Path format: <project_path>/.squads/worktrees/<agent_slug>-<work_key>
   """
-  def ensure_worktree(project_id, agent_id, ticket_id) do
+  def ensure_worktree(project_id, agent_id, work_key) do
     with %Project{} = project <- Repo.get(Project, project_id),
          %Agent{} = agent <- Repo.get(Agent, agent_id),
-         %Ticket{} = ticket <- Repo.get(Ticket, ticket_id) do
-      worktree_name = "#{agent.slug}-#{ticket.id}"
+         true <- is_binary(work_key) and work_key != "" do
+      worktree_name = "#{agent.slug}-#{work_key}"
       worktree_path = Path.join([project.path, ".squads", "worktrees", worktree_name])
       branch_name = "squads/#{worktree_name}"
 
@@ -26,6 +30,7 @@ defmodule Squads.Worktrees do
       end
     else
       nil -> {:error, :not_found}
+      false -> {:error, :invalid_work_key}
     end
   end
 

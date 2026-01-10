@@ -4,7 +4,6 @@ defmodule SquadsWeb.API.WorktreeControllerTest do
   alias Squads.Projects
   alias Squads.Agents
   alias Squads.Squads, as: SquadsContext
-  alias Squads.Tickets
   alias Squads.Worktrees
 
   setup %{conn: conn} do
@@ -28,14 +27,13 @@ defmodule SquadsWeb.API.WorktreeControllerTest do
     {:ok, agent} =
       Agents.create_agent(%{squad_id: squad.id, name: "GreenPanda", slug: "green-panda"})
 
-    {:ok, ticket} =
-      Tickets.create_ticket(%{project_id: project.id, beads_id: "test-123", title: "Test Ticket"})
+    work_key = Ecto.UUID.generate()
 
     {:ok,
      conn: put_req_header(conn, "accept", "application/json"),
      project: project,
      agent: agent,
-     ticket: ticket}
+     work_key: work_key}
   end
 
   describe "index" do
@@ -51,16 +49,16 @@ defmodule SquadsWeb.API.WorktreeControllerTest do
   end
 
   describe "create" do
-    test "creates a worktree for an agent working on a ticket", %{
+    test "creates a worktree for an agent and work key", %{
       conn: conn,
       project: project,
       agent: agent,
-      ticket: ticket
+      work_key: work_key
     } do
       conn =
         post(conn, ~p"/api/projects/#{project.id}/worktrees", %{
           "agent_id" => agent.id,
-          "ticket_id" => ticket.id
+          "work_key" => work_key
         })
 
       assert response(conn, 201)
@@ -73,11 +71,11 @@ defmodule SquadsWeb.API.WorktreeControllerTest do
       conn: conn,
       project: project,
       agent: agent,
-      ticket: ticket
+      work_key: work_key
     } do
       # Create first
-      {:ok, _path} = Worktrees.ensure_worktree(project.id, agent.id, ticket.id)
-      worktree_name = "#{agent.slug}-#{ticket.id}"
+      {:ok, _path} = Worktrees.ensure_worktree(project.id, agent.id, work_key)
+      worktree_name = "#{agent.slug}-#{work_key}"
 
       conn = delete(conn, ~p"/api/projects/#{project.id}/worktrees/#{worktree_name}")
       assert response(conn, 204)

@@ -6,7 +6,6 @@ defmodule Squads.Mail.Thread do
   import Ecto.Changeset
 
   alias Squads.Projects.Project
-  alias Squads.Tickets.Ticket
   alias Squads.Mail.Message
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -17,7 +16,6 @@ defmodule Squads.Mail.Thread do
     field :last_message_at, :utc_datetime
 
     belongs_to :project, Project
-    belongs_to :ticket, Ticket
     has_many :messages, Message
 
     timestamps(type: :utc_datetime)
@@ -26,9 +24,8 @@ defmodule Squads.Mail.Thread do
   @doc false
   def changeset(thread, attrs) do
     thread
-    |> cast(attrs, [:subject, :project_id, :ticket_id, :last_message_at])
+    |> cast(attrs, [:subject, :project_id, :last_message_at])
     |> validate_required([:subject, :project_id])
     |> foreign_key_constraint(:project_id)
-    |> foreign_key_constraint(:ticket_id)
   end
 end

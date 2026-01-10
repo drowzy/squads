@@ -5,13 +5,23 @@ defmodule Squads.Sessions.Helpers do
 
   alias Squads.Repo
   alias Squads.OpenCode.Resolver
+  alias Squads.OpenCode.Server
 
   require Logger
 
   def with_base_url(session, opts) do
-    case get_base_url_for_session(session) do
-      nil -> opts
-      url -> Keyword.put_new(opts, :base_url, url)
+    cond do
+      Keyword.has_key?(opts, :base_url) ->
+        opts
+
+      not has_opencode_session?(session) ->
+        opts
+
+      true ->
+        case get_base_url_for_session(session) do
+          nil -> opts
+          url -> Keyword.put_new(opts, :base_url, url)
+        end
     end
   end
 
@@ -37,11 +47,32 @@ defmodule Squads.Sessions.Helpers do
                  base_url: metadata_base_url(session.metadata)
                ) do
             {:ok, base_url} ->
+              Logger.debug(
+                "Discovered OpenCode base URL for project #{squad.project_id}: #{base_url}"
+              )
+
               maybe_persist_base_url(session, base_url)
               base_url
 
-            _ ->
-              nil
+            {:error, _reason} ->
+              Logger.info("No running OpenCode instance found; starting one",
+                project_id: squad.project_id,
+                project_path: project.path
+              )
+
+              case Server.ensure_running(squad.project_id, project.path) do
+                {:ok, base_url} ->
+                  maybe_persist_base_url(session, base_url)
+                  base_url
+
+                {:error, reason} ->
+                  Logger.error("Failed to start OpenCode server for project",
+                    project_id: squad.project_id,
+                    reason: inspect(reason)
+                  )
+
+                  nil
+              end
           end
 
         {:error, reason} ->
@@ -85,6 +116,13 @@ defmodule Squads.Sessions.Helpers do
 
   def metadata_base_url(%{"opencode_base_url" => base_url}), do: base_url
   def metadata_base_url(_), do: nil
+
+  defp has_opencode_session?(%{opencode_session_id: opencode_session_id})
+       when is_binary(opencode_session_id) do
+    String.starts_with?(opencode_session_id, "ses")
+  end
+
+  defp has_opencode_session?(_), do: false
 
   defp fetch_agent_for_resolution(agent_id) do
     case Repo.get(Squads.Agents.Agent, agent_id) do

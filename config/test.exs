@@ -36,3 +36,4 @@ config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
 config :squads, :opencode_client, Squads.OpenCode.ClientMock
+config :squads, :github_client, Squads.GitHub.ClientMock

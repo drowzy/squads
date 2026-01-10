@@ -33,3 +33,7 @@ opencode_squads-*.tar
 assets/node_modules/
 assets/.tanstack/
 
+# Env
+.env
+.env.*
+

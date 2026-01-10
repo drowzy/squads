@@ -14,15 +14,30 @@ defmodule Squads.OpenCode.Resolver do
   3) Fallback to configured default
   """
   def resolve_base_url(project_path, opts \\ []) do
+    base_url = Keyword.get(opts, :base_url)
+
     cond do
-      url = Keyword.get(opts, :base_url) ->
-        {:ok, url}
+      is_binary(base_url) and base_url != "" and base_url_matches_project?(project_path, base_url) ->
+        {:ok, base_url}
 
       url = find_matching_local_node(project_path) ->
         {:ok, url}
 
       true ->
-        {:ok, configured_base_url()}
+        default_url = configured_base_url()
+
+        if base_url_matches_project?(project_path, default_url) do
+          {:ok, default_url}
+        else
+          {:error, :not_found}
+        end
+    end
+  end
+
+  defp base_url_matches_project?(project_path, base_url) do
+    case Client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
+      {:ok, project} when is_map(project) -> project_matches?(project_path, project)
+      _ -> false
     end
   end
 

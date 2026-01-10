@@ -403,7 +403,7 @@ function SessionRow({ session, agent, onOpenChat }: SessionRowProps) {
       <div className="flex-1 hidden md:flex flex-col text-xs text-tui-dim min-w-0 px-4">
         {session.ticket_key && (
           <div className="flex items-center gap-1.5 truncate text-tui-text/80">
-            <span className="text-tui-dim uppercase tracking-wider text-[10px]">Ticket:</span>
+            <span className="text-tui-dim uppercase tracking-wider text-[10px]">Ref:</span>
             <span className="font-mono">{session.ticket_key}</span>
           </div>
         )}

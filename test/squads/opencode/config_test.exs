@@ -624,7 +624,6 @@ defmodule Squads.OpenCode.ConfigTest do
       assert config["mcp"]["agent_mail"]["url"] =~ "/api/mcp/agent_mail/connect"
       assert config["agent"]["default"] == %{"agent" => "generalist"}
       assert config["agent"]["commands"]["squads-status"] != nil
-      assert config["agent"]["commands"]["squads-tickets"] != nil
     end
 
     test "applies overrides", %{project_dir: project_dir} do
@@ -670,7 +669,7 @@ defmodule Squads.OpenCode.ConfigTest do
       assert config["agent"]["commands"] != nil
     end
 
-    test "includes agent mail MCP with env var placeholder", %{project_dir: project_dir} do
+    test "includes agent mail MCP with env var placeholder", _context do
       config = Config.default_squads_config()
 
       headers = config["mcp"]["agent_mail"]["headers"]

@@ -90,7 +90,7 @@ defmodule Squads.OpenCode.ProjectServer do
             )
 
             # Start health check
-            _task = Task.async(fn -> wait_for_healthy(url) end)
+            _task = Task.async(fn -> wait_for_healthy(url, state.project_path, state.client) end)
 
             {:noreply,
              %{
@@ -496,24 +496,56 @@ defmodule Squads.OpenCode.ProjectServer do
     System.monotonic_time(:millisecond) - started_at_ms
   end
 
-  defp wait_for_healthy(url, retries \\ 60)
-  defp wait_for_healthy(_url, 0), do: {:error, :timeout}
+  defp wait_for_healthy(url, project_path, client, retries \\ 60) do
+    do_wait_for_healthy(url, project_path, client, retries, nil)
+  end
 
-  defp wait_for_healthy(url, retries) do
+  defp do_wait_for_healthy(_url, _project_path, _client, 0, last_error),
+    do: {:error, {:timeout, last_error}}
+
+  defp do_wait_for_healthy(url, project_path, client, retries, last_error) do
     port = URI.parse(url).port
 
-    case :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 1000) do
-      {:ok, socket} ->
-        :gen_tcp.close(socket)
-        :ok
+    {ready?, new_last_error} =
+      case :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 1000) do
+        {:ok, socket} ->
+          :gen_tcp.close(socket)
 
-      _ ->
-        if retries in [60, 30, 10, 5, 1] do
-          Logger.debug("OpenCode bootstrap: waiting for health at #{url} (retries=#{retries})")
-        end
+          case client.health(base_url: url, timeout: 1000, retry_count: 0) do
+            {:ok, %{"healthy" => true}} ->
+              case client.get_current_project(base_url: url, timeout: 1000, retry_count: 0) do
+                {:ok, project} when is_map(project) ->
+                  if Resolver.project_matches?(project_path, project) do
+                    {true, nil}
+                  else
+                    {false, :wrong_project}
+                  end
 
-        Process.sleep(1000)
-        wait_for_healthy(url, retries - 1)
+                other ->
+                  {false, {:project_not_ready, other}}
+              end
+
+            other ->
+              {false, {:unhealthy, other}}
+          end
+
+        other ->
+          {false, {:port_not_ready, other}}
+      end
+
+    last_error = if ready?, do: last_error, else: new_last_error
+
+    if ready? do
+      :ok
+    else
+      if retries in [60, 30, 10, 5, 1] do
+        Logger.debug(
+          "OpenCode bootstrap: waiting for health at #{url} (retries=#{retries}, last_error=#{inspect(last_error)})"
+        )
+      end
+
+      Process.sleep(1000)
+      do_wait_for_healthy(url, project_path, client, retries - 1, last_error)
     end
   end
 end

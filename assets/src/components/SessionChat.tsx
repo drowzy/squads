@@ -29,6 +29,7 @@ import {
   type SessionMessageToolPart,
   type SessionMessageInfo,
 } from '../api/queries'
+import { API_BASE } from '../api/client'
 import { useNotifications } from './Notifications'
 import { cn } from '../lib/cn'
 import { useProjectEvents } from '../lib/socket'
@@ -76,6 +77,10 @@ export function SessionChat({
 }: SessionChatProps) {
   const [chatInput, setChatInput] = useState('')
   const [awaitingResponse, setAwaitingResponse] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [streamingText, setStreamingText] = useState('')
+  const streamAbortRef = useRef<AbortController | null>(null)
+  const streamingStartedAtRef = useRef<number | null>(null)
   const pendingSinceRef = useRef<number | null>(null)
   const [autocomplete, setAutocomplete] = useState<{
     active: boolean
@@ -141,7 +146,7 @@ export function SessionChat({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [session.id, sessionMessages.length])
+  }, [session.id, sessionMessages.length, streamingText])
 
   useEffect(() => {
     if (!awaitingResponse || pendingSinceRef.current === null) return
@@ -163,6 +168,11 @@ export function SessionChat({
     setChatInput('')
     setAutocomplete(prev => ({ ...prev, active: false }))
     setAwaitingResponse(false)
+    setIsStreaming(false)
+    setStreamingText('')
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = null
+    streamingStartedAtRef.current = null
     pendingSinceRef.current = null
   }, [session.id])
 
@@ -269,6 +279,12 @@ export function SessionChat({
   }
 
   const handleAbort = async () => {
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = null
+    streamingStartedAtRef.current = null
+    setIsStreaming(false)
+    setStreamingText('')
+
     try {
       await abortSession.mutateAsync({ session_id: session.id })
       setAwaitingResponse(false)
@@ -329,11 +345,135 @@ export function SessionChat({
           model: session.model,
         })
       } else {
-        await sendPrompt.mutateAsync({
-          session_id: session.id,
-          prompt: input,
-          agent: mode, // Send with current mode
+        setIsStreaming(true)
+        setStreamingText('')
+        streamingStartedAtRef.current = Date.now()
+
+        const controller = new AbortController()
+        streamAbortRef.current = controller
+
+        const response = await fetch(`${API_BASE}/sessions/${session.id}/prompt_stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: input, agent: mode }),
+          signal: controller.signal,
         })
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => response.statusText)
+          throw new Error(`API Error: ${response.status} ${errorText}`)
+        }
+
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('Streaming not supported by this browser')
+
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let shouldStop = false
+
+        let userMessageId: string | null = null
+        let assistantMessageId: string | null = null
+
+        const handleEvent = (eventType: string, data: any) => {
+          if (eventType === 'message.updated') {
+            const info = data?.properties?.info
+            if (info?.role === 'user' && typeof info?.id === 'string') {
+              userMessageId = info.id
+            }
+            if (info?.role === 'assistant' && typeof info?.id === 'string') {
+              assistantMessageId = info.id
+            }
+            if (info?.role === 'assistant' && typeof info?.time?.completed === 'number') {
+              shouldStop = true
+              return 'done'
+            }
+          }
+
+          const part = data?.properties?.part
+          const delta = typeof data?.properties?.delta === 'string' ? data.properties.delta : null
+
+          if (eventType === 'message.part.updated' && part && part.type === 'text') {
+            const messageId = typeof part.messageID === 'string' ? part.messageID : null
+
+            const isAssistantPart =
+              (assistantMessageId && messageId === assistantMessageId) ||
+              (userMessageId && messageId && messageId !== userMessageId)
+
+            if (isAssistantPart) {
+              if (delta && delta.length) {
+                setStreamingText((prev) => prev + delta)
+              } else if (typeof part.text === 'string') {
+                setStreamingText((prev) => (part.text.length > prev.length ? part.text : prev))
+              }
+            }
+          }
+
+          if (eventType === 'tui.prompt.append' && typeof data?.properties?.text === 'string') {
+            setStreamingText((prev) => prev + data.properties.text)
+          }
+
+          const statusType = data?.properties?.status?.type
+          if (eventType === 'session.idle' || (eventType === 'session.status' && statusType === 'idle')) {
+            shouldStop = true
+            return 'done'
+          }
+
+          return 'continue'
+        }
+
+        while (!shouldStop) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+
+          while (true) {
+            const splitIndex = buffer.indexOf('\n\n')
+            if (splitIndex === -1) break
+
+            const block = buffer.slice(0, splitIndex)
+            buffer = buffer.slice(splitIndex + 2)
+
+            let eventType = ''
+            const dataLines: string[] = []
+
+            for (const line of block.split('\n')) {
+              if (line.startsWith('event:')) {
+                eventType = line.slice('event:'.length).trim()
+              } else if (line.startsWith('data:')) {
+                dataLines.push(line.slice('data:'.length).trim())
+              }
+            }
+
+            if (!eventType) continue
+
+            const dataText = dataLines.join('\n')
+            let data: any = dataText
+            try {
+              data = JSON.parse(dataText)
+            } catch {
+              // keep as string
+            }
+
+            const result = handleEvent(eventType, data)
+            if (result === 'done') {
+              break
+            }
+          }
+        }
+
+        try {
+          await reader.cancel()
+        } catch {
+          // ignore
+        }
+
+        streamAbortRef.current = null
+        streamingStartedAtRef.current = null
+        setIsStreaming(false)
+        setAwaitingResponse(false)
+        pendingSinceRef.current = null
+        queryClient.invalidateQueries({ queryKey: ['sessions', session.id, 'messages'] })
       }
 
       if (!shouldAwaitResponse) {
@@ -342,8 +482,19 @@ export function SessionChat({
       }
       setChatInput('')
     } catch (error) {
+      const isAbortError =
+        (error instanceof DOMException && error.name === 'AbortError') ||
+        (error instanceof Error && /aborted/i.test(error.message))
+
+      streamAbortRef.current = null
+      streamingStartedAtRef.current = null
+      setIsStreaming(false)
+      setStreamingText('')
       setAwaitingResponse(false)
       pendingSinceRef.current = null
+
+      if (isAbortError) return
+
       console.error('SessionChat action failed', {
         input,
         sessionId: session.id,
@@ -361,10 +512,10 @@ export function SessionChat({
   const isHistory = (['completed', 'failed', 'cancelled', 'archived'] as string[]).includes(session.status)
   const isPending = sendPrompt.isPending || executeCommand.isPending || runShell.isPending
   const isAborting = abortSession.isPending
-  const isProcessing = isPending || awaitingResponse
+  const isProcessing = isPending || awaitingResponse || isStreaming
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div className={cn('flex flex-col h-full min-h-0', className)}>
       {/* Header */}
       {showHeader && (
         <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between shrink-0">
@@ -391,7 +542,7 @@ export function SessionChat({
       {/* Messages */}
       <div 
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-3 md:p-4 bg-ctp-crust/60 space-y-3 relative"
+        className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4 bg-ctp-crust/60 space-y-3 relative"
       >
         {isLoadingMessages ? (
           <div className="flex items-center justify-center text-tui-dim text-xs uppercase tracking-widest">
@@ -409,6 +560,20 @@ export function SessionChat({
             />
           ))
         )}
+
+        {isStreaming && (
+          <ChatMessage
+            message={{
+              info: {
+                id: 'streaming',
+                role: 'assistant',
+                time: { created: streamingStartedAtRef.current ?? Date.now() },
+              },
+              parts: [{ type: 'text', text: streamingText }],
+            } as unknown as SessionMessageEntry}
+          />
+        )}
+
         <div ref={messagesEndRef} />
         {isHistory && !sessionMessages.length && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-tui-bg/80 backdrop-blur-sm z-10 pointer-events-none">
@@ -807,8 +972,15 @@ function ToolPartBlock({ part }: { part: SessionMessagePart }) {
   const output = toolPart.state?.output
   const error = toolPart.state?.error
 
+  const inputFilePath = getToolInputFilePath(input)
+  const outputLanguage = inferLanguageFromFilePath(inputFilePath)
+  const outputSegments = useMemo(() => {
+    if (typeof output !== 'string' || output.length === 0) return []
+    return splitToolOutput(output)
+  }, [output])
+
   const isError = status === 'error' || !!error
-  const isDone = status === 'success' || status === 'done' || !!output
+  const isDone = status === 'completed' || status === 'success' || status === 'done' || !!output
 
   return (
     <div
@@ -836,21 +1008,134 @@ function ToolPartBlock({ part }: { part: SessionMessagePart }) {
 
       <div className="p-3 space-y-3 font-mono">
         {input && (
-          <div>
-            <div className="text-[9px] uppercase tracking-widest text-tui-dim mb-1">Input</div>
-            <div className="bg-ctp-crust/40 p-2 rounded border border-tui-border-dim overflow-x-auto">
+          <details className="group">
+            <summary className="cursor-pointer select-none flex items-center justify-between gap-3">
+              <div className="min-w-0 flex items-center gap-2">
+                <div className="text-[9px] uppercase tracking-widest text-tui-dim">Input</div>
+                {inputFilePath && (
+                  <div className="text-[9px] text-tui-dim/70 font-mono truncate">
+                    {inputFilePath}
+                  </div>
+                )}
+              </div>
+              <ChevronRight
+                size={12}
+                className="shrink-0 transition-transform group-open:rotate-90 text-tui-dim"
+              />
+            </summary>
+            <div className="mt-2 bg-ctp-crust/40 p-2 rounded border border-tui-border-dim overflow-x-auto">
               <pre>{formatJSON(input)}</pre>
             </div>
-          </div>
+          </details>
         )}
+
         {output && (
           <div>
             <div className="text-[9px] uppercase tracking-widest text-tui-dim mb-1">Output</div>
-            <div className="bg-ctp-crust/40 p-2 rounded border border-tui-border-dim overflow-x-auto text-tui-text/90">
-              <pre>{output}</pre>
+            <div className="space-y-2">
+              {outputSegments.map((segment, index) => {
+                if (segment.type === 'text') {
+                  return (
+                    <div
+                      key={`text-${index}`}
+                      className="bg-ctp-crust/40 p-2 rounded border border-tui-border-dim overflow-x-auto text-tui-text/90"
+                    >
+                      <pre>{segment.text}</pre>
+                    </div>
+                  )
+                }
+
+                if (segment.type === 'diagnostics') {
+                  const hasErrors = segment.diagnostics.some((d) => d.severity === 'error')
+
+                  return (
+                    <div key={`diag-${index}`} className="space-y-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[9px] uppercase tracking-widest text-tui-dim">
+                          Diagnostics
+                        </div>
+                        {segment.filePath && (
+                          <div className="text-[9px] text-tui-dim/70 font-mono truncate">
+                            {segment.filePath}
+                          </div>
+                        )}
+                      </div>
+                      <div
+                        className={cn(
+                          'rounded border overflow-hidden',
+                          hasErrors
+                            ? 'border-red-900/50 bg-red-950/10'
+                            : 'border-tui-border-dim bg-ctp-crust/40'
+                        )}
+                      >
+                        <div className="divide-y divide-tui-border/30">
+                          {segment.diagnostics.length > 0 ? (
+                            segment.diagnostics.map((diag, diagIndex) => (
+                              <div key={diagIndex} className="px-2 py-1 flex gap-2">
+                                <span
+                                  className={cn(
+                                    'shrink-0 text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded border',
+                                    diag.severity === 'error'
+                                      ? 'border-red-500/30 text-red-400'
+                                      : diag.severity === 'warning'
+                                      ? 'border-yellow-500/30 text-yellow-300'
+                                      : diag.severity === 'info'
+                                      ? 'border-blue-500/30 text-blue-300'
+                                      : diag.severity === 'hint'
+                                      ? 'border-purple-500/30 text-purple-300'
+                                      : 'border-tui-dim/30 text-tui-dim'
+                                  )}
+                                >
+                                  {diag.severity}
+                                </span>
+                                {typeof diag.line === 'number' && typeof diag.column === 'number' && (
+                                  <span className="shrink-0 text-[10px] text-tui-dim font-mono">
+                                    [{diag.line}:{diag.column}]
+                                  </span>
+                                )}
+                                <span className="text-tui-text/90 break-words">{diag.message}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-2 py-1 text-[10px] text-tui-dim">
+                              No diagnostics reported.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div key={`file-${index}`} className="space-y-1">
+                    <div className="bg-ctp-crust/40 rounded border border-tui-border-dim overflow-x-auto">
+                      <SyntaxHighlighter
+                        style={vscDarkPlus}
+                        language={outputLanguage}
+                        showLineNumbers
+                        PreTag="div"
+                        customStyle={{
+                          margin: 0,
+                          background: 'transparent',
+                          fontSize: '0.75rem',
+                        }}
+                      >
+                        {segment.code}
+                      </SyntaxHighlighter>
+                    </div>
+                    {segment.meta.length > 0 && (
+                      <div className="text-[10px] text-tui-dim whitespace-pre-wrap">
+                        {segment.meta.join('\n')}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
+
         {error && (
           <div>
             <div className="text-[9px] uppercase tracking-widest text-red-400 mb-1">Error</div>
@@ -1046,5 +1331,189 @@ function formatJSON(value: Record<string, unknown>) {
     return JSON.stringify(value, null, 2)
   } catch {
     return String(value)
+  }
+}
+
+type ToolDiagnosticSeverity = 'error' | 'warning' | 'info' | 'hint' | 'unknown'
+
+type ToolOutputDiagnostic = {
+  severity: ToolDiagnosticSeverity
+  line?: number
+  column?: number
+  message: string
+  raw: string
+}
+
+type ToolOutputSegment =
+  | { type: 'text'; text: string }
+  | { type: 'file'; code: string; meta: string[] }
+  | { type: 'diagnostics'; filePath?: string; diagnostics: ToolOutputDiagnostic[] }
+
+function getToolInputFilePath(input?: Record<string, unknown>) {
+  const filePath = input?.filePath
+  if (typeof filePath === 'string' && filePath.length > 0) return filePath
+
+  const path = input?.path
+  if (typeof path === 'string' && path.length > 0) return path
+
+  return undefined
+}
+
+function splitToolOutput(output: string): ToolOutputSegment[] {
+  const segments: ToolOutputSegment[] = []
+  const normalized = output.replace(/\r\n/g, '\n')
+  const blockRegex = /<(file|file_diagnostics)>\s*([\s\S]*?)\s*<\/\1>/g
+
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = blockRegex.exec(normalized)) !== null) {
+    const before = normalized.slice(lastIndex, match.index).trim()
+    if (before) segments.push({ type: 'text', text: before })
+
+    const tag = match[1]
+    const inner = match[2] || ''
+    let consumedUntil = blockRegex.lastIndex
+
+    if (tag === 'file') {
+      const { code, meta } = parseFileBlock(inner)
+      segments.push({ type: 'file', code, meta })
+    } else {
+      const lineEnd = normalized.indexOf('\n', consumedUntil)
+      const endOfLine = lineEnd === -1 ? normalized.length : lineEnd
+      const trailing = normalized.slice(consumedUntil, endOfLine).trim()
+
+      if (trailing) {
+        consumedUntil = endOfLine
+      }
+
+      const diagnostics = parseDiagnosticsBlock(inner)
+      segments.push({ type: 'diagnostics', filePath: trailing || undefined, diagnostics })
+    }
+
+    lastIndex = consumedUntil
+    blockRegex.lastIndex = consumedUntil
+  }
+
+  const after = normalized.slice(lastIndex).trim()
+  if (after) segments.push({ type: 'text', text: after })
+
+  if (segments.length === 0) {
+    return [{ type: 'text', text: normalized }]
+  }
+
+  return segments
+}
+
+function parseFileBlock(block: string) {
+  const codeLines: string[] = []
+  const meta: string[] = []
+
+  const lines = block.replace(/\r\n/g, '\n').split('\n')
+  for (const line of lines) {
+    const match = line.match(/^\d+\|\s?(.*)$/)
+    if (match) {
+      codeLines.push(match[1] ?? '')
+    } else {
+      const trimmed = line.trimEnd()
+      if (trimmed) meta.push(trimmed)
+    }
+  }
+
+  return { code: codeLines.join('\n'), meta }
+}
+
+function parseDiagnosticsBlock(block: string): ToolOutputDiagnostic[] {
+  const diagnostics: ToolOutputDiagnostic[] = []
+  const lines = block.replace(/\r\n/g, '\n').split('\n')
+
+  for (const line of lines) {
+    const raw = line.trim()
+    if (!raw) continue
+
+    const match = raw.match(/^(ERROR|WARNING|WARN|INFO|HINT)\s+\[(\d+):(\d+)\]\s+(.*)$/i)
+
+    if (match) {
+      const severityRaw = (match[1] || '').toLowerCase()
+      const severity: ToolDiagnosticSeverity =
+        severityRaw === 'error'
+          ? 'error'
+          : severityRaw === 'warning' || severityRaw === 'warn'
+          ? 'warning'
+          : severityRaw === 'info'
+          ? 'info'
+          : severityRaw === 'hint'
+          ? 'hint'
+          : 'unknown'
+
+      const lineNumber = Number(match[2])
+      const columnNumber = Number(match[3])
+      const message = match[4] || raw
+
+      diagnostics.push({
+        severity,
+        line: Number.isFinite(lineNumber) ? lineNumber : undefined,
+        column: Number.isFinite(columnNumber) ? columnNumber : undefined,
+        message,
+        raw,
+      })
+
+      continue
+    }
+
+    diagnostics.push({
+      severity: 'unknown',
+      message: raw,
+      raw,
+    })
+  }
+
+  return diagnostics
+}
+
+function inferLanguageFromFilePath(filePath?: string) {
+  if (!filePath) return undefined
+
+  const basename = filePath.split('/').pop() || filePath
+  const dot = basename.lastIndexOf('.')
+  if (dot < 0) return undefined
+
+  const ext = basename.slice(dot + 1).toLowerCase()
+  switch (ext) {
+    case 'ts':
+      return 'typescript'
+    case 'tsx':
+      return 'tsx'
+    case 'js':
+      return 'javascript'
+    case 'jsx':
+      return 'jsx'
+    case 'json':
+      return 'json'
+    case 'md':
+      return 'markdown'
+    case 'yml':
+    case 'yaml':
+      return 'yaml'
+    case 'toml':
+      return 'toml'
+    case 'css':
+      return 'css'
+    case 'html':
+    case 'heex':
+      return 'markup'
+    case 'sh':
+      return 'bash'
+    case 'py':
+      return 'python'
+    case 'rs':
+      return 'rust'
+    case 'go':
+      return 'go'
+    case 'ex':
+    case 'exs':
+      return 'elixir'
+    default:
+      return undefined
   }
 }

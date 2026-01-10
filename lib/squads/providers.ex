@@ -130,16 +130,28 @@ defmodule Squads.Providers do
     client_opts = Keyword.get(opts, :client_opts, [])
     client_opts = add_base_url(project_id, client_opts)
 
-    with {:ok, provider_payload} <- Client.list_providers(client_opts) do
-      config_payload =
-        case Client.get_config_providers(client_opts) do
-          {:ok, config} -> config
-          {:error, _} -> %{}
-        end
+    case Client.list_providers(client_opts) do
+      {:ok, provider_payload} ->
+        config_payload =
+          case Client.get_config_providers(client_opts) do
+            {:ok, config} -> config
+            {:error, _} -> %{}
+          end
 
-      providers = normalize_providers(provider_payload, config_payload)
-      synced = upsert_providers(project_id, providers)
-      {:ok, synced}
+        providers = normalize_providers(provider_payload, config_payload)
+        synced = upsert_providers(project_id, providers)
+        {:ok, synced}
+
+      {:error, {:transport_error, reason}} ->
+        Logger.info("OpenCode server not available for provider sync; using defaults",
+          project_id: project_id,
+          reason: inspect(reason)
+        )
+
+        {:ok, ensure_default_providers(project_id)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -303,6 +315,30 @@ defmodule Squads.Providers do
 
   defp test_env? do
     Code.ensure_loaded?(Mix) and function_exported?(Mix, :env, 0) and Mix.env() == :test
+  end
+
+  defp ensure_default_providers(project_id) do
+    default_provider_defs()
+    |> Enum.map(fn provider_data ->
+      case get_provider_by_provider_id(project_id, provider_data.provider_id) do
+        nil ->
+          attrs = Map.put(provider_data, :project_id, project_id)
+          {:ok, provider} = create_provider(attrs)
+          provider
+
+        existing ->
+          existing
+      end
+    end)
+  end
+
+  defp default_provider_defs do
+    [
+      %{provider_id: "anthropic", name: "Anthropic", status: "disconnected", models: []},
+      %{provider_id: "openai", name: "OpenAI", status: "disconnected", models: []},
+      %{provider_id: "google", name: "Google", status: "disconnected", models: []},
+      %{provider_id: "openrouter", name: "OpenRouter", status: "disconnected", models: []}
+    ]
   end
 
   defp normalize_providers(%{"all" => providers} = payload, config_payload)

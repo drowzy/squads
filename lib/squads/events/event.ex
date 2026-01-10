@@ -26,6 +26,7 @@ defmodule Squads.Events.Event do
     pr.created pr.merged pr.closed
     session.status_changed session.tool_started session.tool_completed
     squad.connected squad.disconnected
+    fleet.run_event
   )
 
   schema "events" do

@@ -5,7 +5,6 @@ defmodule Squads.WorktreesTest do
   alias Squads.Projects
   alias Squads.Squads, as: SquadsContext
   alias Squads.Agents
-  alias Squads.Tickets
 
   setup do
     tmp_dir = System.tmp_dir!() |> Path.join("worktree_test_#{:rand.uniform(1_000_000)}")
@@ -31,37 +30,32 @@ defmodule Squads.WorktreesTest do
     {:ok, agent} =
       Agents.create_agent(%{squad_id: squad.id, name: "GreenPanda", slug: "green-panda"})
 
-    {:ok, ticket} =
-      Tickets.create_ticket(%{
-        project_id: project.id,
-        beads_id: "test-123",
-        title: "Test Ticket"
-      })
+    work_key = Ecto.UUID.generate()
 
     %{
       project: project,
       agent: agent,
-      ticket: ticket,
+      work_key: work_key,
       tmp_dir: tmp_dir
     }
   end
 
   describe "worktree naming" do
-    test "worktree name follows agent-slug-ticket-id format", %{
+    test "worktree name follows agent-slug-work-key format", %{
       agent: agent,
-      ticket: ticket
+      work_key: work_key
     } do
-      worktree_name = "#{agent.slug}-#{ticket.id}"
-      assert worktree_name == "green-panda-#{ticket.id}"
+      worktree_name = "#{agent.slug}-#{work_key}"
+      assert worktree_name == "green-panda-#{work_key}"
     end
 
     test "branch name uses squads prefix", %{
       agent: agent,
-      ticket: ticket
+      work_key: work_key
     } do
-      worktree_name = "#{agent.slug}-#{ticket.id}"
+      worktree_name = "#{agent.slug}-#{work_key}"
       branch_name = "squads/#{worktree_name}"
-      assert branch_name == "squads/green-panda-#{ticket.id}"
+      assert branch_name == "squads/green-panda-#{work_key}"
     end
   end
 
@@ -69,23 +63,23 @@ defmodule Squads.WorktreesTest do
     test "creates worktree successfully", %{
       project: project,
       agent: agent,
-      ticket: ticket
+      work_key: work_key
     } do
-      {:ok, path} = Worktrees.ensure_worktree(project.id, agent.id, ticket.id)
+      {:ok, path} = Worktrees.ensure_worktree(project.id, agent.id, work_key)
 
       assert path =~ ".squads/worktrees"
       assert path =~ agent.slug
-      assert path =~ ticket.id
+      assert path =~ work_key
       assert File.exists?(path)
     end
 
     test "returns existing worktree path if already exists", %{
       project: project,
       agent: agent,
-      ticket: ticket
+      work_key: work_key
     } do
-      {:ok, path1} = Worktrees.ensure_worktree(project.id, agent.id, ticket.id)
-      {:ok, path2} = Worktrees.ensure_worktree(project.id, agent.id, ticket.id)
+      {:ok, path1} = Worktrees.ensure_worktree(project.id, agent.id, work_key)
+      {:ok, path2} = Worktrees.ensure_worktree(project.id, agent.id, work_key)
 
       assert path1 == path2
     end
@@ -100,9 +94,9 @@ defmodule Squads.WorktreesTest do
     test "lists created worktrees", %{
       project: project,
       agent: agent,
-      ticket: ticket
+      work_key: work_key
     } do
-      {:ok, _path} = Worktrees.ensure_worktree(project.id, agent.id, ticket.id)
+      {:ok, _path} = Worktrees.ensure_worktree(project.id, agent.id, work_key)
 
       worktrees = Worktrees.list_worktrees(project.id)
       assert length(worktrees) == 1
@@ -114,12 +108,12 @@ defmodule Squads.WorktreesTest do
     test "removes worktree successfully", %{
       project: project,
       agent: agent,
-      ticket: ticket
+      work_key: work_key
     } do
-      {:ok, path} = Worktrees.ensure_worktree(project.id, agent.id, ticket.id)
+      {:ok, path} = Worktrees.ensure_worktree(project.id, agent.id, work_key)
       assert File.exists?(path)
 
-      worktree_name = "#{agent.slug}-#{ticket.id}"
+      worktree_name = "#{agent.slug}-#{work_key}"
       {:ok, :removed} = Worktrees.remove_worktree(project.id, worktree_name)
       refute File.exists?(path)
     end

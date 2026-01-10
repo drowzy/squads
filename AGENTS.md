@@ -1,96 +1,37 @@
-## Issue Tracking with bd (beads)
+## Issue Tracking with GitHub Issues
 
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+**IMPORTANT**: This project uses **GitHub Issues** for ALL issue tracking.
 
-### Why bd?
+Squads syncs and operates on GitHub issues labeled `squads`. Avoid duplicating tracking systems (no bd/beads, no ad-hoc TODO files).
 
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Auto-syncs to JSONL for version control
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
+### Labels / Conventions
 
-### Quick Start
+- `squads` - Marks issues that should be synced into Squads
+- `type:<bug|feature|task|epic|chore>`
+- `priority:<0-4>`
+- `status:<in_progress|blocked>`
+- `agent:<slug>` - Which agent is working the ticket
 
-**Check for ready work:**
-```bash
-bd ready --json
-```
+### Claim / Workflow
 
-**Create new issues:**
-```bash
-bd create "Issue title" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" -p 1 --deps discovered-from:bd-123 --json
-bd create "Subtask" --parent <epic-id> --json  # Hierarchical subtask (gets ID like epic-id.1)
-```
+- Claim sets the GitHub assignee to the authenticated user (token owner) and adds:
+  - `agent:<slug>`
+  - `status:in_progress`
+- Block sets `status:blocked`
+- Closing a ticket closes the GitHub issue
 
-**Claim and update:**
-```bash
-bd update bd-42 --status in_progress --json
-bd update bd-42 --priority 1 --json
-```
+### Configuration
 
-**Complete work:**
-```bash
-bd close bd-42 --reason "Completed" --json
-```
+Squads needs to know which repo to use:
 
-### Issue Types
+- Preferred: set `integrations.github.repo` in the project `.squads/config.json` (value `owner/repo`)
+- Fallback: `git remote get-url origin` is parsed when present
 
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
+Squads needs a GitHub token in one of:
 
-### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### Workflow for AI Agents
-
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task**: `bd update <id> --status in_progress`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
-6. **Commit together**: Always commit the `.beads/issues.jsonl` file together with the code changes so issue state stays in sync with code state
-
-### Auto-Sync
-
-bd automatically syncs with git:
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed!
-
-### GitHub Copilot Integration
-
-If using GitHub Copilot, also create `.github/copilot-instructions.md` for automatic instruction loading.
-Run `bd onboard` to get the content, or see step 2 of the onboard instructions.
-
-### MCP Server (Recommended)
-
-If using Claude or MCP-compatible clients, install the beads MCP server:
-
-```bash
-pip install beads-mcp
-```
-
-Add to MCP config (e.g., `~/.config/claude/config.json`):
-```json
-{
-  "beads": {
-    "command": "beads-mcp",
-    "args": []
-  }
-}
-```
-
-Then use `mcp__beads__*` functions instead of CLI commands.
+- `GITHUB_TOKEN` (preferred)
+- `GH_TOKEN`
+- `GITHUB_PAT`
 
 ### Managing AI-Generated Planning Documents
 
@@ -105,7 +46,6 @@ AI assistants often create planning and design documents during development:
 - Create a `history/` directory in the project root
 - Store ALL AI-generated planning/design docs in `history/`
 - Keep the repository root clean and focused on permanent project files
-- Only access `history/` when explicitly asked to review past planning
 
 **Example .gitignore entry (optional):**
 ```
@@ -113,29 +53,11 @@ AI assistants often create planning and design documents during development:
 history/
 ```
 
-**Benefits:**
-- ✅ Clean repository root
-- ✅ Clear separation between ephemeral and permanent documentation
-- ✅ Easy to exclude from version control if desired
-- ✅ Preserves planning history for archeological research
-- ✅ Reduces noise when browsing the project
-
-### CLI Help
-
-Run `bd <command> --help` to see all available flags for any command.
-For example: `bd create --help` shows `--parent`, `--deps`, `--assignee`, etc.
-
 ### Important Rules
 
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ✅ Store AI planning docs in `history/` directory
-- ✅ Run `bd <cmd> --help` to discover available flags
-- ❌ Do NOT create markdown TODO lists
-- ❌ Do NOT use external issue trackers
+- ✅ Use GitHub Issues for ALL task tracking
+- ✅ Only issues labeled `squads` are synced into Squads
+- ✅ Keep ticket metadata in labels (`type:*`, `priority:*`, `status:*`, `agent:*`)
+- ❌ Do NOT use bd/beads for issue tracking
+- ❌ Do NOT create markdown TODO lists in the repo root
 - ❌ Do NOT duplicate tracking systems
-- ❌ Do NOT clutter repo root with planning documents
-
-For more details, see README.md and QUICKSTART.md.

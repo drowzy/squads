@@ -789,7 +789,7 @@ function SquadMcpPanel({ squadId }: { squadId: string }) {
         source: 'registry',
         type: 'container',
         image: entry.image,
-        catalog_meta: entry as Record<string, unknown>,
+        catalog_meta: (entry.raw ?? entry) as unknown as Record<string, unknown>,
       })
       addNotification({
         type: 'success',
@@ -1236,18 +1236,13 @@ function McpCatalogModal({ isOpen, onClose, existingNames, onAdd }: McpCatalogMo
               const isAdded = existingNames.has(entry.name)
               const displayTitle = entry.title || entry.name
               const tags = Array.isArray(entry.tags) ? entry.tags.slice(0, 3) : []
-              const oauth = Array.isArray(entry.oauth)
-                ? entry.oauth
-                : Array.isArray((entry.raw as { oauth?: unknown[] } | undefined)?.oauth)
-                  ? (entry.raw as { oauth?: unknown[] }).oauth
-                  : []
-              const secrets = Array.isArray(entry.secrets)
-                ? entry.secrets
-                : Array.isArray((entry.raw as { config?: { secrets?: unknown[] } } | undefined)?.config?.secrets)
-                  ? (entry.raw as { config?: { secrets?: unknown[] } }).config?.secrets
-                  : []
-              const authBadges = [oauth.length > 0 ? 'OAUTH' : null, secrets.length > 0 ? 'SECRET' : null]
-                .filter(Boolean) as string[]
+              const rawOauth = (entry.raw as { oauth?: unknown[] } | undefined)?.oauth
+              const oauth = Array.isArray(entry.oauth) ? entry.oauth : Array.isArray(rawOauth) ? rawOauth : []
+              const rawSecrets = (entry.raw as { config?: { secrets?: unknown[] } } | undefined)?.config?.secrets
+              const secrets = Array.isArray(entry.secrets) ? entry.secrets : Array.isArray(rawSecrets) ? rawSecrets : []
+              const authBadges = [oauth.length > 0 ? 'OAUTH' : null, secrets.length > 0 ? 'SECRET' : null].filter(
+                Boolean
+              ) as string[]
 
               return (
                 <div key={entry.name} className="border border-tui-border bg-ctp-mantle/50">

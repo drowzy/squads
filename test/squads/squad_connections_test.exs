@@ -9,7 +9,6 @@ defmodule Squads.SquadConnectionsTest do
   describe "squad_connections" do
     @valid_attrs %{status: "active", notes: "Collaboration on API", metadata: %{}}
     @update_attrs %{status: "disabled", notes: "Collaboration paused"}
-    @invalid_attrs %{status: nil}
 
     setup do
       {:ok, project1} =

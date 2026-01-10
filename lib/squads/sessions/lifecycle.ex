@@ -6,9 +6,7 @@ defmodule Squads.Sessions.Lifecycle do
   import Ecto.Query, warn: false
   alias Squads.Repo
   alias Squads.Sessions.Session
-  alias Squads.Sessions.Queries
   alias Squads.Sessions.Helpers
-  alias Squads.Tickets.Ticket
   alias Squads.OpenCode.Client, as: OpenCodeClient
 
   require Logger
@@ -34,49 +32,6 @@ defmodule Squads.Sessions.Lifecycle do
     %Session{}
     |> Session.changeset(attrs)
     |> Repo.insert()
-  end
-
-  @doc """
-  Links an existing session to a ticket.
-  """
-  def link_session_to_ticket(session_id, ticket_id) do
-    case Queries.fetch_session(session_id) do
-      {:error, :not_found} ->
-        {:error, :not_found}
-
-      {:ok, session} ->
-        session
-        |> Ecto.Changeset.change(%{ticket_id: ticket_id})
-        |> Repo.update()
-    end
-  end
-
-  @doc """
-  Unlinks a session from its ticket.
-  """
-  def unlink_session_from_ticket(session_id) do
-    case Queries.fetch_session(session_id) do
-      {:error, :not_found} ->
-        {:error, :not_found}
-
-      {:ok, session} ->
-        session
-        |> Ecto.Changeset.change(%{ticket_id: nil})
-        |> Repo.update()
-    end
-  end
-
-  @doc """
-  Creates a session already linked to a ticket.
-  """
-  def create_session_for_ticket(%Ticket{id: ticket_id}, attrs) do
-    create_session_for_ticket(ticket_id, attrs)
-  end
-
-  def create_session_for_ticket(ticket_id, attrs) when is_binary(ticket_id) do
-    attrs
-    |> Map.put(:ticket_id, ticket_id)
-    |> create_session()
   end
 
   @doc """

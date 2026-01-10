@@ -59,16 +59,6 @@ defmodule Squads.Sessions.Queries do
   end
 
   @doc """
-  Returns all sessions for a specific ticket.
-  """
-  def list_sessions_for_ticket(ticket_id) do
-    Session
-    |> where(ticket_id: ^ticket_id)
-    |> order_by(desc: :inserted_at)
-    |> Repo.all()
-  end
-
-  @doc """
   Gets a session by ID. Raises if not found.
   Deprecated: use fetch_session/1.
   """
@@ -87,16 +77,6 @@ defmodule Squads.Sessions.Queries do
   end
 
   @doc """
-  Gets a session with its associated ticket preloaded. Returns nil if not found.
-  """
-  def get_session_with_ticket(session_id) do
-    Session
-    |> where(id: ^session_id)
-    |> preload(:ticket)
-    |> Repo.one()
-  end
-
-  @doc """
   Gets a session by ID. Returns `{:ok, session}` or `{:error, :not_found}`.
   """
   def fetch_session(id) do
@@ -111,20 +91,6 @@ defmodule Squads.Sessions.Queries do
   """
   def fetch_session_by_opencode_id(opencode_session_id) do
     case Repo.get_by(Session, opencode_session_id: opencode_session_id) do
-      nil -> {:error, :not_found}
-      session -> {:ok, session}
-    end
-  end
-
-  @doc """
-  Gets a session with its associated ticket preloaded. Returns `{:ok, session}` or `{:error, :not_found}`.
-  """
-  def fetch_session_with_ticket(session_id) do
-    Session
-    |> where(id: ^session_id)
-    |> preload(:ticket)
-    |> Repo.one()
-    |> case do
       nil -> {:error, :not_found}
       session -> {:ok, session}
     end

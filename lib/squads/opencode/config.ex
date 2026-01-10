@@ -260,11 +260,6 @@ defmodule Squads.OpenCode.Config do
             "description" => "Show current squad status and tasks",
             "agent" => "generalist",
             "noReply" => true
-          },
-          "squads-tickets" => %{
-            "description" => "List available tickets from bd",
-            "agent" => "generalist",
-            "noReply" => true
           }
         }
       }

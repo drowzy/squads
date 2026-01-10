@@ -2,15 +2,14 @@ defmodule Squads.Sessions.Session do
   @moduledoc """
   A session represents an OpenCode session instance.
 
-  Sessions track the execution of work on a specific ticket by an agent,
-  including worktree paths, branch names, and execution status.
+  Sessions track work performed by an agent, including worktree paths,
+  branch names, and execution status.
   """
   use Ecto.Schema
   import Ecto.Changeset
 
   alias Squads.Agents.Agent
   alias Squads.Events.Event
-  alias Squads.Tickets.Ticket
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -29,7 +28,6 @@ defmodule Squads.Sessions.Session do
     field :metadata, :map, default: %{}
 
     belongs_to :agent, Agent
-    belongs_to :ticket, Ticket
     has_one :squad, through: [:agent, :squad]
     has_one :project, through: [:agent, :squad, :project]
     has_many :events, Event
@@ -38,7 +36,7 @@ defmodule Squads.Sessions.Session do
   end
 
   @required_fields ~w(agent_id)a
-  @optional_fields ~w(opencode_session_id ticket_key ticket_id status worktree_path branch started_at finished_at exit_code metadata)a
+  @optional_fields ~w(opencode_session_id ticket_key status worktree_path branch started_at finished_at exit_code metadata)a
 
   @doc false
   def changeset(session, attrs) do
@@ -47,7 +45,6 @@ defmodule Squads.Sessions.Session do
     |> validate_required(@required_fields)
     |> validate_inclusion(:status, @statuses)
     |> foreign_key_constraint(:agent_id)
-    |> foreign_key_constraint(:ticket_id)
   end
 
   @doc """

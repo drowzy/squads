@@ -10,7 +10,6 @@ defmodule Squads.Projects.Project do
 
   alias Squads.Squads.Squad
   alias Squads.Events.Event
-  alias Squads.Tickets.Ticket
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -22,7 +21,6 @@ defmodule Squads.Projects.Project do
 
     has_many :squads, Squad
     has_many :events, Event
-    has_many :tickets, Ticket
 
     timestamps(type: :utc_datetime)
   end

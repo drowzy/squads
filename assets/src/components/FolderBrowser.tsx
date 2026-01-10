@@ -118,7 +118,7 @@ function DirectoryRow({ entry, onNavigate, onSelect }: DirectoryRowProps) {
       {/* Folder icon and name - clickable to select */}
       <button
         onClick={onSelect}
-        className="flex-1 flex items-center gap-2 py-2 pr-3 text-left hover:text-tui-accent"
+        className="flex-1 flex items-center gap-2 py-2 pr-3 text-left text-tui-text hover:text-tui-accent"
       >
         {entry.is_git_repo ? (
           <FolderGit size={16} className="text-tui-accent shrink-0" />

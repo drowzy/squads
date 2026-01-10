@@ -1,7 +1,6 @@
 defmodule Squads.OpenCode.EventIngesterTest do
   use Squads.DataCase
   alias Squads.OpenCode.EventIngester
-  alias Squads.Events
   alias Squads.Projects
 
   setup do

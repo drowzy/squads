@@ -69,7 +69,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         sizeClasses[size]
       )}
     >
-      <div className="bg-tui-bg border border-tui-border rounded-lg shadow-xl">
+      <div className="bg-tui-bg text-tui-text border border-tui-border rounded-lg shadow-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-tui-border">
           <h2 className="text-sm font-bold tracking-widest text-tui-text uppercase">
             {title}

@@ -41,15 +41,10 @@ defmodule SquadsWeb.Router do
       get "/models", ProviderController, :models
       get "/models/default", ProviderController, :default_model
 
-      # Ticket endpoints nested under projects
-      get "/tickets", TicketController, :index
-      post "/tickets", TicketController, :create
-      get "/tickets/ready", TicketController, :ready
-      get "/tickets/in_progress", TicketController, :in_progress
-      get "/tickets/blocked", TicketController, :blocked
-      get "/board", TicketController, :board
-      post "/tickets/sync", TicketController, :sync
-      get "/tickets/beads/:beads_id", TicketController, :show_by_beads_id
+      # Board (cards grouped by squad)
+      get "/board", BoardController, :show
+      post "/board/cards", BoardController, :create_card
+      put "/board/lanes/assign", BoardController, :assign_lane
 
       get "/mail/threads", MailController, :threads_index
       post "/mail/send", MailController, :create
@@ -65,13 +60,12 @@ defmodule SquadsWeb.Router do
     # Standalone provider endpoint
     get "/providers/:id", ProviderController, :show
 
-    # Standalone ticket endpoints
-    get "/tickets/:id", TicketController, :show
-    get "/tickets/:id/children", TicketController, :children
-    post "/tickets/:id/claim", TicketController, :claim
-    post "/tickets/:id/unclaim", TicketController, :unclaim
-    patch "/tickets/:id/status", TicketController, :update_status
-    post "/tickets/:id/close", TicketController, :close
+    # Board card actions
+    patch "/board/cards/:id", BoardController, :update_card
+    post "/board/cards/:id/actions/sync", BoardController, :sync_artifacts
+    post "/board/cards/:id/actions/create_issues", BoardController, :create_issues
+    post "/board/cards/:id/actions/create_pr", BoardController, :create_pr
+    post "/board/cards/:id/human_review", BoardController, :submit_human_review
 
     # Standalone squad endpoints
     resources "/squads", SquadController, only: [:show, :update, :delete] do
@@ -97,15 +91,22 @@ defmodule SquadsWeb.Router do
       post "/archive", SessionController, :archive
       post "/cancel", SessionController, :cancel
       get "/messages", SessionController, :messages
+      get "/transcript", SessionController, :transcript
       get "/diff", SessionController, :diff
       get "/todos", SessionController, :todos
       post "/prompt", SessionController, :prompt
       post "/prompt_async", SessionController, :prompt_async
+      post "/prompt_stream", SessionController, :prompt_stream
       post "/command", SessionController, :command
       post "/shell", SessionController, :shell
     end
 
     get "/events", EventController, :index
+
+    # Human review queue (board cards)
+    get "/reviews", ReviewController, :index
+    get "/reviews/:id", ReviewController, :show
+    post "/reviews/:id/submit", ReviewController, :submit
 
     # External Node endpoints
     get "/external_nodes", ExternalNodeController, :index

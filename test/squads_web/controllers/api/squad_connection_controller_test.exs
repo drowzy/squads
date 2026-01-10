@@ -3,15 +3,12 @@ defmodule SquadsWeb.API.SquadConnectionControllerTest do
 
   alias Squads.Projects
   alias Squads.Squads
-  alias Squads.Squads.SquadConnection
-  alias Squads.Repo
 
   @create_attrs %{
     status: "active",
     notes: "some notes",
     metadata: %{}
   }
-  @invalid_attrs %{status: nil}
 
   setup %{conn: conn} do
     {:ok, conn: put_req_header(conn, "accept", "application/json")}
@@ -116,7 +113,7 @@ defmodule SquadsWeb.API.SquadConnectionControllerTest do
     project
   end
 
-  defp squad_fixture(attrs \\ %{}) do
+  defp squad_fixture(attrs) do
     unique_suffix = System.unique_integer([:positive])
 
     attrs =

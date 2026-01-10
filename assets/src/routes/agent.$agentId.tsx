@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Terminal, Mail, Archive, Activity, Cpu, ChevronRight, Loader2, Inbox, Pencil, Play, Info, History, X, ListTodo, FileDiff } from 'lucide-react'
+import { Terminal, Mail, Archive, Activity, Cpu, ChevronRight, ChevronDown, Loader2, Inbox, Pencil, Play, Info, History, X, ListTodo, FileDiff } from 'lucide-react'
 import React, { useState, useEffect, useMemo } from 'react'
+import { MultiFileDiff, PatchDiff, type FileContents } from '@pierre/diffs/react'
 
 import { 
   useEvents, 
@@ -15,9 +16,11 @@ import {
   useModels,
   useSyncProviders,
   useNewSession,
+  useSessionMessages,
   useSessionTodos,
   useSessionDiff,
   type Agent,
+  type SessionDiffEntry,
 } from '../api/queries'
 import { EventTimeline } from '../components/events/EventTimeline'
 import { useActiveProject } from './__root'
@@ -93,18 +96,259 @@ function SessionTodos({ sessionId }: { sessionId: string }) {
   )
 }
 
-function SessionDiff({ sessionId }: { sessionId: string }) {
-  const { data: diff, isLoading, error } = useSessionDiff(sessionId)
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
 
-  if (isLoading) return <div className="animate-pulse text-tui-dim">Loading diff...</div>
-  if (error) return <div className="text-red-500">Error loading diff</div>
-  if (!diff || typeof diff !== 'string' || diff.trim() === '') return <div className="text-tui-dim italic">No changes recorded in this session.</div>
+const DIFF_VIEW_OPTIONS = { theme: 'catppuccin-mocha' as const }
+const DIFF_VIEW_OPTIONS_EMBEDDED = { theme: 'catppuccin-mocha' as const, disableFileHeader: true }
+
+function looksLikePatch(text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return false
+
+  return /^diff --git /m.test(trimmed) || /^@@/m.test(trimmed) || /^(---|\+\+\+)/m.test(trimmed)
+}
+
+function extractDiffText(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  if (!value) return null
+  if (Array.isArray(value)) return null
+  if (!isRecord(value)) return null
+
+  const nested = (value as Record<string, unknown>).data
+  if (nested) {
+    const nestedText = extractDiffText(nested)
+    if (nestedText) return nestedText
+  }
+
+  const candidates = [
+    (value as Record<string, unknown>).diff,
+    (value as Record<string, unknown>).patch,
+    (value as Record<string, unknown>).text,
+    (value as Record<string, unknown>).output,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') return candidate
+  }
+
+  return null
+}
+
+function extractDiffEntries(value: unknown): SessionDiffEntry[] | null {
+  if (!value) return null
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return []
+
+    const entries = value.filter(isRecord) as SessionDiffEntry[]
+    return entries.length > 0 ? entries : null
+  }
+
+  if (!isRecord(value)) return null
+
+  const candidates = [
+    (value as Record<string, unknown>).diffs,
+    (value as Record<string, unknown>).files,
+    (value as Record<string, unknown>).data,
+  ]
+
+  for (const candidate of candidates) {
+    const entries = extractDiffEntries(candidate)
+    if (entries) return entries
+  }
+
+  return null
+}
+
+function getDiffEntryTitle(entry: SessionDiffEntry, index: number) {
+  return entry.path || entry.file || entry.filename || `Change ${index + 1}`
+}
+
+function formatDiffEntryStats(entry: SessionDiffEntry) {
+  const additions = typeof entry.additions === 'number' ? entry.additions : null
+  const deletions = typeof entry.deletions === 'number' ? entry.deletions : null
+
+  if (additions == null && deletions == null) return null
+
+  const parts: string[] = []
+  if (additions != null) parts.push(`+${additions}`)
+  if (deletions != null) parts.push(`-${deletions}`)
+  return parts.join(' ')
+}
+
+function extractLatestSummaryDiffEntries(
+  messages: Array<{ info?: { summary?: unknown } }> | undefined
+): SessionDiffEntry[] | null {
+  if (!Array.isArray(messages)) return null
+
+  for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
+    const summary = messages[idx]?.info?.summary
+    if (!summary || typeof summary !== 'object' || Array.isArray(summary)) continue
+
+    const diffs = (summary as Record<string, unknown>).diffs
+    const entries = extractDiffEntries(diffs)
+    if (entries && entries.length > 0) return entries
+  }
+
+  return null
+}
+
+function SessionDiff({ sessionId }: { sessionId: string }) {
+  const { data: diff, isLoading: isLoadingDiff, error: diffError } = useSessionDiff(sessionId)
+  const { data: messages, isLoading: isLoadingMessages } = useSessionMessages(sessionId, {
+    enabled: !!sessionId,
+    limit: 100,
+  })
+
+  const diffText = extractDiffText(diff)
+  const diffEntries = extractDiffEntries(diff)
+  const summaryEntries = extractLatestSummaryDiffEntries(messages)
+
+  const entriesToRender = diffEntries && diffEntries.length > 0 ? diffEntries : summaryEntries
+  const sourceLabel =
+    diffEntries && diffEntries.length > 0 ? null : summaryEntries ? 'From message summary' : null
+
+  const diffCards = useMemo(() => {
+    if (!entriesToRender || entriesToRender.length === 0) return []
+
+    return entriesToRender.map((entry, idx) => {
+      const title = getDiffEntryTitle(entry, idx)
+      const stats = formatDiffEntryStats(entry)
+      const entryText = extractDiffText(entry)
+      const beforeText = typeof entry.before === 'string' ? entry.before : null
+      const afterText = typeof entry.after === 'string' ? entry.after : null
+
+      const fileName = entry.path || entry.file || entry.filename || title
+      const keyBase = entry.path || entry.file || entry.filename || 'change'
+
+      if (entryText && entryText.trim() !== '' && looksLikePatch(entryText)) {
+        return {
+          key: `${keyBase}-${idx}`,
+          title,
+          stats,
+          type: 'patch' as const,
+          patch: entryText,
+        }
+      }
+
+      if (beforeText != null || afterText != null) {
+        const oldFile: FileContents = {
+          name: fileName,
+          contents: beforeText ?? '',
+        }
+
+        const newFile: FileContents = {
+          name: fileName,
+          contents: afterText ?? '',
+        }
+
+        return {
+          key: `${keyBase}-${idx}`,
+          title,
+          stats,
+          type: 'file' as const,
+          oldFile,
+          newFile,
+        }
+      }
+
+      const fallbackText = entryText && entryText.trim() !== '' ? entryText : safeStringify(entry)
+
+      return {
+        key: `${keyBase}-${idx}`,
+        title,
+        stats,
+        type: 'text' as const,
+        text: fallbackText,
+      }
+    })
+  }, [entriesToRender])
+
+  if (isLoadingDiff) return <div className="animate-pulse text-tui-dim">Loading diff...</div>
+  if (diffError) return <div className="text-red-500">Error loading diff</div>
+
+  if (diffText && diffText.trim() !== '' && looksLikePatch(diffText)) {
+    return (
+      <div className="border border-tui-border bg-ctp-crust/20 rounded-sm overflow-hidden">
+        <PatchDiff patch={diffText} options={DIFF_VIEW_OPTIONS} />
+      </div>
+    )
+  }
+
+  if (diffText && diffText.trim() !== '') {
+    return (
+      <pre className="text-[10px] leading-relaxed overflow-x-auto whitespace-pre-wrap text-tui-text/90">
+        {diffText}
+      </pre>
+    )
+  }
+
+  if (entriesToRender && entriesToRender.length > 0) {
+    return (
+      <div className="space-y-3">
+        {sourceLabel && (
+          <div className="text-[9px] uppercase tracking-widest text-tui-dim">{sourceLabel}</div>
+        )}
+        {diffCards.map((card) => (
+          <div
+            key={card.key}
+            className="border border-tui-border bg-ctp-crust/20 rounded-sm overflow-hidden"
+          >
+            <div className="px-2 py-1 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between gap-2">
+              <div className="text-[10px] font-bold text-tui-text truncate">{card.title}</div>
+              {card.stats && (
+                <div className="text-[9px] text-tui-dim font-mono shrink-0">{card.stats}</div>
+              )}
+            </div>
+            <div className="p-2">
+              {card.type === 'patch' ? (
+                <PatchDiff patch={card.patch} options={DIFF_VIEW_OPTIONS_EMBEDDED} />
+              ) : card.type === 'file' ? (
+                <MultiFileDiff
+                  oldFile={card.oldFile}
+                  newFile={card.newFile}
+                  options={DIFF_VIEW_OPTIONS_EMBEDDED}
+                />
+              ) : (
+                <pre className="text-[10px] leading-relaxed overflow-x-auto whitespace-pre-wrap text-tui-text/90">
+                  {card.text}
+                </pre>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const diffIsEmpty =
+    diff == null ||
+    (typeof diff === 'string' && diff.trim() === '') ||
+    (Array.isArray(diff) && diff.length === 0)
+
+  if (diffIsEmpty && isLoadingMessages) {
+    return <div className="animate-pulse text-tui-dim">Loading diff...</div>
+  }
+
+  if (diffIsEmpty) {
+    return <div className="text-tui-dim italic">No changes recorded in this session.</div>
+  }
 
   return (
     <pre className="text-[10px] leading-relaxed overflow-x-auto whitespace-pre-wrap text-tui-text/90">
-      {diff}
+      {safeStringify(diff)}
     </pre>
   )
+}
+
+function safeStringify(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
 }
 
 function AgentDetail() {
@@ -507,7 +751,7 @@ function AgentDetail() {
                   )}
                 </div>
 
-                <div className="flex-1 overflow-hidden relative">
+                <div className="flex-1 min-h-0 overflow-hidden relative">
                   {activeTab === 'chat' && (
                     <SessionChat
                       session={currentSession}

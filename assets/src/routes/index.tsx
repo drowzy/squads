@@ -33,10 +33,10 @@ function Dashboard() {
       onClick: () => navigate({ to: '/sessions' }),
     },
     {
-      label: 'New Ticket',
+      label: 'New Card',
       description: activeProject
-        ? `Log work for ${activeProject.name}`
-        : 'Select a project to create tickets',
+        ? `Add a build request for ${activeProject.name}`
+        : 'Select a project to add a card',
       icon: <ClipboardList size={18} className="text-ctp-blue" />,
       onClick: () => navigate({ to: '/board' }),
     },
