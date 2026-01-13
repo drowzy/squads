@@ -8,6 +8,8 @@ defmodule SquadsWeb.API.MCPController do
 
   action_fallback SquadsWeb.FallbackController
 
+  plug :force_identity_encoding
+
   @server_fields ~w(name source type image url command args headers enabled status last_error catalog_meta tools)
 
   def index(conn, %{"squad_id" => squad_id}) do
@@ -81,12 +83,24 @@ defmodule SquadsWeb.API.MCPController do
 
   def connect(conn, _params), do: missing_squad_id(conn)
 
+  def options_connect(conn, %{"name" => _name}) do
+    conn
+    |> put_resp_header("access-control-allow-origin", "*")
+    |> put_resp_header("access-control-allow-methods", "GET,POST,OPTIONS")
+    |> put_resp_header(
+      "access-control-allow-headers",
+      "content-type,authorization,mcp-protocol-version"
+    )
+    |> send_resp(:no_content, "")
+  end
+
   def connect_stream(conn, %{"name" => name}) do
     conn =
       conn
       |> put_resp_header("content-type", "text/event-stream")
       |> put_resp_header("cache-control", "no-cache")
       |> put_resp_header("connection", "keep-alive")
+      |> put_resp_header("content-encoding", "identity")
       |> send_chunked(200)
 
     {:ok, conn} =
@@ -213,6 +227,10 @@ defmodule SquadsWeb.API.MCPController do
 
   def auth_callback(conn, _params) do
     json(conn, %{status: "ok"})
+  end
+
+  defp force_identity_encoding(conn, _opts) do
+    put_resp_header(conn, "content-encoding", "identity")
   end
 
   defp with_squad(squad_id, fun) do

@@ -74,7 +74,8 @@ defmodule Squads.OpenCode.ProjectServerTest do
       started_at_ms: System.monotonic_time(:millisecond),
       attach_attempts: 0,
       lsof_runner: lsof_runner_for_port(port, lsof_line(os_pid, port)),
-      client: FakeClient
+      client: FakeClient,
+      health_check_task: nil
     }
 
     assert {:noreply, new_state} = ProjectServer.handle_info({:EXIT, self(), :normal}, state)
@@ -101,7 +102,8 @@ defmodule Squads.OpenCode.ProjectServerTest do
       started_at_ms: System.monotonic_time(:millisecond),
       attach_attempts: 5,
       lsof_runner: lsof_runner_for_port(port, ""),
-      client: FakeClient
+      client: FakeClient,
+      health_check_task: nil
     }
 
     assert {:stop, :process_exited, ^state} =
@@ -126,7 +128,8 @@ defmodule Squads.OpenCode.ProjectServerTest do
       started_at_ms: System.monotonic_time(:millisecond),
       attach_attempts: 0,
       lsof_runner: lsof_runner_for_port(port, ""),
-      client: FakeClient
+      client: FakeClient,
+      health_check_task: nil
     }
 
     assert {:noreply, new_state} = ProjectServer.handle_info({:EXIT, self(), :normal}, state)
@@ -186,7 +189,8 @@ defmodule Squads.OpenCode.ProjectServerTest do
       started_at_ms: System.monotonic_time(:millisecond),
       attach_attempts: 0,
       lsof_runner: lsof_runner_for_all(lsof_line(os_pid, port)),
-      client: FakeClient
+      client: FakeClient,
+      health_check_task: nil
     }
 
     assert {:noreply, new_state} = ProjectServer.handle_info({:EXIT, self(), :normal}, state)
@@ -204,7 +208,7 @@ defmodule Squads.OpenCode.ProjectServerTest do
     Status.set(project_path, :running)
 
     state = %{
-      project_id: "proj-start",
+      project_id: "proj",
       project_path: project_path,
       port: nil,
       url: nil,
@@ -214,7 +218,8 @@ defmodule Squads.OpenCode.ProjectServerTest do
       started_at_ms: nil,
       attach_attempts: 0,
       lsof_runner: lsof_runner_for_all(lsof_line(os_pid, port)),
-      client: FakeClient
+      client: FakeClient,
+      health_check_task: nil
     }
 
     assert {:noreply, new_state} = ProjectServer.handle_continue(:start_process, state)

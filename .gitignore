@@ -37,3 +37,7 @@ assets/.tanstack/
 .env
 .env.*
 
+# Squads local-first artifacts (opt-in to commit)
+/.squads/issues/
+/.squads/reviews/
+

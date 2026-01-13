@@ -58,12 +58,42 @@ defmodule Squads.Projects do
 
   @doc """
   Fetches a project by ID with a tuple result.
+
+  Accepts either a UUID (preferred) or a project name (fallback).
   """
-  @spec fetch_project(Ecto.UUID.t()) :: {:ok, Project.t()} | {:error, :not_found}
-  def fetch_project(id) do
-    case get_project(id) do
+  @spec fetch_project(String.t()) :: {:ok, Project.t()} | {:error, :not_found}
+  def fetch_project(id_or_name) when is_binary(id_or_name) do
+    case Ecto.UUID.cast(id_or_name) do
+      {:ok, uuid} ->
+        fetch_project_by_id(uuid)
+
+      :error ->
+        fetch_project_by_name(id_or_name)
+    end
+  end
+
+  def fetch_project(_), do: {:error, :not_found}
+
+  defp fetch_project_by_id(uuid) do
+    case get_project(uuid) do
       nil -> {:error, :not_found}
       project -> {:ok, project}
+    end
+  end
+
+  defp fetch_project_by_name(name) when is_binary(name) do
+    name = String.trim(name)
+
+    if name == "" do
+      {:error, :not_found}
+    else
+      case Repo.get_by(Project, name: name) do
+        nil ->
+          {:error, :not_found}
+
+        project ->
+          {:ok, project}
+      end
     end
   end
 

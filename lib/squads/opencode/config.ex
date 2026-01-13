@@ -249,6 +249,11 @@ defmodule Squads.OpenCode.Config do
           "headers" => %{
             "Authorization" => "Bearer {env:AGENT_MAIL_API_KEY}"
           }
+        },
+        "artifacts" => %{
+          "type" => "remote",
+          "url" => "http://127.0.0.1:4000/api/mcp/artifacts/connect",
+          "enabled" => true
         }
       },
       "agent" => %{

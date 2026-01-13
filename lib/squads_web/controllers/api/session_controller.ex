@@ -306,78 +306,109 @@ defmodule SquadsWeb.API.SessionController do
   end
 
   @doc """
-  Send a prompt and stream OpenCode message deltas back.
+  Stream OpenCode events for a session.
 
-  POST /api/sessions/:session_id/prompt_stream
-  Body: { "prompt": "Fix the bug", "model": "...", "agent": "..." }
+  GET /api/sessions/:session_id/stream
 
-  This endpoint proxies the OpenCode `/event` SSE stream and filters it down
-  to events for the target OpenCode session.
-
-  The stream includes `message.part.updated` events with a `delta` field that
-  can be used to render assistant output incrementally.
+  This proxies the OpenCode `/event` SSE stream and filters it down to events for the
+  target OpenCode session. The connection remains open as long as the client stays
+  connected.
   """
-  def prompt_stream(conn, %{"session_id" => id, "prompt" => prompt} = params) do
+  def stream(conn, %{"session_id" => id} = params) do
     opts =
       params
-      |> Map.take(["model", "agent", "no_reply", "node_url"])
+      |> Map.take(["node_url"])
       |> normalize_opts()
 
-    with {:ok, {base_url, opencode_session_id}} <- resolve_opencode_target(id, opts) do
-      _ = Task.start(fn -> Sessions.dispatch_prompt(id, prompt, opts) end)
-      stream_url = "#{base_url}/event"
+    conn =
+      conn
+      |> put_resp_header("content-type", "text/event-stream")
+      |> put_resp_header("cache-control", "no-cache")
+      |> put_resp_header("connection", "keep-alive")
+      |> send_chunked(200)
 
-      conn =
-        conn
-        |> put_resp_header("content-type", "text/event-stream")
-        |> put_resp_header("cache-control", "no-cache")
-        |> put_resp_header("connection", "keep-alive")
-        |> send_chunked(200)
+    conn =
+      case chunk(conn, "retry: 3000\n\n") do
+        {:ok, conn} -> conn
+        {:error, _reason} -> conn
+      end
 
-      {:ok, conn} =
-        chunk(
-          conn,
-          "event: ping\ndata: {\"status\":\"connected\",\"session_id\":\"#{opencode_session_id}\"}\n\n"
-        )
+    case resolve_opencode_target(id, opts) do
+      {:ok, {base_url, opencode_session_id}} ->
+        request = SSE.build_request("#{base_url}/event")
 
-      SSE.stream(stream_url)
-      |> Stream.filter(&opencode_session_event?(&1, opencode_session_id))
-      |> Enum.reduce_while(conn, fn raw, conn_acc ->
-        event_type = opencode_event_type(raw) || Map.get(raw, :event) || "opencode.event"
-        data = Map.get(raw, :data)
-        payload = Jason.encode!(data)
+        case Req.get(request, into: :self) do
+          {:ok, %{status: 200, body: %Req.Response.Async{ref: ref}}} ->
+            conn =
+              case chunk(
+                     conn,
+                     "event: ping\ndata: {\"status\":\"connected\",\"session_id\":\"#{opencode_session_id}\"}\n\n"
+                   ) do
+                {:ok, conn} -> conn
+                {:error, _reason} -> conn
+              end
 
-        case chunk(conn_acc, "event: #{event_type}\ndata: #{payload}\n\n") do
-          {:ok, conn_acc} ->
-            if opencode_event_done?(raw) do
-              {:halt, conn_acc}
-            else
-              {:cont, conn_acc}
-            end
+            stream_opencode_events(conn, ref, opencode_session_id, "")
 
-          {:error, _reason} ->
-            {:halt, conn_acc}
+          {:ok, %{status: status, body: body}} ->
+            send_sse_error(conn, %{status: status, body: inspect(body)})
+
+          {:error, reason} ->
+            send_sse_error(conn, %{error: inspect(reason)})
         end
-      end)
-    else
-      {:error, :session_not_active} ->
-        {:error, :session_not_active}
-
-      {:error, :no_opencode_session} ->
-        {:error, :session_not_active}
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{errors: %{detail: inspect(reason)}})
-
-      error ->
-        error
+        send_sse_error(conn, %{error: inspect(reason)})
     end
   end
 
-  def prompt_stream(_conn, %{"session_id" => _}) do
-    {:error, :missing_prompt}
+  defp send_sse_error(conn, data) when is_map(data) do
+    payload = Jason.encode!(data)
+
+    case chunk(conn, "event: error\ndata: #{payload}\n\n") do
+      {:ok, conn} -> conn
+      {:error, _reason} -> conn
+    end
+  end
+
+  defp stream_opencode_events(conn, ref, opencode_session_id, buffer) do
+    receive do
+      {^ref, {:data, chunk_data}} ->
+        {events, new_buffer} = SSE.parse_chunk(chunk_data, buffer)
+
+        conn =
+          Enum.reduce_while(events, conn, fn raw, conn_acc ->
+            if opencode_session_event?(raw, opencode_session_id) do
+              event_type = opencode_event_type(raw) || Map.get(raw, :event) || "opencode.event"
+              payload = Jason.encode!(Map.get(raw, :data))
+
+              case chunk(conn_acc, "event: #{event_type}\ndata: #{payload}\n\n") do
+                {:ok, conn_acc} -> {:cont, conn_acc}
+                {:error, _reason} -> {:halt, conn_acc}
+              end
+            else
+              {:cont, conn_acc}
+            end
+          end)
+
+        stream_opencode_events(conn, ref, opencode_session_id, new_buffer)
+
+      {^ref, :done} ->
+        conn
+
+      {^ref, {:error, reason}} ->
+        Logger.debug("OpenCode session stream closed", reason: inspect(reason))
+        conn
+
+      _other ->
+        stream_opencode_events(conn, ref, opencode_session_id, buffer)
+    after
+      30_000 ->
+        case chunk(conn, "event: ping\ndata: {\"status\":\"keep-alive\"}\n\n") do
+          {:ok, conn} -> stream_opencode_events(conn, ref, opencode_session_id, buffer)
+          {:error, _reason} -> conn
+        end
+    end
   end
 
   defp resolve_opencode_target(id, opts) do
@@ -415,28 +446,6 @@ defmodule SquadsWeb.API.SessionController do
   end
 
   defp opencode_session_event?(_event, _opencode_session_id), do: false
-
-  defp opencode_event_done?(%{event: "session.idle"}), do: true
-
-  defp opencode_event_done?(%{data: %{"type" => "session.idle"}}), do: true
-
-  defp opencode_event_done?(%{
-         data: %{"type" => "session.status", "properties" => %{"status" => %{"type" => "idle"}}}
-       }),
-       do: true
-
-  defp opencode_event_done?(%{
-         data: %{
-           "type" => "message.updated",
-           "properties" => %{
-             "info" => %{"role" => "assistant", "time" => %{"completed" => completed}}
-           }
-         }
-       })
-       when is_number(completed),
-       do: true
-
-  defp opencode_event_done?(_), do: false
 
   @doc """
   Execute a slash command in a session.

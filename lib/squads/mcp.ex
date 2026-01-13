@@ -5,11 +5,14 @@ defmodule Squads.MCP do
 
   import Ecto.Query, warn: false
 
+  alias Squads.Artifacts
   alias Squads.MCP.Catalog
   alias Squads.MCP.DockerCLI
   alias Squads.MCP.Server
   alias Squads.Mail
+  alias Squads.Projects
   alias Squads.Repo
+  alias Squads.Reviews
   alias Squads.Sessions
 
   @doc """
@@ -423,9 +426,265 @@ defmodule Squads.MCP do
     {:ok, %{content: [%{type: "text", text: Jason.encode!(summary, pretty: true)}]}}
   end
 
+  def handle_request("artifacts", %{"method" => "list_tools"}) do
+    tools = [
+      %{
+        name: "create_issue",
+        description: "Creates a new filesystem-backed issue in the target project.",
+        inputSchema: %{
+          type: "object",
+          properties: %{
+            project_id: %{type: "string", description: "The project ID or project name."},
+            title: %{type: "string", description: "Issue title."},
+            body_md: %{type: "string", description: "Issue body in Markdown."},
+            status: %{type: "string", enum: ["open", "in_progress", "blocked", "done"]},
+            priority: %{type: "integer", minimum: 0, maximum: 4},
+            labels: %{type: "array", items: %{type: "string"}},
+            dependencies: %{type: "array", items: %{type: "string"}},
+            references: %{type: "object", additionalProperties: true}
+          },
+          required: ["project_id", "title"]
+        }
+      },
+      %{
+        name: "create_review",
+        description: "Creates a new review for code changes.",
+        inputSchema: %{
+          type: "object",
+          properties: %{
+            project_id: %{type: "string", description: "The project ID or project name."},
+            project_ids: %{
+              type: "array",
+              items: %{type: "string"},
+              description: "Array of project IDs for multi-project reviews."
+            },
+            session_id: %{
+              type: "string",
+              description: "Optional Squads session ID to notify on submit."
+            },
+            title: %{type: "string", description: "Review title."},
+            summary: %{type: "string", description: "Markdown summary of the changes."},
+            highlights: %{
+              type: "array",
+              items: %{type: "string"},
+              description: "Key highlights or bullet points."
+            },
+            worktree_path: %{type: "string", description: "Path to the worktree for diff."},
+            base_sha: %{type: "string", description: "Base commit SHA for diff range."},
+            head_sha: %{
+              type: "string",
+              description: "Head commit SHA. If omitted, uses uncommitted worktree diff."
+            },
+            author_type: %{
+              type: "string",
+              enum: ["agent", "human", "system"],
+              description: "Type of author."
+            },
+            author_name: %{type: "string", description: "Author name."},
+            references: %{
+              type: "object",
+              additionalProperties: true,
+              description: "Additional references (ticket_id, card_id, squad_id, etc.)"
+            }
+          },
+          required: ["title", "worktree_path"]
+        }
+      },
+      %{
+        name: "submit_review",
+        description: "Submits a review with approval or change request.",
+        inputSchema: %{
+          type: "object",
+          properties: %{
+            review_id: %{type: "string", description: "The review ID (UUID)."},
+            status: %{type: "string", enum: ["approved", "changes_requested"]},
+            feedback: %{type: "string", description: "Optional feedback message."},
+            comments: %{
+              type: "array",
+              items: %{
+                type: "object",
+                properties: %{
+                  type: %{type: "string", enum: ["summary", "file", "line"]},
+                  body: %{type: "string"},
+                  file_path: %{type: "string"},
+                  line_number: %{type: "integer"},
+                  diff_side: %{type: "string", enum: ["old", "new"]}
+                },
+                required: ["type", "body"]
+              },
+              description: "Inline comments on the review."
+            }
+          },
+          required: ["review_id", "status"]
+        }
+      }
+    ]
+
+    {:ok, %{tools: tools}}
+  end
+
+  def handle_request("artifacts", %{
+        "method" => "call_tool",
+        "params" => %{"name" => "create_issue", "arguments" => args}
+      }) do
+    with {:ok, project} <- fetch_project(args["project_id"]),
+         {:ok, issue} <- Artifacts.create_issue(project.path, Map.delete(args, "project_id")) do
+      payload = %{
+        id: issue.id,
+        path: issue.path,
+        url: "/issues/#{issue.id}",
+        title: issue.title,
+        status: issue.status
+      }
+
+      {:ok, %{content: [%{type: "text", text: Jason.encode!(payload)}]}}
+    else
+      {:error, reason} -> mcp_error("create_issue", reason)
+    end
+  end
+
+  def handle_request("artifacts", %{
+        "method" => "call_tool",
+        "params" => %{"name" => "create_review", "arguments" => args}
+      }) do
+    attrs = build_review_attrs(args)
+
+    case Reviews.create_review(attrs) do
+      {:ok, review} ->
+        payload = %{
+          id: review.id,
+          url: "/review/#{review.id}",
+          title: review.title,
+          status: review.status
+        }
+
+        {:ok, %{content: [%{type: "text", text: Jason.encode!(payload)}]}}
+
+      {:error, reason} ->
+        mcp_error("create_review", reason)
+    end
+  end
+
+  def handle_request("artifacts", %{
+        "method" => "call_tool",
+        "params" => %{"name" => "submit_review", "arguments" => args}
+      }) do
+    review_id = args["review_id"]
+    status = args["status"]
+    feedback = Map.get(args, "feedback")
+    comments = Map.get(args, "comments", [])
+
+    with {:ok, _uuid} <- Ecto.UUID.cast(review_id),
+         {:ok, review} <- Reviews.submit_review(review_id, status, feedback) do
+      # Add inline comments if provided
+      Enum.each(comments, fn comment ->
+        Reviews.add_comment(review, %{
+          type: comment["type"] || "summary",
+          body: comment["body"],
+          file_path: comment["file_path"],
+          line_number: comment["line_number"],
+          diff_side: comment["diff_side"],
+          author_type: "agent",
+          author_name: args["author_name"] || "agent"
+        })
+      end)
+
+      # Reload review with comments
+      {:ok, updated} = Reviews.get_review(review_id)
+
+      payload = %{
+        id: updated.id,
+        url: "/review/#{updated.id}",
+        title: updated.title,
+        status: updated.status,
+        comments_count: length(updated.comments)
+      }
+
+      {:ok, %{content: [%{type: "text", text: Jason.encode!(payload)}]}}
+    else
+      :error -> mcp_error("submit_review", :invalid_review_id)
+      {:error, reason} -> mcp_error("submit_review", reason)
+    end
+  end
+
   def handle_request(_name, _params) do
     {:error, %{code: -32601, message: "Method not found"}}
   end
+
+  defp fetch_project(project_id) when is_binary(project_id) do
+    Projects.fetch_project(project_id)
+  end
+
+  defp fetch_project(_), do: {:error, :not_found}
+
+  defp build_review_attrs(args) do
+    project_id = args["project_id"]
+
+    # Support both single project_id and array of project_ids
+    project_ids =
+      case args["project_ids"] do
+        list when is_list(list) -> list
+        nil when is_binary(project_id) -> [project_id]
+        _ -> []
+      end
+
+    # Build references from optional context fields
+    references =
+      (args["references"] || %{})
+      |> maybe_put_ref("session_id", args["session_id"])
+      |> maybe_put_ref("squad_id", args["squad_id"])
+      |> maybe_put_ref("card_id", args["card_id"])
+      |> maybe_put_ref("ticket_id", args["ticket_id"])
+
+    %{
+      title: args["title"],
+      summary: args["summary"],
+      highlights: args["highlights"] || [],
+      worktree_path: args["worktree_path"],
+      base_sha: args["base_sha"],
+      head_sha: args["head_sha"],
+      project_ids: project_ids,
+      workspace_root: args["worktree_path"],
+      references: references,
+      author_type: args["author_type"] || "agent",
+      author_name: args["author_name"],
+      session_id: parse_uuid(args["session_id"])
+    }
+  end
+
+  defp maybe_put_ref(map, _key, nil), do: map
+
+  defp maybe_put_ref(map, key, value) when is_binary(value) do
+    if String.trim(value) == "" do
+      map
+    else
+      Map.put(map, key, value)
+    end
+  end
+
+  defp maybe_put_ref(map, _key, _value), do: map
+
+  defp parse_uuid(nil), do: nil
+
+  defp parse_uuid(value) when is_binary(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> uuid
+      :error -> nil
+    end
+  end
+
+  defp parse_uuid(_), do: nil
+
+  defp mcp_error(tool, reason) do
+    {:error, %{code: -32000, message: "#{tool} failed: #{format_mcp_reason(reason)}"}}
+  end
+
+  defp format_mcp_reason({:validation, %Ecto.Changeset{} = changeset}),
+    do: inspect(changeset.errors)
+
+  defp format_mcp_reason(%Ecto.Changeset{} = changeset), do: inspect(changeset.errors)
+  defp format_mcp_reason(reason) when is_binary(reason), do: reason
+  defp format_mcp_reason(reason), do: inspect(reason)
 
   defp docker_cli do
     Application.get_env(:squads, __MODULE__, [])[:docker_cli] || DockerCLI

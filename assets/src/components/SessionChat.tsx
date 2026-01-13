@@ -3,18 +3,19 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { 
-  Terminal, 
-  Archive, 
-  Pencil, 
-  Send, 
-  Loader2, 
+import {
+  Terminal,
+  Archive,
+  Pencil,
+  Send,
+  Loader2,
   ChevronRight,
   Zap,
   FileText,
   Command,
   RefreshCw,
-  StopCircle
+  StopCircle,
+  FileDiff
 } from 'lucide-react'
 import {
   useSessionMessages,
@@ -28,6 +29,7 @@ import {
   type SessionMessagePart,
   type SessionMessageToolPart,
   type SessionMessageInfo,
+  type SessionDiffEntry,
 } from '../api/queries'
 import { API_BASE } from '../api/client'
 import { useNotifications } from './Notifications'
@@ -55,6 +57,8 @@ interface SessionChatProps {
   headerContent?: React.ReactNode
   /** Callback when /new command is triggered */
   onNewSession?: () => void
+  /** Callback when user wants to view diffs from a message */
+  onViewDiff?: (diffs: SessionDiffEntry[]) => void
 }
 
 const COMMANDS = [
@@ -74,14 +78,17 @@ export function SessionChat({
   showHeader = true,
   headerContent,
   onNewSession,
+  onViewDiff,
 }: SessionChatProps) {
   const [chatInput, setChatInput] = useState('')
   const [awaitingResponse, setAwaitingResponse] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [streamingText, setStreamingText] = useState('')
-  const streamAbortRef = useRef<AbortController | null>(null)
-  const streamingStartedAtRef = useRef<number | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const streamUserMessageIdRef = useRef<string | null>(null)
+  const streamAssistantMessageIdRef = useRef<string | null>(null)
   const pendingSinceRef = useRef<number | null>(null)
+  const localUserMessageQueueRef = useRef<string[]>([])
+  const scrollRafRef = useRef<number | null>(null)
   const [autocomplete, setAutocomplete] = useState<{
     active: boolean
     trigger: '/' | '@' | null
@@ -108,24 +115,299 @@ export function SessionChat({
 
   const queryClient = useQueryClient()
 
+  const messagesLimit = 100
+  const messagesQueryKey = ['sessions', session.id, 'messages', messagesLimit] as const
+
+  const updateMessagesCache = (updater: (prev: SessionMessageEntry[]) => SessionMessageEntry[]) => {
+    if (!session.id) return
+
+    queryClient.setQueryData(messagesQueryKey, (prev) => {
+      const prevList = Array.isArray(prev) ? prev : []
+      return updater(prevList)
+    })
+  }
+
+  const upsertMessage = (info: any) => {
+    if (!info || typeof info !== 'object' || typeof info.id !== 'string') return
+
+    updateMessagesCache((prev) => {
+      const existingIndex = prev.findIndex((m) => m?.info?.id === info.id)
+
+      if (existingIndex >= 0) {
+        const existing = prev[existingIndex]
+        const merged: SessionMessageEntry = {
+          ...existing,
+          info: { ...(existing.info as any), ...(info as any) },
+        }
+
+        if (merged === existing) return prev
+
+        const next = prev.slice()
+        next[existingIndex] = merged
+        return next
+      }
+
+      return [...prev, { info: info as any, parts: [] }]
+    })
+  }
+
+  const appendTextToMessage = (messageId: string, delta: string | null, fullText: string | null) => {
+    if (!messageId) return
+
+    updateMessagesCache((prev) => {
+      const idx = prev.findIndex((m) => m?.info?.id === messageId)
+      const createdAt = Date.now()
+
+      const existing =
+        idx >= 0
+          ? prev[idx]
+          : ({
+              info: { id: messageId, role: 'assistant', time: { created: createdAt } } as any,
+              parts: [],
+            } as SessionMessageEntry)
+
+      const parts = Array.isArray(existing.parts) ? existing.parts.slice() : []
+      const textPartIndex = parts.findIndex((p: any) => p?.type === 'text')
+      const prevText = textPartIndex >= 0 && typeof (parts[textPartIndex] as any).text === 'string' ? (parts[textPartIndex] as any).text : ''
+
+      let nextText = prevText
+      if (typeof delta === 'string' && delta.length) {
+        nextText = prevText + delta
+      } else if (typeof fullText === 'string') {
+        nextText = fullText.length > prevText.length ? fullText : prevText
+      }
+
+      if (nextText === prevText) return prev
+
+      const nextTextPart = { ...(textPartIndex >= 0 ? (parts[textPartIndex] as any) : {}), type: 'text', text: nextText }
+
+      if (textPartIndex >= 0) {
+        parts[textPartIndex] = nextTextPart as any
+      } else {
+        parts.push(nextTextPart as any)
+      }
+
+      const nextMessage: SessionMessageEntry = { ...existing, parts }
+
+      if (idx >= 0) {
+        const next = prev.slice()
+        next[idx] = nextMessage
+        return next
+      }
+
+      return [...prev, nextMessage]
+    })
+
+    scrollToBottomSoon()
+  }
+
+  const upsertPartToMessage = (messageId: string, part: any) => {
+    if (!messageId || !part) return
+
+    updateMessagesCache((prev) => {
+      const idx = prev.findIndex((m) => m?.info?.id === messageId)
+      const createdAt = Date.now()
+
+      const existing =
+        idx >= 0
+          ? prev[idx]
+          : ({
+              info: { id: messageId, role: 'assistant', time: { created: createdAt } } as any,
+              parts: [],
+            } as SessionMessageEntry)
+
+      const parts = Array.isArray(existing.parts) ? existing.parts.slice() : []
+      const partId = typeof part.id === 'string' ? part.id : null
+      const partType = typeof part.type === 'string' ? part.type : null
+
+      let partIndex = -1
+      if (partId) {
+        partIndex = parts.findIndex((p: any) => p?.id === partId)
+      } else if (partType) {
+        partIndex = parts.findIndex((p: any) => p?.type === partType)
+      }
+
+      if (partIndex >= 0) {
+        parts[partIndex] = { ...(parts[partIndex] as any), ...(part as any) }
+      } else {
+        parts.push(part as any)
+      }
+
+      const nextMessage: SessionMessageEntry = { ...existing, parts }
+
+      if (idx >= 0) {
+        const next = prev.slice()
+        next[idx] = nextMessage
+        return next
+      }
+
+      return [...prev, nextMessage]
+    })
+
+    scrollToBottomSoon()
+  }
+
+  const scrollToBottomSoon = () => {
+    if (scrollRafRef.current != null) return
+
+    scrollRafRef.current = window.requestAnimationFrame(() => {
+      scrollRafRef.current = null
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    })
+  }
+
   // Subscribe to real-time events for this project
   useProjectEvents({
     projectId: session.project_id,
     onEvent: (event) => {
       const kind = normalizeEventKind(event.kind)
-      // If a message was created or status changed for THIS session, invalidate queries
-      if (
-        (kind === 'session:status_changed' && event.session_id === session.id) ||
-        (kind === 'message:created' && event.session_id === session.id)
-      ) {
+
+      if (kind === 'session:status_changed' && event.session_id === session.id) {
         if (import.meta.env.DEV) {
-          console.log('Session event received, invalidating queries:', kind)
+          console.log('Session status changed, invalidating session query')
         }
-        queryClient.invalidateQueries({ queryKey: ['sessions', session.id, 'messages'] })
         queryClient.invalidateQueries({ queryKey: ['sessions', session.id] })
       }
     }
   })
+
+  useEffect(() => {
+    if (!session.id) return
+
+    const eventSource = new EventSource(`${API_BASE}/sessions/${session.id}/stream`)
+    eventSourceRef.current = eventSource
+
+    const handleOpenCodeEvent = (eventType: string, rawText: string) => {
+      let data: any
+      try {
+        data = JSON.parse(rawText)
+      } catch {
+        return
+      }
+
+      if (eventType === 'message.updated') {
+        const info = data?.properties?.info
+
+        if (info?.role === 'user' && typeof info?.id === 'string') {
+          streamUserMessageIdRef.current = info.id
+
+          const localUserId = localUserMessageQueueRef.current.shift()
+
+          if (localUserId) {
+            updateMessagesCache((prev) => {
+              const localIdx = prev.findIndex((m) => m?.info?.id === localUserId)
+              if (localIdx < 0) return prev
+
+              const next = prev.slice()
+              const existing = next[localIdx]
+              next[localIdx] = { ...existing, info: { ...(existing.info as any), ...(info as any) } }
+
+              return next.filter((m, idx) => idx === localIdx || m?.info?.id !== info.id)
+            })
+          } else {
+            upsertMessage(info)
+          }
+
+          scrollToBottomSoon()
+        }
+
+        if (info?.role === 'assistant' && typeof info?.id === 'string') {
+          streamAssistantMessageIdRef.current = info.id
+          upsertMessage(info)
+          scrollToBottomSoon()
+
+          if (typeof info?.time?.completed === 'number') {
+            setIsStreaming(false)
+            setAwaitingResponse(false)
+            pendingSinceRef.current = null
+          }
+        }
+
+        if (info && info.role !== 'user' && info.role !== 'assistant') {
+          upsertMessage(info)
+        }
+      }
+
+      if (eventType === 'message.part.updated') {
+        const part = data?.properties?.part
+        const delta = typeof data?.properties?.delta === 'string' ? data.properties.delta : null
+
+        if (part) {
+          const messageId = typeof part.messageID === 'string' ? part.messageID : null
+          const userMessageId = streamUserMessageIdRef.current
+          const assistantMessageId = streamAssistantMessageIdRef.current
+
+          const isAssistantPart =
+            (assistantMessageId && messageId === assistantMessageId) ||
+            (userMessageId && messageId && messageId !== userMessageId)
+
+          if (isAssistantPart) {
+            setIsStreaming(true)
+          }
+
+          if (messageId) {
+            if (part.type === 'text') {
+              appendTextToMessage(messageId, delta, typeof part.text === 'string' ? part.text : null)
+            } else {
+              upsertPartToMessage(messageId, part)
+            }
+          }
+        }
+      }
+
+      if (eventType === 'tui.prompt.append' && typeof data?.properties?.text === 'string') {
+        const assistantMessageId = streamAssistantMessageIdRef.current
+
+        if (assistantMessageId) {
+          setIsStreaming(true)
+          appendTextToMessage(assistantMessageId, data.properties.text, null)
+        }
+      }
+
+      const statusType = data?.properties?.status?.type
+      if (eventType === 'session.idle' || (eventType === 'session.status' && statusType === 'idle')) {
+        if (pendingSinceRef.current != null) {
+          setIsStreaming(false)
+          setAwaitingResponse(false)
+          pendingSinceRef.current = null
+          streamUserMessageIdRef.current = null
+          streamAssistantMessageIdRef.current = null
+        }
+      }
+    }
+
+    const bind = (eventType: string) => {
+      const handler = (event: MessageEvent) => {
+        handleOpenCodeEvent(eventType, event.data)
+      }
+      eventSource.addEventListener(eventType, handler)
+      return handler
+    }
+
+    const handlers = {
+      'message.updated': bind('message.updated'),
+      'message.part.updated': bind('message.part.updated'),
+      'tui.prompt.append': bind('tui.prompt.append'),
+      'session.status': bind('session.status'),
+      'session.idle': bind('session.idle'),
+    }
+
+    eventSource.onerror = (err) => {
+      if (import.meta.env.DEV) {
+        console.error('Session SSE Error:', err)
+      }
+    }
+
+    return () => {
+      for (const [eventType, handler] of Object.entries(handlers)) {
+        eventSource.removeEventListener(eventType, handler as any)
+      }
+      eventSource.close()
+      if (eventSourceRef.current === eventSource) {
+        eventSourceRef.current = null
+      }
+    }
+  }, [session.id, queryClient])
 
   const { data: fileData } = useProjectFiles(session.project_id)
   const projectFiles = useMemo(() => {
@@ -144,57 +426,22 @@ export function SessionChat({
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [session.id, sessionMessages.length, streamingText])
-
-  useEffect(() => {
-    if (!awaitingResponse || pendingSinceRef.current === null) return
-
-    const pendingSince = pendingSinceRef.current
-    const hasAssistantResponse = sessionMessages.some((message) => {
-      const created = message.info?.time?.created
-      return message.info?.role === 'assistant' && typeof created === 'number' && created >= pendingSince
-    })
-
-    if (hasAssistantResponse) {
-      setAwaitingResponse(false)
-      pendingSinceRef.current = null
-    }
-  }, [awaitingResponse, sessionMessages])
-
-  // Reset chat input and autocomplete when session changes
-  useEffect(() => {
-    setChatInput('')
-    setAutocomplete(prev => ({ ...prev, active: false }))
-    setAwaitingResponse(false)
-    setIsStreaming(false)
-    setStreamingText('')
-    streamAbortRef.current?.abort()
-    streamAbortRef.current = null
-    streamingStartedAtRef.current = null
-    pendingSinceRef.current = null
-  }, [session.id])
-
   // Autocomplete logic
   const filteredSuggestions = useMemo(() => {
     if (!autocomplete.active) return []
-    
+
     if (autocomplete.trigger === '/') {
       return COMMANDS.filter(cmd => cmd.id.startsWith('/' + autocomplete.query))
     }
-    
+
     if (autocomplete.trigger === '@') {
       const q = autocomplete.query.toLowerCase()
-      if (import.meta.env.DEV) {
-        console.log('Filtering project files:', { q, totalFiles: projectFiles.length, files: projectFiles.slice(0, 5) })
-      }
       return projectFiles
         .filter(f => f.toLowerCase().includes(q))
-        .slice(0, 10) // Limit to 10 for performance
+        .slice(0, 10)
         .map(f => ({ id: f, label: f, description: '' }))
     }
-    
+
     return []
   }, [autocomplete.active, autocomplete.trigger, autocomplete.query, projectFiles])
 
@@ -202,19 +449,17 @@ export function SessionChat({
     const cursorPosition = textareaRef.current?.selectionStart || 0
     const textBeforeCursor = chatInput.substring(0, cursorPosition)
     const textAfterCursor = chatInput.substring(cursorPosition)
-    
+
     const lastWordMatch = textBeforeCursor.match(/([/@])(\w*)$/)
     if (!lastWordMatch) return
 
     const matchStart = lastWordMatch.index!
-    
     const beforeMatch = textBeforeCursor.substring(0, matchStart)
+
     const newValue = beforeMatch + suggestion.id + ' ' + textAfterCursor
-    
     setChatInput(newValue)
     setAutocomplete(prev => ({ ...prev, active: false }))
-    
-    // Set focus back to textarea
+
     setTimeout(() => {
       textareaRef.current?.focus()
       const newPos = beforeMatch.length + suggestion.id.length + 1
@@ -223,26 +468,21 @@ export function SessionChat({
   }
 
   const handleChatInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value
-    setChatInput(value)
+    const newValue = e.target.value
+    setChatInput(newValue)
 
-    const cursorPosition = e.target.selectionStart
-    const textBeforeCursor = value.substring(0, cursorPosition)
-    
+    const cursorPosition = e.target.selectionStart || 0
+    const textBeforeCursor = newValue.substring(0, cursorPosition)
+
     const lastWordMatch = textBeforeCursor.match(/([/@])(\w*)$/)
-    
+
     if (lastWordMatch) {
       const trigger = lastWordMatch[1] as '/' | '@'
-      const query = lastWordMatch[2]
-      
-      if (import.meta.env.DEV) {
-        console.log('Autocomplete triggered:', { trigger, query })
-      }
+      const query = lastWordMatch[2] || ''
 
-      // Calculate position based on textarea and cursor
       const rect = e.target.getBoundingClientRect()
       const containerRect = messagesContainerRef.current?.getBoundingClientRect()
-      
+
       setAutocomplete({
         active: true,
         trigger,
@@ -250,7 +490,7 @@ export function SessionChat({
         index: 0,
         position: {
           top: rect.top - (containerRect?.top || 0),
-          left: 0
+          left: 0,
         }
       })
     } else if (autocomplete.active) {
@@ -278,12 +518,35 @@ export function SessionChat({
     }
   }
 
-  const handleAbort = async () => {
-    streamAbortRef.current?.abort()
-    streamAbortRef.current = null
-    streamingStartedAtRef.current = null
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [session.id, sessionMessages.length])
+
+
+  // Reset chat input and autocomplete when session changes
+  useEffect(() => {
+    setChatInput('')
+    setAutocomplete(prev => ({ ...prev, active: false }))
+    setAwaitingResponse(false)
     setIsStreaming(false)
-    setStreamingText('')
+
+    streamUserMessageIdRef.current = null
+    streamAssistantMessageIdRef.current = null
+    pendingSinceRef.current = null
+    localUserMessageQueueRef.current = []
+
+    if (scrollRafRef.current != null) {
+      cancelAnimationFrame(scrollRafRef.current)
+      scrollRafRef.current = null
+    }
+  }, [session.id])
+
+  const handleAbort = async () => {
+    streamUserMessageIdRef.current = null
+    streamAssistantMessageIdRef.current = null
+    pendingSinceRef.current = null
+    localUserMessageQueueRef.current = []
+    setIsStreaming(false)
 
     try {
       await abortSession.mutateAsync({ session_id: session.id })
@@ -318,11 +581,12 @@ export function SessionChat({
       // In Squads, this currently means the backend will try to ensure it's running before sending the message
       // and we rely on the backend to handle the state transition or error if it's truly locked.
 
+      const sentAt = Date.now()
       const shouldAwaitResponse = !input.startsWith('/') && !input.startsWith('!')
 
       if (shouldAwaitResponse) {
         setAwaitingResponse(true)
-        pendingSinceRef.current = Date.now()
+        pendingSinceRef.current = sentAt
       }
 
       if (input.startsWith('/')) {
@@ -345,135 +609,33 @@ export function SessionChat({
           model: session.model,
         })
       } else {
+        const localId = `local-user-${sentAt}`
+        localUserMessageQueueRef.current.push(localId)
+
+        updateMessagesCache((prev) => [
+          ...prev,
+          {
+            info: {
+              id: localId,
+              role: 'user',
+              time: { created: sentAt },
+            },
+            parts: [{ type: 'text', text: input }],
+          } as unknown as SessionMessageEntry,
+        ])
+
+        scrollToBottomSoon()
+
         setIsStreaming(true)
-        setStreamingText('')
-        streamingStartedAtRef.current = Date.now()
+        streamUserMessageIdRef.current = null
+        streamAssistantMessageIdRef.current = null
 
-        const controller = new AbortController()
-        streamAbortRef.current = controller
-
-        const response = await fetch(`${API_BASE}/sessions/${session.id}/prompt_stream`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: input, agent: mode }),
-          signal: controller.signal,
+        await sendPrompt.mutateAsync({
+          session_id: session.id,
+          prompt: input,
+          agent: mode,
+          model: session.model,
         })
-
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => response.statusText)
-          throw new Error(`API Error: ${response.status} ${errorText}`)
-        }
-
-        const reader = response.body?.getReader()
-        if (!reader) throw new Error('Streaming not supported by this browser')
-
-        const decoder = new TextDecoder()
-        let buffer = ''
-        let shouldStop = false
-
-        let userMessageId: string | null = null
-        let assistantMessageId: string | null = null
-
-        const handleEvent = (eventType: string, data: any) => {
-          if (eventType === 'message.updated') {
-            const info = data?.properties?.info
-            if (info?.role === 'user' && typeof info?.id === 'string') {
-              userMessageId = info.id
-            }
-            if (info?.role === 'assistant' && typeof info?.id === 'string') {
-              assistantMessageId = info.id
-            }
-            if (info?.role === 'assistant' && typeof info?.time?.completed === 'number') {
-              shouldStop = true
-              return 'done'
-            }
-          }
-
-          const part = data?.properties?.part
-          const delta = typeof data?.properties?.delta === 'string' ? data.properties.delta : null
-
-          if (eventType === 'message.part.updated' && part && part.type === 'text') {
-            const messageId = typeof part.messageID === 'string' ? part.messageID : null
-
-            const isAssistantPart =
-              (assistantMessageId && messageId === assistantMessageId) ||
-              (userMessageId && messageId && messageId !== userMessageId)
-
-            if (isAssistantPart) {
-              if (delta && delta.length) {
-                setStreamingText((prev) => prev + delta)
-              } else if (typeof part.text === 'string') {
-                setStreamingText((prev) => (part.text.length > prev.length ? part.text : prev))
-              }
-            }
-          }
-
-          if (eventType === 'tui.prompt.append' && typeof data?.properties?.text === 'string') {
-            setStreamingText((prev) => prev + data.properties.text)
-          }
-
-          const statusType = data?.properties?.status?.type
-          if (eventType === 'session.idle' || (eventType === 'session.status' && statusType === 'idle')) {
-            shouldStop = true
-            return 'done'
-          }
-
-          return 'continue'
-        }
-
-        while (!shouldStop) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-
-          while (true) {
-            const splitIndex = buffer.indexOf('\n\n')
-            if (splitIndex === -1) break
-
-            const block = buffer.slice(0, splitIndex)
-            buffer = buffer.slice(splitIndex + 2)
-
-            let eventType = ''
-            const dataLines: string[] = []
-
-            for (const line of block.split('\n')) {
-              if (line.startsWith('event:')) {
-                eventType = line.slice('event:'.length).trim()
-              } else if (line.startsWith('data:')) {
-                dataLines.push(line.slice('data:'.length).trim())
-              }
-            }
-
-            if (!eventType) continue
-
-            const dataText = dataLines.join('\n')
-            let data: any = dataText
-            try {
-              data = JSON.parse(dataText)
-            } catch {
-              // keep as string
-            }
-
-            const result = handleEvent(eventType, data)
-            if (result === 'done') {
-              break
-            }
-          }
-        }
-
-        try {
-          await reader.cancel()
-        } catch {
-          // ignore
-        }
-
-        streamAbortRef.current = null
-        streamingStartedAtRef.current = null
-        setIsStreaming(false)
-        setAwaitingResponse(false)
-        pendingSinceRef.current = null
-        queryClient.invalidateQueries({ queryKey: ['sessions', session.id, 'messages'] })
       }
 
       if (!shouldAwaitResponse) {
@@ -482,18 +644,9 @@ export function SessionChat({
       }
       setChatInput('')
     } catch (error) {
-      const isAbortError =
-        (error instanceof DOMException && error.name === 'AbortError') ||
-        (error instanceof Error && /aborted/i.test(error.message))
-
-      streamAbortRef.current = null
-      streamingStartedAtRef.current = null
       setIsStreaming(false)
-      setStreamingText('')
       setAwaitingResponse(false)
       pendingSinceRef.current = null
-
-      if (isAbortError) return
 
       console.error('SessionChat action failed', {
         input,
@@ -513,6 +666,7 @@ export function SessionChat({
   const isPending = sendPrompt.isPending || executeCommand.isPending || runShell.isPending
   const isAborting = abortSession.isPending
   const isProcessing = isPending || awaitingResponse || isStreaming
+  const messagesToRender = sessionMessages
 
   return (
     <div className={cn('flex flex-col h-full min-h-0', className)}>
@@ -548,34 +702,23 @@ export function SessionChat({
           <div className="flex items-center justify-center text-tui-dim text-xs uppercase tracking-widest">
             Loading chat...
           </div>
-        ) : sessionMessages.length === 0 ? (
+        ) : messagesToRender.length === 0 ? (
           <div className="text-center text-tui-dim text-xs italic">
             No messages yet. Send the first prompt to get started.
           </div>
         ) : (
-          sessionMessages.map((message, index) => (
+          messagesToRender.map((message, index) => (
             <ChatMessage
               key={message.info?.id ?? `${message.info?.role || 'msg'}-${index}`}
               message={message}
+              onViewDiff={onViewDiff}
             />
           ))
         )}
 
-        {isStreaming && (
-          <ChatMessage
-            message={{
-              info: {
-                id: 'streaming',
-                role: 'assistant',
-                time: { created: streamingStartedAtRef.current ?? Date.now() },
-              },
-              parts: [{ type: 'text', text: streamingText }],
-            } as unknown as SessionMessageEntry}
-          />
-        )}
 
         <div ref={messagesEndRef} />
-        {isHistory && !sessionMessages.length && (
+        {isHistory && !messagesToRender.length && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-tui-bg/80 backdrop-blur-sm z-10 pointer-events-none">
             <div className="text-tui-dim text-xs uppercase tracking-widest mb-4">No active session</div>
             {/* Start New Session button removed in favor of command/sidebar controls */}
@@ -718,7 +861,7 @@ export { ModeToggle }
 // Chat Message Component
 // ============================================================================
 
-export function ChatMessage({ message }: { message: SessionMessageEntry }) {
+export function ChatMessage({ message, onViewDiff }: { message: SessionMessageEntry; onViewDiff?: () => void }) {
   const role = getMessageRole(message.info)
   const parts = normalizeMessageParts(message.parts)
   const timestamp = formatMessageTime(message.info)
@@ -778,7 +921,7 @@ export function ChatMessage({ message }: { message: SessionMessageEntry }) {
         {/* Text Content */}
         {parts.text ? (
           <div className="min-w-0 break-words">
-            <MarkdownRenderer content={parts.text} />
+            <MixedMessageContent content={parts.text} />
           </div>
         ) : !parts.tools.length &&
           !parts.reasoning.length &&
@@ -844,19 +987,36 @@ export function ChatMessage({ message }: { message: SessionMessageEntry }) {
           </div>
         )}
 
-        {/* Meta Lines (Snapshots, etc) */}
-        {parts.metaLines.length > 0 && (
-          <div className="mt-3 pt-2 border-t border-tui-border/20 space-y-1">
-            {parts.metaLines.map((line, index) => (
-              <div
-                key={index}
-                className="text-[9px] uppercase tracking-widest text-tui-dim font-mono"
-              >
-                {line}
-              </div>
-            ))}
-          </div>
-        )}
+         {/* Meta Lines (Snapshots, etc) */}
+         {parts.metaLines.length > 0 && (
+           <div className="mt-3 pt-2 border-t border-tui-border/20 space-y-1">
+             {parts.metaLines.map((line, index) => (
+               <div
+                 key={index}
+                 className="text-[9px] uppercase tracking-widest text-tui-dim font-mono"
+               >
+                 {line}
+               </div>
+             ))}
+           </div>
+         )}
+
+         {/* Diff Pill - for messages with summary diffs */}
+         {message.info.summary &&
+          typeof message.info.summary === 'object' &&
+          'diffs' in message.info.summary &&
+          Array.isArray(message.info.summary.diffs) &&
+          message.info.summary.diffs.length > 0 && (
+           <div className="mt-3">
+             <button
+               onClick={() => onViewDiff?.()}
+               className="flex items-center gap-2 px-3 py-2 bg-tui-accent/10 border border-tui-accent/30 text-tui-accent text-[10px] font-bold uppercase tracking-widest rounded-sm hover:bg-tui-accent/20 transition-colors"
+             >
+               <FileDiff size={12} />
+               <span>View Diff ({(message.info.summary.diffs as SessionDiffEntry[]).length} {(message.info.summary.diffs as SessionDiffEntry[]).length === 1 ? 'file' : 'files'})</span>
+             </button>
+           </div>
+         )}
 
         {/* Footer: Tokens & Cost */}
         {(tokens || cost != null) && !isUser && (
@@ -885,6 +1045,158 @@ export function ChatMessage({ message }: { message: SessionMessageEntry }) {
 // ============================================================================
 // Helper Components
 // ============================================================================
+
+type ArtifactTagKind = 'issue' | 'review'
+
+type ArtifactTagPayload = {
+  id?: string
+  title?: string
+  status?: string
+  url?: string
+  path?: string
+}
+
+type MixedMessagePart =
+  | { type: 'text'; text: string }
+  | {
+      type: 'artifact'
+      kind: ArtifactTagKind
+      raw: string
+      payload?: ArtifactTagPayload
+      parseError?: string
+    }
+
+function MixedMessageContent({ content }: { content: string }) {
+  const parts = useMemo(() => parseMixedMessageContent(content), [content])
+
+  if (parts.length === 1 && parts[0].type === 'text') {
+    return <MarkdownRenderer content={parts[0].text} />
+  }
+
+  return (
+    <div className="space-y-3">
+      {parts.map((part, index) => {
+        if (part.type === 'text') {
+          return part.text.trim() ? <MarkdownRenderer key={`text-${index}`} content={part.text} /> : null
+        }
+
+        return (
+          <ArtifactTagCard
+            key={`artifact-${index}`}
+            kind={part.kind}
+            raw={part.raw}
+            payload={part.payload}
+            parseError={part.parseError}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function parseMixedMessageContent(content: string): MixedMessagePart[] {
+  const parts: MixedMessagePart[] = []
+  const tagRegex = new RegExp('<(issue|review)>([\\s\\S]*?)<\\/\\1>', 'g')
+
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = tagRegex.exec(content)) !== null) {
+    const start = match.index
+    const end = tagRegex.lastIndex
+
+    if (start > lastIndex) {
+      parts.push({ type: 'text', text: content.slice(lastIndex, start) })
+    }
+
+    const kind = match[1] as ArtifactTagKind
+    const inner = match[2]
+    const raw = match[0]
+
+    const { payload, parseError } = parseArtifactPayload(inner)
+
+    parts.push({ type: 'artifact', kind, raw, payload, parseError })
+    lastIndex = end
+  }
+
+  if (lastIndex < content.length) {
+    parts.push({ type: 'text', text: content.slice(lastIndex) })
+  }
+
+  return parts.length ? parts : [{ type: 'text', text: content }]
+}
+
+function parseArtifactPayload(inner: string): { payload?: ArtifactTagPayload; parseError?: string } {
+  const trimmed = inner.trim()
+
+  if (!trimmed) {
+    return { parseError: 'Empty tag payload' }
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed)
+
+    if (parsed && typeof parsed === 'object') {
+      return { payload: parsed as ArtifactTagPayload }
+    }
+
+    return { parseError: 'Tag payload is not an object' }
+  } catch (error) {
+    return {
+      parseError: error instanceof Error ? error.message : 'Invalid JSON',
+    }
+  }
+}
+
+function ArtifactTagCard({
+  kind,
+  raw,
+  payload,
+  parseError,
+}: {
+  kind: ArtifactTagKind
+  raw: string
+  payload?: ArtifactTagPayload
+  parseError?: string
+}) {
+  const title = payload?.title || payload?.id || (kind === 'issue' ? 'Issue' : 'Review')
+  const status = payload?.status
+  const url = payload?.url
+
+  return (
+    <div className="border border-tui-border bg-ctp-mantle/40 p-3 rounded-sm">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="text-[10px] uppercase tracking-widest text-tui-dim font-bold">
+          {kind === 'issue' ? 'Issue' : 'Review'} Artifact
+        </div>
+        {status ? (
+          <div className="text-[10px] font-mono px-2 py-0.5 border border-tui-border/40 text-tui-dim">
+            {status}
+          </div>
+        ) : null}
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-bold text-xs text-tui-text truncate">{title}</div>
+        {url ? (
+          <a
+            href={url}
+            className="text-[10px] uppercase font-bold tracking-widest text-tui-accent border border-tui-accent/30 px-2 py-1 hover:bg-tui-accent hover:text-tui-bg transition-colors shrink-0"
+          >
+            Open
+          </a>
+        ) : null}
+      </div>
+      {parseError ? (
+        <details className="mt-2 border border-red-900/40 bg-red-950/20 rounded-sm">
+          <summary className="cursor-pointer p-2 text-[10px] uppercase tracking-widest text-red-400 select-none">
+            Invalid {kind} tag payload
+          </summary>
+          <pre className="p-2 text-[10px] text-red-200/80 whitespace-pre-wrap">{raw}</pre>
+        </details>
+      ) : null}
+    </div>
+  )
+}
 
 function MarkdownRenderer({ content }: { content: string }) {
   return (
@@ -962,6 +1274,62 @@ function MarkdownRenderer({ content }: { content: string }) {
   )
 }
 
+type TaskToolSummaryStep = {
+  id: string
+  tool: string
+  status: string
+  title?: string
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseTaskToolMetadata(metadata: unknown): { childSessionId?: string; steps: TaskToolSummaryStep[] } {
+  if (!isPlainObject(metadata)) return { steps: [] }
+
+  const sessionIdCandidates = [metadata['sessionId'], metadata['sessionID'], metadata['session_id']]
+  const childSessionId = sessionIdCandidates.find(
+    (value) => typeof value === 'string' && value.length > 0
+  ) as string | undefined
+
+  const summaryRaw = metadata['summary']
+  if (!Array.isArray(summaryRaw)) return { childSessionId, steps: [] }
+
+  const steps: TaskToolSummaryStep[] = []
+
+  summaryRaw.forEach((entry, index) => {
+    if (!isPlainObject(entry)) return
+
+    const tool = typeof entry['tool'] === 'string' && entry['tool'].length > 0 ? entry['tool'] : 'tool'
+    const id = typeof entry['id'] === 'string' && entry['id'].length > 0 ? entry['id'] : `${tool}-${index}`
+
+    const state = entry['state']
+    const stateObject = isPlainObject(state) ? state : undefined
+    const status = typeof stateObject?.['status'] === 'string' ? stateObject['status'] : 'unknown'
+    const title = typeof stateObject?.['title'] === 'string' ? stateObject['title'] : undefined
+
+    steps.push({ id, tool, status, title })
+  })
+
+  return { childSessionId, steps }
+}
+
+function getToolStatusBadgeClass(status: string) {
+  switch (status) {
+    case 'error':
+      return 'border-red-500/30 text-red-400'
+    case 'completed':
+      return 'border-green-500/30 text-green-400'
+    case 'running':
+      return 'border-tui-accent/30 text-tui-accent'
+    case 'pending':
+      return 'border-tui-dim/30 text-tui-dim'
+    default:
+      return 'border-tui-border/40 text-tui-dim'
+  }
+}
+
 function ToolPartBlock({ part }: { part: SessionMessagePart }) {
   if (part.type !== 'tool') return null
   const toolPart = part as SessionMessageToolPart
@@ -971,6 +1339,14 @@ function ToolPartBlock({ part }: { part: SessionMessagePart }) {
   const input = toolPart.state?.input
   const output = toolPart.state?.output
   const error = toolPart.state?.error
+  const metadata = toolPart.state?.metadata
+
+  const { childSessionId, steps: taskSummarySteps } = useMemo(
+    () => parseTaskToolMetadata(metadata),
+    [metadata]
+  )
+
+  const [showAllTaskSteps, setShowAllTaskSteps] = useState(false)
 
   const inputFilePath = getToolInputFilePath(input)
   const outputLanguage = inferLanguageFromFilePath(inputFilePath)
@@ -981,6 +1357,18 @@ function ToolPartBlock({ part }: { part: SessionMessagePart }) {
 
   const isError = status === 'error' || !!error
   const isDone = status === 'completed' || status === 'success' || status === 'done' || !!output
+
+  const isTaskTool = toolName === 'task'
+  const hasTaskProgress = isTaskTool && (taskSummarySteps.length > 0 || !!childSessionId)
+  const totalSteps = taskSummarySteps.length
+  const completedSteps = taskSummarySteps.filter((s) => s.status === 'completed').length
+  const errorSteps = taskSummarySteps.filter((s) => s.status === 'error').length
+  const runningStep = taskSummarySteps.find((s) => s.status === 'running')
+  const pendingStep = taskSummarySteps.find((s) => s.status === 'pending')
+  const headlineStep = runningStep || pendingStep
+  const canToggleAllSteps = taskSummarySteps.length > 5
+  const visibleSteps = showAllTaskSteps ? taskSummarySteps : taskSummarySteps.slice(-5)
+  const hiddenStepCount = Math.max(0, taskSummarySteps.length - visibleSteps.length)
 
   return (
     <div
@@ -1007,7 +1395,87 @@ function ToolPartBlock({ part }: { part: SessionMessagePart }) {
       </div>
 
       <div className="p-3 space-y-3 font-mono">
-        {input && (
+        {hasTaskProgress && (
+          <div className="rounded border border-tui-border/40 bg-tui-dim/5 p-2 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[9px] uppercase tracking-widest text-tui-dim">Subagent</div>
+              {childSessionId ? (
+                <div className="text-[9px] text-tui-dim/70 font-mono">session/{childSessionId.slice(0, 8)}</div>
+              ) : (
+                <div className="text-[9px] text-tui-dim/70 font-mono">starting…</div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 text-[10px] text-tui-text/90 truncate">
+                {headlineStep ? headlineStep.title || headlineStep.tool : 'awaiting subagent activity…'}
+              </div>
+              {totalSteps > 0 && (
+                <div className="shrink-0 text-[9px] uppercase tracking-widest text-tui-dim">
+                  {completedSteps}/{totalSteps}
+                  {errorSteps > 0 ? ` • ${errorSteps} err` : ''}
+                </div>
+              )}
+            </div>
+
+            {visibleSteps.length > 0 && (
+              <div className={cn('space-y-1', showAllTaskSteps ? 'max-h-52 overflow-y-auto pr-1' : '')}>
+                {visibleSteps.map((step) => (
+                  <div key={step.id} className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'shrink-0 text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded border',
+                        getToolStatusBadgeClass(step.status)
+                      )}
+                    >
+                      {step.status}
+                    </span>
+                    <span className="min-w-0 text-[10px] text-tui-text/80 truncate">
+                      {step.title || step.tool}
+                    </span>
+                  </div>
+                ))}
+                {canToggleAllSteps && !showAllTaskSteps && hiddenStepCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTaskSteps(true)}
+                    className="text-[9px] text-tui-accent hover:text-white underline hover:no-underline text-left"
+                  >
+                    +{hiddenStepCount} more…
+                  </button>
+                )}
+                {canToggleAllSteps && showAllTaskSteps && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTaskSteps(false)}
+                    className="text-[9px] text-tui-dim hover:text-tui-text underline hover:no-underline text-left"
+                  >
+                    Show less
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isTaskTool && input && (
+          <details className="group">
+            <summary className="cursor-pointer select-none flex items-center justify-between gap-3">
+              <div className="min-w-0 flex items-center gap-2">
+                <div className="text-[9px] uppercase tracking-widest text-tui-dim">Prompt</div>
+              </div>
+              <ChevronRight
+                size={12}
+                className="shrink-0 transition-transform group-open:rotate-90 text-tui-dim"
+              />
+            </summary>
+            <div className="mt-2 bg-ctp-crust/40 p-2 rounded border border-tui-border-dim overflow-x-auto">
+              <pre>{formatJSON(input)}</pre>
+            </div>
+          </details>
+        )}
+
+        {input && !isTaskTool && (
           <details className="group">
             <summary className="cursor-pointer select-none flex items-center justify-between gap-3">
               <div className="min-w-0 flex items-center gap-2">

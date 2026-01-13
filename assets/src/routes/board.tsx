@@ -447,16 +447,16 @@ function SquadSection(props: {
       </div>
 
       <div className="p-3 border-b border-tui-border bg-ctp-crust/40">
-        <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex flex-col md:flex-row md:items-end gap-2 md:gap-3">
           <textarea
             value={props.composerValue}
             onChange={(e) => props.onComposerChange(e.target.value)}
             placeholder="What do you want to build?"
-            className="flex-1 bg-ctp-crust border border-tui-border-dim p-3 text-xs md:text-sm outline-none focus:border-tui-accent font-mono min-h-[80px]"
+            className="flex-1 bg-ctp-crust border border-tui-border-dim p-2 text-xs md:text-sm outline-none focus:border-tui-accent font-mono min-h-[56px] resize-none placeholder:text-tui-dim/30"
           />
           <button
             onClick={props.onCreateCard}
-            className="px-4 py-2 bg-tui-accent text-tui-bg text-xs font-bold uppercase tracking-tui hover:bg-tui-accent/90 transition-colors"
+            className="px-3 py-1.5 bg-tui-accent text-tui-bg text-[10px] font-bold uppercase tracking-tui hover:bg-tui-accent/90 transition-colors shrink-0 whitespace-nowrap md:self-end"
           >
             Add to TODO
           </button>

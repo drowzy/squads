@@ -1,4 +1,6 @@
 defmodule Squads.Sessions.Operations do
+  import Ecto.Query, warn: false
+
   @moduledoc """
   Session commands, dispatch logic and slash commands.
   """
@@ -11,6 +13,7 @@ defmodule Squads.Sessions.Operations do
   alias Squads.Sessions.Messages
   alias Squads.Sessions.Helpers
   alias Squads.OpenCode.Client, as: OpenCodeClient
+  alias Squads.Squads, as: SquadsContext
 
   require Logger
 
@@ -350,7 +353,47 @@ defmodule Squads.Sessions.Operations do
             nil
         end
 
-      system_override =
+      project_context =
+        case agent do
+          %{squad_id: squad_id} when not is_nil(squad_id) ->
+            squad = SquadsContext.get_squad(squad_id)
+            project = if squad, do: squad.project, else: nil
+
+            worktree_path =
+              cond do
+                is_binary(session.worktree_path) and String.trim(session.worktree_path) != "" ->
+                  session.worktree_path
+
+                project && is_binary(project.path) ->
+                  project.path
+
+                true ->
+                  nil
+              end
+
+            if project do
+              """
+              Squads project context:
+              - project_id: #{project.id}
+              - project_name: #{project.name}
+              - project_path: #{project.path}
+              - worktree_path: #{worktree_path || ""}
+
+              MCP usage requirements:
+              - When calling MCP tools under `artifacts.*` (create_review/create_issue/submit_review), ALWAYS set `project_id` to exactly `#{project.id}`.
+              - Do NOT guess `project_id` from directory names.
+              - For filesystem reviews (`artifacts.create_review`), ALWAYS include `worktree_path` and set it to the worktree directory shown above.
+              """
+              |> String.trim()
+            else
+              nil
+            end
+
+          _ ->
+            nil
+        end
+
+      base_system_override =
         cond do
           opts[:system] ->
             opts[:system]
@@ -364,6 +407,15 @@ defmodule Squads.Sessions.Operations do
 
           true ->
             nil
+        end
+
+      system_override =
+        [base_system_override, project_context]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("\n\n")
+        |> case do
+          "" -> nil
+          text -> text
         end
 
       params = if model, do: Map.put(params, :model, model), else: params
@@ -407,7 +459,47 @@ defmodule Squads.Sessions.Operations do
             nil
         end
 
-      system_override =
+      project_context =
+        case agent do
+          %{squad_id: squad_id} when not is_nil(squad_id) ->
+            squad = SquadsContext.get_squad(squad_id)
+            project = if squad, do: squad.project, else: nil
+
+            worktree_path =
+              cond do
+                is_binary(session.worktree_path) and String.trim(session.worktree_path) != "" ->
+                  session.worktree_path
+
+                project && is_binary(project.path) ->
+                  project.path
+
+                true ->
+                  nil
+              end
+
+            if project do
+              """
+              Squads project context:
+              - project_id: #{project.id}
+              - project_name: #{project.name}
+              - project_path: #{project.path}
+              - worktree_path: #{worktree_path || ""}
+
+              MCP usage requirements:
+              - When calling MCP tools under `artifacts.*` (create_review/create_issue/submit_review), ALWAYS set `project_id` to exactly `#{project.id}`.
+              - Do NOT guess `project_id` from directory names.
+              - For filesystem reviews (`artifacts.create_review`), ALWAYS include `worktree_path` and set it to the worktree directory shown above.
+              """
+              |> String.trim()
+            else
+              nil
+            end
+
+          _ ->
+            nil
+        end
+
+      base_system_override =
         cond do
           opts[:system] ->
             opts[:system]
@@ -421,6 +513,15 @@ defmodule Squads.Sessions.Operations do
 
           true ->
             nil
+        end
+
+      system_override =
+        [base_system_override, project_context]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("\n\n")
+        |> case do
+          "" -> nil
+          text -> text
         end
 
       params = if model, do: Map.put(params, :model, model), else: params

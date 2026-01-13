@@ -14,12 +14,17 @@ import { Route as SessionsRouteImport } from './routes/sessions'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as NodesRouteImport } from './routes/nodes'
 import { Route as MailRouteImport } from './routes/mail'
+import { Route as IssuesRouteImport } from './routes/issues'
+import { Route as FsReviewsRouteImport } from './routes/fs-reviews'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AgentRouteImport } from './routes/agent'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as FleetIndexRouteImport } from './routes/fleet/index'
 import { Route as AgentIndexRouteImport } from './routes/agent.index'
+import { Route as ReviewIdRouteImport } from './routes/review.$id'
+import { Route as IssuesIdRouteImport } from './routes/issues.$id'
+import { Route as FsReviewsIdRouteImport } from './routes/fs-reviews.$id'
 import { Route as AgentAgentIdRouteImport } from './routes/agent.$agentId'
 
 const SquadRoute = SquadRouteImport.update({
@@ -45,6 +50,16 @@ const NodesRoute = NodesRouteImport.update({
 const MailRoute = MailRouteImport.update({
   id: '/mail',
   path: '/mail',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IssuesRoute = IssuesRouteImport.update({
+  id: '/issues',
+  path: '/issues',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FsReviewsRoute = FsReviewsRouteImport.update({
+  id: '/fs-reviews',
+  path: '/fs-reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EventsRoute = EventsRouteImport.update({
@@ -77,6 +92,21 @@ const AgentIndexRoute = AgentIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AgentRoute,
 } as any)
+const ReviewIdRoute = ReviewIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ReviewRoute,
+} as any)
+const IssuesIdRoute = IssuesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => IssuesRoute,
+} as any)
+const FsReviewsIdRoute = FsReviewsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => FsReviewsRoute,
+} as any)
 const AgentAgentIdRoute = AgentAgentIdRouteImport.update({
   id: '/$agentId',
   path: '/$agentId',
@@ -88,12 +118,17 @@ export interface FileRoutesByFullPath {
   '/agent': typeof AgentRouteWithChildren
   '/board': typeof BoardRoute
   '/events': typeof EventsRoute
+  '/fs-reviews': typeof FsReviewsRouteWithChildren
+  '/issues': typeof IssuesRouteWithChildren
   '/mail': typeof MailRoute
   '/nodes': typeof NodesRoute
-  '/review': typeof ReviewRoute
+  '/review': typeof ReviewRouteWithChildren
   '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
+  '/fs-reviews/$id': typeof FsReviewsIdRoute
+  '/issues/$id': typeof IssuesIdRoute
+  '/review/$id': typeof ReviewIdRoute
   '/agent/': typeof AgentIndexRoute
   '/fleet': typeof FleetIndexRoute
 }
@@ -101,12 +136,17 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/board': typeof BoardRoute
   '/events': typeof EventsRoute
+  '/fs-reviews': typeof FsReviewsRouteWithChildren
+  '/issues': typeof IssuesRouteWithChildren
   '/mail': typeof MailRoute
   '/nodes': typeof NodesRoute
-  '/review': typeof ReviewRoute
+  '/review': typeof ReviewRouteWithChildren
   '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
+  '/fs-reviews/$id': typeof FsReviewsIdRoute
+  '/issues/$id': typeof IssuesIdRoute
+  '/review/$id': typeof ReviewIdRoute
   '/agent': typeof AgentIndexRoute
   '/fleet': typeof FleetIndexRoute
 }
@@ -116,12 +156,17 @@ export interface FileRoutesById {
   '/agent': typeof AgentRouteWithChildren
   '/board': typeof BoardRoute
   '/events': typeof EventsRoute
+  '/fs-reviews': typeof FsReviewsRouteWithChildren
+  '/issues': typeof IssuesRouteWithChildren
   '/mail': typeof MailRoute
   '/nodes': typeof NodesRoute
-  '/review': typeof ReviewRoute
+  '/review': typeof ReviewRouteWithChildren
   '/sessions': typeof SessionsRoute
   '/squad': typeof SquadRoute
   '/agent/$agentId': typeof AgentAgentIdRoute
+  '/fs-reviews/$id': typeof FsReviewsIdRoute
+  '/issues/$id': typeof IssuesIdRoute
+  '/review/$id': typeof ReviewIdRoute
   '/agent/': typeof AgentIndexRoute
   '/fleet/': typeof FleetIndexRoute
 }
@@ -132,12 +177,17 @@ export interface FileRouteTypes {
     | '/agent'
     | '/board'
     | '/events'
+    | '/fs-reviews'
+    | '/issues'
     | '/mail'
     | '/nodes'
     | '/review'
     | '/sessions'
     | '/squad'
     | '/agent/$agentId'
+    | '/fs-reviews/$id'
+    | '/issues/$id'
+    | '/review/$id'
     | '/agent/'
     | '/fleet'
   fileRoutesByTo: FileRoutesByTo
@@ -145,12 +195,17 @@ export interface FileRouteTypes {
     | '/'
     | '/board'
     | '/events'
+    | '/fs-reviews'
+    | '/issues'
     | '/mail'
     | '/nodes'
     | '/review'
     | '/sessions'
     | '/squad'
     | '/agent/$agentId'
+    | '/fs-reviews/$id'
+    | '/issues/$id'
+    | '/review/$id'
     | '/agent'
     | '/fleet'
   id:
@@ -159,12 +214,17 @@ export interface FileRouteTypes {
     | '/agent'
     | '/board'
     | '/events'
+    | '/fs-reviews'
+    | '/issues'
     | '/mail'
     | '/nodes'
     | '/review'
     | '/sessions'
     | '/squad'
     | '/agent/$agentId'
+    | '/fs-reviews/$id'
+    | '/issues/$id'
+    | '/review/$id'
     | '/agent/'
     | '/fleet/'
   fileRoutesById: FileRoutesById
@@ -174,9 +234,11 @@ export interface RootRouteChildren {
   AgentRoute: typeof AgentRouteWithChildren
   BoardRoute: typeof BoardRoute
   EventsRoute: typeof EventsRoute
+  FsReviewsRoute: typeof FsReviewsRouteWithChildren
+  IssuesRoute: typeof IssuesRouteWithChildren
   MailRoute: typeof MailRoute
   NodesRoute: typeof NodesRoute
-  ReviewRoute: typeof ReviewRoute
+  ReviewRoute: typeof ReviewRouteWithChildren
   SessionsRoute: typeof SessionsRoute
   SquadRoute: typeof SquadRoute
   FleetIndexRoute: typeof FleetIndexRoute
@@ -217,6 +279,20 @@ declare module '@tanstack/react-router' {
       path: '/mail'
       fullPath: '/mail'
       preLoaderRoute: typeof MailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/issues': {
+      id: '/issues'
+      path: '/issues'
+      fullPath: '/issues'
+      preLoaderRoute: typeof IssuesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fs-reviews': {
+      id: '/fs-reviews'
+      path: '/fs-reviews'
+      fullPath: '/fs-reviews'
+      preLoaderRoute: typeof FsReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/events': {
@@ -261,6 +337,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentIndexRouteImport
       parentRoute: typeof AgentRoute
     }
+    '/review/$id': {
+      id: '/review/$id'
+      path: '/$id'
+      fullPath: '/review/$id'
+      preLoaderRoute: typeof ReviewIdRouteImport
+      parentRoute: typeof ReviewRoute
+    }
+    '/issues/$id': {
+      id: '/issues/$id'
+      path: '/$id'
+      fullPath: '/issues/$id'
+      preLoaderRoute: typeof IssuesIdRouteImport
+      parentRoute: typeof IssuesRoute
+    }
+    '/fs-reviews/$id': {
+      id: '/fs-reviews/$id'
+      path: '/$id'
+      fullPath: '/fs-reviews/$id'
+      preLoaderRoute: typeof FsReviewsIdRouteImport
+      parentRoute: typeof FsReviewsRoute
+    }
     '/agent/$agentId': {
       id: '/agent/$agentId'
       path: '/$agentId'
@@ -283,14 +380,50 @@ const AgentRouteChildren: AgentRouteChildren = {
 
 const AgentRouteWithChildren = AgentRoute._addFileChildren(AgentRouteChildren)
 
+interface FsReviewsRouteChildren {
+  FsReviewsIdRoute: typeof FsReviewsIdRoute
+}
+
+const FsReviewsRouteChildren: FsReviewsRouteChildren = {
+  FsReviewsIdRoute: FsReviewsIdRoute,
+}
+
+const FsReviewsRouteWithChildren = FsReviewsRoute._addFileChildren(
+  FsReviewsRouteChildren,
+)
+
+interface IssuesRouteChildren {
+  IssuesIdRoute: typeof IssuesIdRoute
+}
+
+const IssuesRouteChildren: IssuesRouteChildren = {
+  IssuesIdRoute: IssuesIdRoute,
+}
+
+const IssuesRouteWithChildren =
+  IssuesRoute._addFileChildren(IssuesRouteChildren)
+
+interface ReviewRouteChildren {
+  ReviewIdRoute: typeof ReviewIdRoute
+}
+
+const ReviewRouteChildren: ReviewRouteChildren = {
+  ReviewIdRoute: ReviewIdRoute,
+}
+
+const ReviewRouteWithChildren =
+  ReviewRoute._addFileChildren(ReviewRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentRoute: AgentRouteWithChildren,
   BoardRoute: BoardRoute,
   EventsRoute: EventsRoute,
+  FsReviewsRoute: FsReviewsRouteWithChildren,
+  IssuesRoute: IssuesRouteWithChildren,
   MailRoute: MailRoute,
   NodesRoute: NodesRoute,
-  ReviewRoute: ReviewRoute,
+  ReviewRoute: ReviewRouteWithChildren,
   SessionsRoute: SessionsRoute,
   SquadRoute: SquadRoute,
   FleetIndexRoute: FleetIndexRoute,

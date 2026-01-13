@@ -6,8 +6,8 @@ defmodule Squads.OpenCode.ProjectServer do
   require Logger
 
   alias Squads.OpenCode.Client
+  alias Squads.OpenCode.DaemonStartup
   alias Squads.OpenCode.Status
-  alias Squads.OpenCode.Resolver
 
   @registry Squads.OpenCode.ServerRegistry
 
@@ -46,7 +46,8 @@ defmodule Squads.OpenCode.ProjectServer do
       started_at_ms: nil,
       attach_attempts: 0,
       lsof_runner: lsof_runner,
-      client: client
+      client: client,
+      health_check_task: nil
     }
 
     {:ok, state, {:continue, :start_process}}
@@ -54,7 +55,9 @@ defmodule Squads.OpenCode.ProjectServer do
 
   @impl true
   def handle_continue(:start_process, state) do
-    case attach_to_local_instance(state) do
+    attach_opts = attach_opts(state)
+
+    case DaemonStartup.attach_to_instance(attach_opts) do
       {:ok, instance} ->
         Logger.info(
           "OpenCode bootstrap: attaching to existing instance",
@@ -66,49 +69,7 @@ defmodule Squads.OpenCode.ProjectServer do
         {:noreply, mark_running(state, instance)}
 
       {:error, _reason} ->
-        port = find_available_port()
-        cmd = "opencode serve --port #{port} --hostname 127.0.0.1 --print-logs"
-
-        Logger.info(
-          "Starting OpenCode server for project #{state.project_id} at #{state.project_path} on port #{port}"
-        )
-
-        started_at_ms = System.monotonic_time(:millisecond)
-
-        Logger.info(
-          "OpenCode bootstrap: provisioning for project #{state.project_id} at #{state.project_path}"
-        )
-
-        Status.set(state.project_path, :provisioning)
-
-        case :exec.run_link(cmd, [:stdout, :stderr, :pty, {:cd, state.project_path}]) do
-          {:ok, _pid, os_pid} ->
-            url = "http://127.0.0.1:#{port}"
-
-            Logger.info(
-              "OpenCode bootstrap: process started for project #{state.project_id} (os_pid=#{os_pid})"
-            )
-
-            # Start health check
-            _task = Task.async(fn -> wait_for_healthy(url, state.project_path, state.client) end)
-
-            {:noreply,
-             %{
-               state
-               | port: port,
-                 url: url,
-                 os_pid: os_pid,
-                 status: :starting,
-                 started_at_ms: started_at_ms
-             }}
-
-          {:error, reason} ->
-            Logger.error(
-              "Failed to start OpenCode process for project #{state.project_id}: #{inspect(reason)}"
-            )
-
-            {:stop, reason, state}
-        end
+        spawn_new_daemon(state)
     end
   end
 
@@ -122,6 +83,7 @@ defmodule Squads.OpenCode.ProjectServer do
     {:noreply, %{state | waiters: [from | state.waiters]}}
   end
 
+  # Health check succeeded
   @impl true
   def handle_info({ref, :ok}, state) when is_reference(ref) do
     Process.demonitor(ref, [:flush])
@@ -134,6 +96,7 @@ defmodule Squads.OpenCode.ProjectServer do
     {:noreply, mark_running(state, %{url: state.url, port: state.port, pid: state.os_pid})}
   end
 
+  # Health check failed but we're already running (ignore)
   @impl true
   def handle_info({ref, {:error, reason}}, %{status: :running} = state) when is_reference(ref) do
     Process.demonitor(ref, [:flush])
@@ -147,6 +110,7 @@ defmodule Squads.OpenCode.ProjectServer do
     {:noreply, state}
   end
 
+  # Health check failed during startup
   @impl true
   def handle_info({ref, {:error, reason}}, state) when is_reference(ref) do
     Process.demonitor(ref, [:flush])
@@ -155,30 +119,10 @@ defmodule Squads.OpenCode.ProjectServer do
       "OpenCode server health check failed for project #{state.project_id}: #{inspect(reason)} (elapsed_ms=#{elapsed_ms(state)})"
     )
 
-    case attach_to_local_instance(state) do
-      {:ok, instance} ->
-        Logger.warning(
-          "OpenCode bootstrap: attaching to existing instance after health check failure",
-          project_id: state.project_id,
-          port: instance.port,
-          os_pid: instance.pid
-        )
-
-        {:noreply, mark_running(state, instance)}
-
-      {:error, attach_reason} ->
-        Logger.error(
-          "OpenCode bootstrap: failed to attach after health check failure",
-          project_id: state.project_id,
-          reason: inspect(attach_reason)
-        )
-
-        Status.set(state.project_path, :error)
-        reply_waiters(state, {:error, reason})
-        {:stop, reason, state}
-    end
+    try_attach_or_retry(state, reason)
   end
 
+  # Health check task crashed
   @impl true
   def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
     if reason != :normal do
@@ -187,31 +131,54 @@ defmodule Squads.OpenCode.ProjectServer do
       )
 
       reply_waiters(state, {:error, :health_check_crashed})
-
       {:stop, :health_check_crashed, state}
     else
       {:noreply, state}
     end
   end
 
+  # Retry attach timer fired
   @impl true
   def handle_info(:attach_retry, state) do
-    case attach_to_local_instance(state) do
-      {:ok, instance} ->
-        Logger.info(
-          "OpenCode attach retry succeeded",
-          project_id: state.project_id,
-          port: instance.port,
-          os_pid: instance.pid
-        )
-
-        {:noreply, mark_running(state, instance)}
-
-      {:error, attach_reason} ->
-        schedule_attach_retry(state, attach_reason)
-    end
+    try_attach(state)
   end
 
+  # Process exited normally while running - move to idle
+  @impl true
+  def handle_info({:EXIT, _pid, :normal}, %{status: :running} = state) do
+    Logger.debug("OpenCode process exited normally after successful start; moving to idle",
+      project_id: state.project_id
+    )
+
+    Status.set(state.project_path, :idle)
+    {:noreply, %{state | status: :idle, os_pid: nil}}
+  end
+
+  # Process exited normally while starting (daemon mode)
+  @impl true
+  def handle_info({:EXIT, _pid, :normal}, %{status: status} = state)
+      when status in [:starting, :attaching] do
+    Logger.debug(
+      "OpenCode process exited normally (daemon mode), waiting for health check",
+      project_id: state.project_id
+    )
+
+    handle_daemon_exit(state)
+  end
+
+  # Process exited with error
+  @impl true
+  def handle_info({:EXIT, _pid, reason}, state) do
+    Logger.error(
+      "OpenCode process for project #{state.project_id} exited with error: #{inspect(reason)} (elapsed_ms=#{elapsed_ms(state)})"
+    )
+
+    Status.set(state.project_path, :error)
+    reply_waiters(state, {:error, :process_exited})
+    {:stop, :process_exited, state}
+  end
+
+  # stdout/stderr from the process
   @impl true
   def handle_info({:stdout, _pid, data}, state) do
     if state.status in [:starting, :attaching] do
@@ -227,51 +194,6 @@ defmodule Squads.OpenCode.ProjectServer do
   def handle_info({:stderr, _pid, data}, state) do
     log_stderr(state.project_id, data, state.status in [:starting, :attaching])
     {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:EXIT, _pid, :normal}, %{status: :running} = state) do
-    Logger.debug("OpenCode process exited normally after successful start; moving to idle",
-      project_id: state.project_id
-    )
-
-    Status.set(state.project_path, :idle)
-    {:noreply, %{state | status: :idle, os_pid: nil}}
-  end
-
-  @impl true
-  def handle_info({:EXIT, _pid, reason}, state) do
-    if reason == :normal do
-      case attach_to_local_instance(state) do
-        {:ok, instance} ->
-          Logger.warning(
-            "OpenCode process exited normally during startup; attaching to existing instance",
-            project_id: state.project_id,
-            port: instance.port,
-            os_pid: instance.pid
-          )
-
-          Logger.info(
-            "OpenCode bootstrap: running for project #{state.project_id} (elapsed_ms=#{elapsed_ms(state)})"
-          )
-
-          {:noreply, mark_running(state, instance)}
-
-        {:error, attach_reason} ->
-          case schedule_attach_retry(state, attach_reason) do
-            {:noreply, updated_state} -> {:noreply, updated_state}
-            {:stop, stop_reason, updated_state} -> {:stop, stop_reason, updated_state}
-          end
-      end
-    else
-      Logger.error(
-        "OpenCode process for project #{state.project_id} exited with error: #{inspect(reason)} (elapsed_ms=#{elapsed_ms(state)})"
-      )
-
-      Status.set(state.project_path, :error)
-      reply_waiters(state, {:error, :process_exited})
-      {:stop, :process_exited, state}
-    end
   end
 
   @impl true
@@ -298,13 +220,161 @@ defmodule Squads.OpenCode.ProjectServer do
     :ok
   end
 
-  # Helpers
+  # Private helpers
 
-  defp find_available_port do
-    {:ok, socket} = :gen_tcp.listen(0, [])
-    {:ok, port} = :inet.port(socket)
-    :ok = :gen_tcp.close(socket)
-    port
+  defp spawn_new_daemon(state) do
+    port = DaemonStartup.find_available_port()
+
+    Logger.info(
+      "Starting OpenCode server for project #{state.project_id} at #{state.project_path} on port #{port}"
+    )
+
+    started_at_ms = System.monotonic_time(:millisecond)
+
+    Logger.info(
+      "OpenCode bootstrap: provisioning for project #{state.project_id} at #{state.project_path}"
+    )
+
+    Status.set(state.project_path, :provisioning)
+
+    case DaemonStartup.spawn_daemon(state.project_path, port) do
+      {:ok, os_pid, url} ->
+        Logger.info(
+          "OpenCode bootstrap: process started for project #{state.project_id} (os_pid=#{os_pid})"
+        )
+
+        health_check_task =
+          Task.async(fn ->
+            DaemonStartup.wait_for_healthy(url, state.project_path, state.client)
+          end)
+
+        {:noreply,
+         %{
+           state
+           | port: port,
+             url: url,
+             os_pid: os_pid,
+             status: :starting,
+             started_at_ms: started_at_ms,
+             health_check_task: health_check_task
+         }}
+
+      {:error, reason} ->
+        Logger.error(
+          "Failed to start OpenCode process for project #{state.project_id}: #{inspect(reason)}"
+        )
+
+        {:stop, reason, state}
+    end
+  end
+
+  defp handle_daemon_exit(state) do
+    case state.health_check_task do
+      %Task{ref: ref} = task ->
+        # Wait for health check to complete (with timeout)
+        receive do
+          {^ref, :ok} ->
+            Process.demonitor(ref, [:flush])
+
+            Logger.info(
+              "OpenCode bootstrap: health check completed for project #{state.project_id}"
+            )
+
+            {:noreply,
+             mark_running(%{state | os_pid: nil, health_check_task: nil}, %{
+               url: state.url,
+               port: state.port,
+               pid: nil
+             })}
+
+          {^ref, {:error, reason}} ->
+            Process.demonitor(ref, [:flush])
+
+            Logger.debug(
+              "OpenCode health check failed, attempting to attach",
+              project_id: state.project_id,
+              reason: inspect(reason)
+            )
+
+            try_attach(%{state | health_check_task: nil})
+
+          {:DOWN, ^ref, :process, _pid, _reason} ->
+            Logger.warning(
+              "OpenCode health check task exited, attempting to attach",
+              project_id: state.project_id
+            )
+
+            try_attach(%{state | health_check_task: nil})
+        after
+          10_000 ->
+            # Timeout waiting for health check, cancel and try attach
+            Task.shutdown(task, :brutal_kill)
+
+            Logger.warning(
+              "OpenCode health check timed out, attempting to attach",
+              project_id: state.project_id
+            )
+
+            try_attach(%{state | health_check_task: nil})
+        end
+
+      nil ->
+        # No health check task, try to attach directly
+        Logger.debug(
+          "OpenCode no health check task, attempting to attach",
+          project_id: state.project_id
+        )
+
+        try_attach(state)
+    end
+  end
+
+  defp try_attach(state) do
+    attach_opts = attach_opts(state)
+
+    case DaemonStartup.attach_to_instance(attach_opts) do
+      {:ok, instance} ->
+        {:noreply, mark_running(%{state | health_check_task: nil}, instance)}
+
+      {:error, reason} ->
+        schedule_attach_retry(state, reason)
+    end
+  end
+
+  defp try_attach_or_retry(state, reason) do
+    attach_opts = attach_opts(state)
+
+    case DaemonStartup.attach_to_instance(attach_opts) do
+      {:ok, instance} ->
+        Logger.warning(
+          "OpenCode bootstrap: attaching to existing instance after health check failure",
+          project_id: state.project_id,
+          port: instance.port,
+          os_pid: instance.pid
+        )
+
+        {:noreply, mark_running(state, instance)}
+
+      {:error, attach_reason} ->
+        Logger.error(
+          "OpenCode bootstrap: failed to attach after health check failure",
+          project_id: state.project_id,
+          reason: inspect(attach_reason)
+        )
+
+        Status.set(state.project_path, :error)
+        reply_waiters(state, {:error, reason})
+        {:stop, reason, state}
+    end
+  end
+
+  defp attach_opts(state) do
+    %{
+      port: state.port,
+      project_path: state.project_path,
+      lsof_runner: state.lsof_runner,
+      client: state.client
+    }
   end
 
   defp mark_running(state, %{url: url, port: port, pid: os_pid}) do
@@ -376,176 +446,9 @@ defmodule Squads.OpenCode.ProjectServer do
     Logger.debug("OpenCode [#{project_id}] stderr: #{inspect(data)}")
   end
 
-  defp attach_to_local_instance(state) do
-    lsof_runner = Map.get(state, :lsof_runner, &System.cmd/2)
-    client = Map.get(state, :client, Client)
-
-    case resolve_instance_for_port(state.port, state.project_path, lsof_runner, client) do
-      {:ok, instance} -> {:ok, instance}
-      :not_found -> discover_instance_for_project(state.project_path, lsof_runner, client)
-    end
-  end
-
-  defp resolve_instance_for_port(nil, _project_path, _lsof_runner, _client), do: :not_found
-
-  defp resolve_instance_for_port(port, project_path, lsof_runner, client) when is_integer(port) do
-    case resolve_opencode_listener(port, lsof_runner) do
-      {:ok, listener} ->
-        base_url = url_for_port(listener.port)
-
-        case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
-          {:ok, project} when is_map(project) ->
-            if Resolver.project_matches?(project_path, project) do
-              {:ok,
-               %{
-                 url: base_url,
-                 port: listener.port,
-                 pid: listener.pid,
-                 source: :lsof_port
-               }}
-            else
-              :not_found
-            end
-
-          _ ->
-            :not_found
-        end
-
-      :not_found ->
-        probe_instance_for_port(port, project_path, client)
-    end
-  end
-
-  defp probe_instance_for_port(port, project_path, client) when is_integer(port) do
-    base_url = url_for_port(port)
-
-    case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
-      {:ok, project} when is_map(project) ->
-        if Resolver.project_matches?(project_path, project) do
-          {:ok,
-           %{
-             url: base_url,
-             port: port,
-             pid: nil,
-             source: :port_probe
-           }}
-        else
-          :not_found
-        end
-
-      _ ->
-        :not_found
-    end
-  end
-
-  defp resolve_opencode_listener(port, lsof_runner) when is_integer(port) do
-    case lsof_runner.("lsof", ["-nP", "-iTCP:#{port}", "-sTCP:LISTEN"]) do
-      {output, 0} ->
-        output
-        |> String.split("\n", trim: true)
-        |> Enum.filter(&String.contains?(&1, "opencode"))
-        |> Enum.find_value(&Resolver.parse_lsof_listener/1)
-        |> case do
-          nil -> :not_found
-          listener -> {:ok, listener}
-        end
-
-      _ ->
-        :not_found
-    end
-  rescue
-    _ -> :not_found
-  end
-
-  defp discover_instance_for_project(project_path, lsof_runner, client)
-       when is_binary(project_path) do
-    instance =
-      Resolver.list_local_listeners(lsof_runner)
-      |> Enum.find_value(fn %{port: port, pid: pid} ->
-        base_url = url_for_port(port)
-
-        case client.get_current_project(base_url: base_url, timeout: 1000, retry_count: 0) do
-          {:ok, project} when is_map(project) ->
-            if Resolver.project_matches?(project_path, project) do
-              %{
-                url: base_url,
-                port: port,
-                pid: pid,
-                source: :lsof_project
-              }
-            end
-
-          _ ->
-            nil
-        end
-      end)
-
-    case instance do
-      nil -> {:error, :no_matching_instance}
-      _ -> {:ok, instance}
-    end
-  end
-
-  defp url_for_port(port) when is_integer(port) do
-    "http://127.0.0.1:#{port}"
-  end
-
   defp elapsed_ms(%{started_at_ms: nil}), do: "unknown"
 
   defp elapsed_ms(%{started_at_ms: started_at_ms}) do
     System.monotonic_time(:millisecond) - started_at_ms
-  end
-
-  defp wait_for_healthy(url, project_path, client, retries \\ 60) do
-    do_wait_for_healthy(url, project_path, client, retries, nil)
-  end
-
-  defp do_wait_for_healthy(_url, _project_path, _client, 0, last_error),
-    do: {:error, {:timeout, last_error}}
-
-  defp do_wait_for_healthy(url, project_path, client, retries, last_error) do
-    port = URI.parse(url).port
-
-    {ready?, new_last_error} =
-      case :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 1000) do
-        {:ok, socket} ->
-          :gen_tcp.close(socket)
-
-          case client.health(base_url: url, timeout: 1000, retry_count: 0) do
-            {:ok, %{"healthy" => true}} ->
-              case client.get_current_project(base_url: url, timeout: 1000, retry_count: 0) do
-                {:ok, project} when is_map(project) ->
-                  if Resolver.project_matches?(project_path, project) do
-                    {true, nil}
-                  else
-                    {false, :wrong_project}
-                  end
-
-                other ->
-                  {false, {:project_not_ready, other}}
-              end
-
-            other ->
-              {false, {:unhealthy, other}}
-          end
-
-        other ->
-          {false, {:port_not_ready, other}}
-      end
-
-    last_error = if ready?, do: last_error, else: new_last_error
-
-    if ready? do
-      :ok
-    else
-      if retries in [60, 30, 10, 5, 1] do
-        Logger.debug(
-          "OpenCode bootstrap: waiting for health at #{url} (retries=#{retries}, last_error=#{inspect(last_error)})"
-        )
-      end
-
-      Process.sleep(1000)
-      do_wait_for_healthy(url, project_path, client, retries - 1, last_error)
-    end
   end
 end

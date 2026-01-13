@@ -333,17 +333,93 @@ export interface MailThread {
   unread_count: number
 }
 
+export interface ReviewComment {
+  id: string
+  type: 'summary' | 'file' | 'line'
+  body: string
+  author_type?: 'agent' | 'human' | 'system'
+  author_name?: string | null
+  file_path?: string | null
+  line_number?: number | null
+  diff_side?: 'old' | 'new' | null
+  before_context?: string | null
+  after_context?: string | null
+  inserted_at: string
+}
+
+export interface ReviewFileChange {
+  path: string
+  additions: number
+  deletions: number
+}
+
 export interface Review {
   id: string
   title: string
   summary: string
+  highlights?: string[]
   diff?: string
+  diff_url?: string | null
   status: 'pending' | 'approved' | 'changes_requested'
+  worktree_path?: string | null
+  base_sha?: string | null
+  head_sha?: string | null
+  files_changed?: ReviewFileChange[]
+  project_ids?: string[]
+  workspace_root?: string | null
+  references?: Record<string, unknown>
+  author_type?: 'agent' | 'human' | 'system'
   author_name?: string | null
-  project_id: string
+  author_id?: string | null
+  session_id?: string | null
+  comments?: ReviewComment[]
   inserted_at: string
-  pr_url?: string | null
-  ai_review?: Record<string, unknown> | null
+  updated_at?: string
+}
+
+export interface FsIssueSummary {
+  id: string
+  title: string
+  status: 'open' | 'in_progress' | 'blocked' | 'done' | string
+  updated_at?: string | null
+  path: string
+}
+
+export interface FsIssueDetail {
+  id: string
+  title: string
+  frontmatter: Record<string, unknown>
+  body_md: string
+}
+
+export interface FsIssueCard {
+  id: string
+  path: string
+  title: string
+  status: 'open' | 'in_progress' | 'blocked' | 'done' | string
+  url?: string
+}
+
+export interface FsReviewSummary {
+  id: string
+  title: string
+  status: 'pending' | 'approved' | 'changes_requested' | string
+  updated_at?: string | null
+  path: string
+}
+
+export interface FsReviewDetail {
+  review: Record<string, unknown>
+  diff: string
+  diff_error?: string | null
+}
+
+export interface FsReviewCard {
+  id: string
+  path: string
+  title: string
+  status: 'pending' | 'approved' | 'changes_requested' | string
+  url?: string
 }
 
 export interface SquadConnection {
@@ -958,20 +1034,14 @@ export function useSessionDiff(sessionId: string) {
 }
 
 export function useSendSessionPrompt() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (data: { session_id: string; prompt: string; model?: string; agent?: string; no_reply?: boolean }) => {
       const { session_id, ...payload } = data
-      // TODO(opencode-squads-gfh): Switch back to /prompt_async once async flow is stable.
-      // Use sync endpoint for easier request/response debugging.
-      await fetcher<void>(`/sessions/${session_id}/prompt`, {
+      await fetcher<void>(`/sessions/${session_id}/prompt_async`, {
         method: 'POST',
         body: JSON.stringify(payload),
       })
       return { ok: true }
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id, 'messages'] })
     },
   })
 }
@@ -1004,6 +1074,100 @@ export function useRunSessionShell() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['sessions', variables.session_id, 'messages'] })
+    },
+  })
+}
+
+export function useFsIssues(projectId?: string) {
+  return useQuery({
+    queryKey: projectId ? ['projects', projectId, 'fs', 'issues'] : ['projects', 'fs', 'issues'],
+    queryFn: () => {
+      if (!projectId) return [] as FsIssueSummary[]
+      return fetcher<FsIssueSummary[]>(`/projects/${projectId}/fs/issues`)
+    },
+    enabled: !!projectId,
+  })
+}
+
+export function useFsIssue(projectId: string | undefined, id: string) {
+  return useQuery({
+    queryKey: projectId ? ['projects', projectId, 'fs', 'issues', id] : ['projects', 'fs', 'issues', id],
+    queryFn: () => {
+      if (!projectId) throw new Error('missing_project_id')
+      return fetcher<FsIssueDetail>(`/projects/${projectId}/fs/issues/${id}`)
+    },
+    enabled: !!projectId && !!id,
+  })
+}
+
+export function useUpdateFsIssue(projectId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: {
+      id: string
+      status?: string
+      title?: string
+      body_md?: string
+    }) => {
+      if (!projectId) throw new Error('missing_project_id')
+      const { id, ...payload } = data
+      return fetcher<FsIssueCard>(`/projects/${projectId}/fs/issues/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      })
+    },
+    onSuccess: (_data, variables) => {
+      if (!projectId) return
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'fs', 'issues'] })
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'fs', 'issues', variables.id] })
+    },
+  })
+}
+
+export function useFsReviews(projectId?: string) {
+  return useQuery({
+    queryKey: projectId ? ['projects', projectId, 'fs', 'reviews'] : ['projects', 'fs', 'reviews'],
+    queryFn: () => {
+      if (!projectId) return [] as FsReviewSummary[]
+      return fetcher<FsReviewSummary[]>(`/projects/${projectId}/fs/reviews`)
+    },
+    enabled: !!projectId,
+  })
+}
+
+export function useFsReview(projectId: string | undefined, id: string) {
+  return useQuery({
+    queryKey: projectId ? ['projects', projectId, 'fs', 'reviews', id] : ['projects', 'fs', 'reviews', id],
+    queryFn: () => {
+      if (!projectId) throw new Error('missing_project_id')
+      return fetcher<FsReviewDetail>(`/projects/${projectId}/fs/reviews/${id}`)
+    },
+    enabled: !!projectId && !!id,
+  })
+}
+
+export function useSubmitFsReview(projectId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: {
+      id: string
+      status: 'approved' | 'changes_requested'
+      feedback?: string
+      comments?: Record<string, unknown>[]
+    }) => {
+      if (!projectId) throw new Error('missing_project_id')
+      const { id, ...payload } = data
+      return fetcher<FsReviewCard>(`/projects/${projectId}/fs/reviews/${id}/submit`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    },
+    onSuccess: (_data, variables) => {
+      if (!projectId) return
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'fs', 'reviews'] })
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'fs', 'reviews', variables.id] })
     },
   })
 }

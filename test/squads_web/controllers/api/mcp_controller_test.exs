@@ -153,6 +153,14 @@ defmodule SquadsWeb.API.MCPControllerTest do
     end
   end
 
+  describe "connect preflight" do
+    test "OPTIONS /api/mcp/:name/connect returns 204", %{conn: conn} do
+      conn = options(conn, ~p"/api/mcp/artifacts/connect")
+      assert response(conn, 204)
+      assert get_resp_header(conn, "access-control-allow-methods") == ["GET,POST,OPTIONS"]
+    end
+  end
+
   describe "auth" do
     test "starts auth flow", %{conn: conn} do
       conn = get(conn, ~p"/api/mcp/test/auth")

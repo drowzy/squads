@@ -23,12 +23,9 @@ import {
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useReviews, useReview, useSubmitReview, Review } from '../api/queries'
 import { useActiveProject } from './__root'
-import { parseDiff, Diff, Hunk } from 'react-diff-view'
-import 'react-diff-view/style/index.css'
+import { PatchDiff } from '@pierre/diffs/react'
 
-// Optional: Prism for syntax highlighting
-import Prism from 'prismjs'
-import 'prismjs/themes/prism-tomorrow.css'
+const DIFF_VIEW_OPTIONS = { theme: 'catppuccin-mocha' as const }
 
 export const Route = createFileRoute('/review')({
   component: ReviewQueue,
@@ -37,9 +34,6 @@ export const Route = createFileRoute('/review')({
 function ReviewQueue() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState('')
-  const [inlineComments, setInlineComments] = useState<Record<string, string[]>>({})
-  const [activeCommentLine, setActiveCommentLine] = useState<string | null>(null)
-  const [commentBuffer, setCommentBuffer] = useState('')
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   
   const { activeProject } = useActiveProject()
@@ -51,31 +45,55 @@ function ReviewQueue() {
 
   const selectedReview = useMemo(() => 
     selectedReviewDetail || reviews.find(r => r.id === selectedId) || null,
-  [selectedReviewDetail, reviews, selectedId])
+    [selectedReviewDetail, reviews, selectedId])
 
-  const files = useMemo(() => {
-    if (!selectedReview?.diff) return []
-    try {
-      return parseDiff(selectedReview.diff)
-    } catch (e) {
-      console.error('Failed to parse diff', e)
-      return []
+  const diffText = selectedReview?.diff ?? ''
+
+  const fileDiffs = useMemo(() => {
+    if (!diffText) return []
+
+    const diffs = diffText.split(/^diff --git /gm).filter(Boolean)
+
+    return diffs.map((diff) => {
+      const match = diff.match(/^a\/(.+?)\s+b\/(.+)$/m)
+      const path = match ? (match[2] || match[1]) : 'unknown'
+
+      return {
+        path,
+        patch: diff.trim()
+      }
+    })
+  }, [diffText])
+
+  const diffFiles = useMemo(() => {
+    return fileDiffs.map((d) => d.path)
+  }, [fileDiffs])
+
+  const diffStats = useMemo(() => {
+    if (!diffText) return { files: 0, additions: 0, deletions: 0 }
+
+    let files = 0
+    let additions = 0
+    let deletions = 0
+
+    for (const line of diffText.split('\n')) {
+      if (line.startsWith('diff --git ')) files += 1
+      if (line.startsWith('+') && !line.startsWith('+++')) additions += 1
+      if (line.startsWith('-') && !line.startsWith('---')) deletions += 1
     }
-  }, [selectedReview])
+
+    return { files, additions, deletions }
+  }, [diffText])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selectedId) {
-        if (activeCommentLine) {
-          setActiveCommentLine(null)
-        } else {
-          setSelectedId(null)
-        }
+        setSelectedId(null)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedId, activeCommentLine])
+  }, [selectedId])
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id)
@@ -86,34 +104,13 @@ function ReviewQueue() {
 
   const handleAction = (status: 'approved' | 'changes_requested') => {
     if (!selectedId) return
-    
-    // Combine general feedback with inline comments
-    let fullFeedback = feedback
-    if (Object.keys(inlineComments).length > 0) {
-      fullFeedback += '\n\n--- INLINE COMMENTS ---\n'
-      Object.entries(inlineComments).forEach(([lineId, comments]) => {
-        fullFeedback += `\nLine ${lineId}:\n`
-        comments.forEach(c => fullFeedback += `- ${c}\n`)
-      })
-    }
 
-    submitReview.mutate({ id: selectedId, status, feedback: fullFeedback }, {
+    submitReview.mutate({ id: selectedId, status, feedback }, {
       onSuccess: () => {
         setSelectedId(null)
         setFeedback('')
-        setInlineComments({})
       }
     })
-  }
-
-  const addInlineComment = (lineId: string) => {
-    if (!commentBuffer.trim()) return
-    setInlineComments(prev => ({
-      ...prev,
-      [lineId]: [...(prev[lineId] || []), commentBuffer.trim()]
-    }))
-    setCommentBuffer('')
-    setActiveCommentLine(null)
   }
 
   if (isLoading) {
@@ -188,7 +185,6 @@ function ReviewQueue() {
                   key={review.id}
                   onClick={() => {
                     setSelectedId(review.id)
-                    setInlineComments({})
                     setFeedback('')
                   }}
                   className={`w-full text-left p-4 border-b border-tui-border/50 transition-all relative group ${
@@ -290,7 +286,7 @@ function ReviewQueue() {
                   </section>
 
                   {/* Diff Section */}
-                  {files.length > 0 && (
+                  {diffText.trim() && (
                     <section id="review-diffs">
                       <div className="flex items-center justify-between mb-4 mt-8">
                         <div className="flex items-center gap-2 text-xs font-bold text-tui-accent">
@@ -299,123 +295,24 @@ function ReviewQueue() {
                         </div>
                         <div className="h-[2px] flex-1 bg-tui-accent/10 mx-4 hidden sm:block" />
                       </div>
-                      
-                      <div className="space-y-4 md:space-y-6">
-                        {files.map((file, fileIdx) => (
-                          <div key={fileIdx} id={`file-${fileIdx}`} className="border border-tui-border bg-ctp-crust/60 rounded-sm overflow-hidden">
-                            <div className="bg-ctp-crust/40 px-3 py-2 border-b border-tui-border flex items-center justify-between gap-2">
-                              <span className="text-xs text-tui-text font-bold flex items-center gap-2 min-w-0">
-                                <FileText size={12} className="text-tui-accent shrink-0" />
-                                <span className="truncate">
-                                  {(file as any).newPath === (file as any).oldPath ? (file as any).newPath : `${(file as any).oldPath} -> ${(file as any).newPath}`}
-                                </span>
-                              </span>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs text-green-500 font-bold">+{(file as any).additions}</span>
-                                <span className="text-xs text-red-500 font-bold">-{(file as any).deletions}</span>
-                              </div>
-                            </div>
-                            
-                            <div className="diff-view-container overflow-x-auto">
-                              <Diff viewType="unified" diffType={file.type} hunks={file.hunks}>
-                                {hunks => hunks.map((hunk: any) => (
-                                  <Hunk 
-                                    key={hunk.content} 
-                                    hunk={hunk} 
-                                    // @ts-ignore - gutterEvents is not typed in HunkProps but is supported
-                                    gutterEvents={{
-                                      onClick: ({ change }: { change: any }) => {
-                                        const id = `${(file as any).newPath}:${change.newLineNumber || change.oldLineNumber}`
-                                        setActiveCommentLine(activeCommentLine === id ? null : id)
-                                      }
-                                    } as any}
-                                    widgets={{
-                                      ...Object.keys(inlineComments).reduce((acc, id) => {
-                                        const [path, line] = id.split(':')
-                                        if (path === (file as any).newPath) {
-                                          const lineNum = parseInt(line)
-                                          // Find the hunk that contains this line
-                                          const hunkWithLine = file.hunks.find((h: any) => 
-                                            h.changes.some((c: any) => (c.newLineNumber || c.oldLineNumber) === lineNum)
-                                          )
-                                          
-                                          if (hunkWithLine) {
-                                            const change = hunkWithLine.changes.find((c: any) => (c.newLineNumber || c.oldLineNumber) === lineNum)
-                                            if (change) {
-                                              // @ts-ignore - lineNumber/oldLineNumber/newLineNumber type mismatch
-                                              const key = `${change.type}-${change.lineNumber || change.oldLineNumber || change.newLineNumber}`
-                                              acc[key] = (
-                                                <div className="bg-tui-accent/10 border-y border-tui-accent/30 p-3 space-y-2">
-                                                  {inlineComments[id].map((c, i) => (
-                                                    <div key={i} className="flex gap-2 items-start group/comment">
-                                                      <MessageSquare size={10} className="mt-1 text-tui-accent" />
-                                                      <div className="flex-1">
-                                                        <p className="text-[10px] text-tui-text italic whitespace-pre-wrap">{c}</p>
-                                                      </div>
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              )
-                                            }
-                                          }
-                                        }
-                                        return acc
-                                      }, {} as any),
-                                      ...(activeCommentLine?.startsWith((file as any).newPath + ':') ? (() => {
-                                        const lineNum = parseInt(activeCommentLine.split(':')[1])
-                                        const hunkWithLine = file.hunks.find((h: any) => 
-                                          h.changes.some((c: any) => (c.newLineNumber || c.oldLineNumber) === lineNum)
-                                        )
-                                        const change = (hunkWithLine as any)?.changes.find((c: any) => (c.newLineNumber || c.oldLineNumber) === lineNum)
-                                        
-                                        if (change) {
-                                          // @ts-ignore - lineNumber/oldLineNumber/newLineNumber type mismatch
-                                          const key = `${change.type}-${change.lineNumber || change.oldLineNumber || change.newLineNumber}`
-                                          return {
-                                            [key]: (
-                                               <div className="bg-tui-accent/5 border-y border-tui-accent/20 p-3">
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-2 text-[8px] font-bold text-tui-accent mb-1">
-                            <Plus size={10} />
-                            Add inline feedback
+
+                      {fileDiffs.map((fileDiff, idx) => (
+                        <div key={`${fileDiff.path}-${idx}`} className="border border-tui-border bg-ctp-crust/60 rounded-sm overflow-hidden mb-4">
+                          <div className="bg-ctp-crust/40 px-3 py-2 border-b border-tui-border flex items-center justify-between gap-2">
+                            <span className="text-xs text-tui-text font-bold flex items-center gap-2 min-w-0">
+                              <FileText size={12} className="text-tui-accent shrink-0" />
+                              <span className="truncate">{fileDiff.path}</span>
+                            </span>
                           </div>
-                                                  <div className="flex gap-2">
-                                                    <input 
-                                                      autoFocus
-                                                      value={commentBuffer}
-                                                      onChange={e => setCommentBuffer(e.target.value)}
-                                                      onKeyDown={e => {
-                                                        if (e.key === 'Enter') addInlineComment(activeCommentLine)
-                                                        if (e.key === 'Escape') setActiveCommentLine(null)
-                                                      }}
-                                                      placeholder="CMD> Enter inline comment..."
-                                                      className="flex-1 bg-ctp-crust border border-tui-border-dim p-2 text-[10px] outline-none focus:border-tui-accent font-mono"
-                                                    />
-                                                    <button 
-                                                      onClick={() => addInlineComment(activeCommentLine)}
-                                                      className="bg-tui-accent text-tui-bg px-3 py-1 text-[10px] font-bold hover:opacity-80 flex items-center gap-2"
-                                                    >
-                                                      <Send size={12} />
-                                                      Commit
-                                                    </button>
-                                                  </div>
-                                                  <div className="text-[8px] text-tui-dim italic">
-                                                    Press ESC to cancel • Enter to commit
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            )
-                                          }
-                                        }
-                                        return {}
-                                      })() : {})
-                                    }}
-                                  />
-                                ))}
-                              </Diff>
-                            </div>
+
+                          <div className="p-3 overflow-x-auto">
+                            <PatchDiff patch={fileDiff.patch} options={DIFF_VIEW_OPTIONS} />
                           </div>
-                        ))}
+                        </div>
+                      ))}
+
+                       <div className="flex items-center gap-2 shrink-0 text-[10px] text-tui-dim font-mono mt-2">
+                        +{diffStats.additions} / -{diffStats.deletions} • {diffStats.files} files
                       </div>
                     </section>
                   )}
@@ -460,18 +357,9 @@ function ReviewQueue() {
                       onClick={() => scrollToSection('review-diffs')}
                       className="w-full text-left px-2 py-1 text-[9px] text-tui-dim hover:text-tui-accent hover:bg-tui-accent/5 flex items-center justify-between group"
                     >
-                      Diff files ({files.length})
+                      Diff ({diffStats.files})
                       <ChevronRight size={10} className="opacity-0 group-hover:opacity-100" />
                     </button>
-                    {files.slice(0, 5).map((f, i) => (
-                      <button 
-                        key={i}
-                        onClick={() => scrollToSection(`file-${i}`)}
-                        className="w-full text-left px-4 py-0.5 text-[8px] text-tui-dim/60 hover:text-tui-accent hover:bg-tui-accent/5 truncate"
-                      >
-                        - {f.newPath.split('/').pop()}
-                      </button>
-                    ))}
                     <button 
                       onClick={() => scrollToSection('review-comments')}
                       className="w-full text-left px-2 py-1 text-[9px] text-tui-dim hover:text-tui-accent hover:bg-tui-accent/5 flex items-center justify-between group"
@@ -487,22 +375,21 @@ function ReviewQueue() {
                     <Clock size={10} />
                     Statistics
                   </div>
-                  <div className="space-y-1 text-[8px] text-tui-dim">
-                    <div className="flex justify-between">
-                      <span>Additions:</span>
-                      {/* @ts-ignore - additions property exists on File but not in types */}
-                      <span className="text-green-500">+{files.reduce((a, f) => a + (f as any).additions, 0)}</span>
+                   <div className="space-y-1 text-[8px] text-tui-dim">
+                     <div className="flex justify-between">
+                       <span>Files:</span>
+                       <span className="text-tui-accent">{diffStats.files}</span>
+                     </div>
+                     <div className="flex justify-between">
+                       <span>Additions:</span>
+                       <span className="text-green-500">+{diffStats.additions}</span>
+                     </div>
+                      <div className="flex justify-between">
+                        <span>Deletions:</span>
+                        <span className="text-red-500">-{diffStats.deletions}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Deletions:</span>
-                      {/* @ts-ignore - deletions property exists on File but not in types */}
-                      <span className="text-red-500">-{files.reduce((a, f) => a + (f as any).deletions, 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Comments:</span>
-                      <span className="text-tui-accent">{Object.keys(inlineComments).length}</span>
-                    </div>
-                  </div>
+
                 </div>
               </div>
 

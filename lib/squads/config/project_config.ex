@@ -111,7 +111,8 @@ defmodule Squads.Config.ProjectConfig do
     with :ok <- validate_version(config),
          :ok <- validate_orchestration(config),
          :ok <- validate_integrations(config),
-         :ok <- validate_worktrees(config) do
+         :ok <- validate_worktrees(config),
+         :ok <- validate_features(config) do
       :ok
     end
   end
@@ -204,6 +205,10 @@ defmodule Squads.Config.ProjectConfig do
 
   defp validate_worktrees(%{"worktrees" => _}), do: {:error, "worktrees must be a map"}
   defp validate_worktrees(_), do: :ok
+
+  defp validate_features(%{"features" => features}) when is_map(features), do: :ok
+  defp validate_features(%{"features" => _}), do: {:error, "features must be a map"}
+  defp validate_features(_), do: :ok
 
   defp read_file(path) do
     case File.read(path) do

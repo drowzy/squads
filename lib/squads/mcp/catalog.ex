@@ -69,14 +69,31 @@ defmodule Squads.MCP.Catalog do
     with {:ok, servers} <- fetch_server_list() do
       servers
       |> Task.async_stream(&fetch_server_entry/1, max_concurrency: 6, timeout: 15_000)
-      |> Enum.reduce_while({:ok, []}, fn
-        {:ok, {:ok, entry}}, {:ok, acc} -> {:cont, {:ok, [entry | acc]}}
-        {:ok, {:error, reason}}, _acc -> {:halt, {:error, reason}}
-        {:exit, reason}, _acc -> {:halt, {:error, reason}}
+      |> Enum.reduce({[], []}, fn
+        {:ok, {:ok, entry}}, {entries, failures} -> {[entry | entries], failures}
+        {:ok, {:error, reason}}, {entries, failures} -> {entries, [{:error, reason} | failures]}
+        {:exit, reason}, {entries, failures} -> {entries, [{:exit, reason} | failures]}
       end)
       |> case do
-        {:ok, entries} -> {:ok, Enum.sort_by(entries, & &1.name)}
-        error -> error
+        {entries, []} ->
+          Logger.debug("Fetched all #{length(entries)} catalog entries")
+          {:ok, Enum.sort_by(entries, & &1.name)}
+
+        {entries, failures} when entries != [] ->
+          Logger.warning(
+            "Fetched #{length(entries)} catalog entries with #{length(failures)} failures"
+          )
+
+          Enum.each(failures, fn
+            {:error, reason} -> Logger.debug("Catalog entry fetch error: #{inspect(reason)}")
+            {:exit, reason} -> Logger.debug("Catalog entry fetch exit: #{inspect(reason)}")
+          end)
+
+          {:ok, Enum.sort_by(entries, & &1.name)}
+
+        {[], failures} ->
+          Logger.error("All catalog entries failed to fetch", failures: inspect(failures))
+          {:error, :all_entries_failed}
       end
     end
   end

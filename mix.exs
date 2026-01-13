@@ -56,6 +56,7 @@ defmodule Squads.MixProject do
       {:gettext, "~> 0.26"},
       {:jason, "~> 1.2"},
       {:yaml_elixir, "~> 2.9"},
+      {:uuidv7, "~> 1.0"},
       {:erlexec, "~> 2.0"},
       {:dns_cluster, "~> 0.2.0"},
       {:websock_adapter, "~> 0.5.8"},

@@ -1,13 +1,12 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Terminal, Mail, Archive, Activity, Cpu, ChevronRight, ChevronDown, Loader2, Inbox, Pencil, Play, Info, History, X, ListTodo, FileDiff } from 'lucide-react'
+import { Mail, Archive, Activity, Cpu, ChevronDown, Loader2, Inbox, Pencil, Play, X } from 'lucide-react'
 import React, { useState, useEffect, useMemo } from 'react'
-import { MultiFileDiff, PatchDiff, type FileContents } from '@pierre/diffs/react'
 
-import { 
-  useEvents, 
-  useSessions, 
-  useMailThreads, 
-  useSquads, 
+import {
+  useEvents,
+  useSessions,
+  useMailThreads,
+  useSquads,
   useStopSession,
   useAbortSession,
   useArchiveSession,
@@ -20,45 +19,18 @@ import {
   useSessionTodos,
   useSessionDiff,
   type Agent,
-  type SessionDiffEntry,
 } from '../api/queries'
 import { EventTimeline } from '../components/events/EventTimeline'
 import { useActiveProject } from './__root'
 import { Modal, FormField, Button } from '../components/Modal'
 import { useNotifications } from '../components/Notifications'
 import { SessionChat, type AgentMode } from '../components/SessionChat'
+import { AgentLayout } from '../components/AgentLayout'
 import { cn } from '../lib/cn'
 
 export const Route = createFileRoute('/agent/$agentId')({
   component: AgentDetail,
 })
-
-function TabButton({ 
-  active, 
-  onClick, 
-  icon, 
-  label 
-}: { 
-  active: boolean; 
-  onClick: () => void; 
-  icon: React.ReactNode; 
-  label: string 
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-widest transition-colors border-b-2",
-        active 
-          ? "text-tui-accent border-tui-accent bg-tui-accent/5" 
-          : "text-tui-dim border-transparent hover:text-tui-text hover:bg-tui-dim/5"
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  )
-}
 
 function SessionTodos({ sessionId }: { sessionId: string }) {
   const { data: todos, isLoading, error } = useSessionTodos(sessionId)
@@ -96,261 +68,6 @@ function SessionTodos({ sessionId }: { sessionId: string }) {
   )
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-const DIFF_VIEW_OPTIONS = { theme: 'catppuccin-mocha' as const }
-const DIFF_VIEW_OPTIONS_EMBEDDED = { theme: 'catppuccin-mocha' as const, disableFileHeader: true }
-
-function looksLikePatch(text: string) {
-  const trimmed = text.trim()
-  if (!trimmed) return false
-
-  return /^diff --git /m.test(trimmed) || /^@@/m.test(trimmed) || /^(---|\+\+\+)/m.test(trimmed)
-}
-
-function extractDiffText(value: unknown): string | null {
-  if (typeof value === 'string') return value
-  if (!value) return null
-  if (Array.isArray(value)) return null
-  if (!isRecord(value)) return null
-
-  const nested = (value as Record<string, unknown>).data
-  if (nested) {
-    const nestedText = extractDiffText(nested)
-    if (nestedText) return nestedText
-  }
-
-  const candidates = [
-    (value as Record<string, unknown>).diff,
-    (value as Record<string, unknown>).patch,
-    (value as Record<string, unknown>).text,
-    (value as Record<string, unknown>).output,
-  ]
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string') return candidate
-  }
-
-  return null
-}
-
-function extractDiffEntries(value: unknown): SessionDiffEntry[] | null {
-  if (!value) return null
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) return []
-
-    const entries = value.filter(isRecord) as SessionDiffEntry[]
-    return entries.length > 0 ? entries : null
-  }
-
-  if (!isRecord(value)) return null
-
-  const candidates = [
-    (value as Record<string, unknown>).diffs,
-    (value as Record<string, unknown>).files,
-    (value as Record<string, unknown>).data,
-  ]
-
-  for (const candidate of candidates) {
-    const entries = extractDiffEntries(candidate)
-    if (entries) return entries
-  }
-
-  return null
-}
-
-function getDiffEntryTitle(entry: SessionDiffEntry, index: number) {
-  return entry.path || entry.file || entry.filename || `Change ${index + 1}`
-}
-
-function formatDiffEntryStats(entry: SessionDiffEntry) {
-  const additions = typeof entry.additions === 'number' ? entry.additions : null
-  const deletions = typeof entry.deletions === 'number' ? entry.deletions : null
-
-  if (additions == null && deletions == null) return null
-
-  const parts: string[] = []
-  if (additions != null) parts.push(`+${additions}`)
-  if (deletions != null) parts.push(`-${deletions}`)
-  return parts.join(' ')
-}
-
-function extractLatestSummaryDiffEntries(
-  messages: Array<{ info?: { summary?: unknown } }> | undefined
-): SessionDiffEntry[] | null {
-  if (!Array.isArray(messages)) return null
-
-  for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-    const summary = messages[idx]?.info?.summary
-    if (!summary || typeof summary !== 'object' || Array.isArray(summary)) continue
-
-    const diffs = (summary as Record<string, unknown>).diffs
-    const entries = extractDiffEntries(diffs)
-    if (entries && entries.length > 0) return entries
-  }
-
-  return null
-}
-
-function SessionDiff({ sessionId }: { sessionId: string }) {
-  const { data: diff, isLoading: isLoadingDiff, error: diffError } = useSessionDiff(sessionId)
-  const { data: messages, isLoading: isLoadingMessages } = useSessionMessages(sessionId, {
-    enabled: !!sessionId,
-    limit: 100,
-  })
-
-  const diffText = extractDiffText(diff)
-  const diffEntries = extractDiffEntries(diff)
-  const summaryEntries = extractLatestSummaryDiffEntries(messages)
-
-  const entriesToRender = diffEntries && diffEntries.length > 0 ? diffEntries : summaryEntries
-  const sourceLabel =
-    diffEntries && diffEntries.length > 0 ? null : summaryEntries ? 'From message summary' : null
-
-  const diffCards = useMemo(() => {
-    if (!entriesToRender || entriesToRender.length === 0) return []
-
-    return entriesToRender.map((entry, idx) => {
-      const title = getDiffEntryTitle(entry, idx)
-      const stats = formatDiffEntryStats(entry)
-      const entryText = extractDiffText(entry)
-      const beforeText = typeof entry.before === 'string' ? entry.before : null
-      const afterText = typeof entry.after === 'string' ? entry.after : null
-
-      const fileName = entry.path || entry.file || entry.filename || title
-      const keyBase = entry.path || entry.file || entry.filename || 'change'
-
-      if (entryText && entryText.trim() !== '' && looksLikePatch(entryText)) {
-        return {
-          key: `${keyBase}-${idx}`,
-          title,
-          stats,
-          type: 'patch' as const,
-          patch: entryText,
-        }
-      }
-
-      if (beforeText != null || afterText != null) {
-        const oldFile: FileContents = {
-          name: fileName,
-          contents: beforeText ?? '',
-        }
-
-        const newFile: FileContents = {
-          name: fileName,
-          contents: afterText ?? '',
-        }
-
-        return {
-          key: `${keyBase}-${idx}`,
-          title,
-          stats,
-          type: 'file' as const,
-          oldFile,
-          newFile,
-        }
-      }
-
-      const fallbackText = entryText && entryText.trim() !== '' ? entryText : safeStringify(entry)
-
-      return {
-        key: `${keyBase}-${idx}`,
-        title,
-        stats,
-        type: 'text' as const,
-        text: fallbackText,
-      }
-    })
-  }, [entriesToRender])
-
-  if (isLoadingDiff) return <div className="animate-pulse text-tui-dim">Loading diff...</div>
-  if (diffError) return <div className="text-red-500">Error loading diff</div>
-
-  if (diffText && diffText.trim() !== '' && looksLikePatch(diffText)) {
-    return (
-      <div className="border border-tui-border bg-ctp-crust/20 rounded-sm overflow-hidden">
-        <PatchDiff patch={diffText} options={DIFF_VIEW_OPTIONS} />
-      </div>
-    )
-  }
-
-  if (diffText && diffText.trim() !== '') {
-    return (
-      <pre className="text-[10px] leading-relaxed overflow-x-auto whitespace-pre-wrap text-tui-text/90">
-        {diffText}
-      </pre>
-    )
-  }
-
-  if (entriesToRender && entriesToRender.length > 0) {
-    return (
-      <div className="space-y-3">
-        {sourceLabel && (
-          <div className="text-[9px] uppercase tracking-widest text-tui-dim">{sourceLabel}</div>
-        )}
-        {diffCards.map((card) => (
-          <div
-            key={card.key}
-            className="border border-tui-border bg-ctp-crust/20 rounded-sm overflow-hidden"
-          >
-            <div className="px-2 py-1 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between gap-2">
-              <div className="text-[10px] font-bold text-tui-text truncate">{card.title}</div>
-              {card.stats && (
-                <div className="text-[9px] text-tui-dim font-mono shrink-0">{card.stats}</div>
-              )}
-            </div>
-            <div className="p-2">
-              {card.type === 'patch' ? (
-                <PatchDiff patch={card.patch} options={DIFF_VIEW_OPTIONS_EMBEDDED} />
-              ) : card.type === 'file' ? (
-                <MultiFileDiff
-                  oldFile={card.oldFile}
-                  newFile={card.newFile}
-                  options={DIFF_VIEW_OPTIONS_EMBEDDED}
-                />
-              ) : (
-                <pre className="text-[10px] leading-relaxed overflow-x-auto whitespace-pre-wrap text-tui-text/90">
-                  {card.text}
-                </pre>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  const diffIsEmpty =
-    diff == null ||
-    (typeof diff === 'string' && diff.trim() === '') ||
-    (Array.isArray(diff) && diff.length === 0)
-
-  if (diffIsEmpty && isLoadingMessages) {
-    return <div className="animate-pulse text-tui-dim">Loading diff...</div>
-  }
-
-  if (diffIsEmpty) {
-    return <div className="text-tui-dim italic">No changes recorded in this session.</div>
-  }
-
-  return (
-    <pre className="text-[10px] leading-relaxed overflow-x-auto whitespace-pre-wrap text-tui-text/90">
-      {safeStringify(diff)}
-    </pre>
-  )
-}
-
-function safeStringify(value: unknown) {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
 function AgentDetail() {
   const { agentId } = Route.useParams()
   const { activeProject } = useActiveProject()
@@ -365,20 +82,13 @@ function AgentDetail() {
   const { addNotification } = useNotifications()
   const [editModalOpen, setEditModalOpen] = useState(false)
 
-  const [historyFilter, setHistoryFilter] = useState<'active' | 'history' | 'all'>('active')
-  const [activeTab, setActiveTab] = useState<'chat' | 'todos' | 'diff' | 'history'>('chat')
-
   const sessions = useMemo(() => {
-    let filtered = allSessions
-    if (historyFilter === 'active') filtered = allSessions.filter(s => ['running', 'pending', 'paused', 'starting'].includes(s.status))
-    if (historyFilter === 'history') filtered = allSessions.filter(s => ['completed', 'failed', 'cancelled', 'archived'].includes(s.status))
-    return filtered.sort((a, b) => new Date(b.inserted_at).getTime() - new Date(a.inserted_at).getTime())
-  }, [allSessions, historyFilter])
+    return allSessions.sort((a, b) => new Date(b.inserted_at).getTime() - new Date(a.inserted_at).getTime())
+  }, [allSessions])
   
   // Sticky mode state per session (runtime only, not persisted)
   const [sessionModes, setSessionModes] = useState<Record<string, AgentMode>>({})
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
-  const [mobileSidebar, setMobileSidebar] = useState<'history' | 'info' | null>(null)
 
   const handleModeChange = (sessionId: string, mode: AgentMode) => {
 
@@ -417,6 +127,13 @@ function AgentDetail() {
     agent_id: agentId,
     limit: 50
   })
+
+  const { data: messages = [] } = useSessionMessages(currentSession?.id || '', {
+    enabled: !!currentSession?.id,
+    limit: 100,
+  })
+
+  const { data: sessionDiff } = useSessionDiff(currentSession?.id || '')
 
   const handleStopSession = async () => {
     if (!activeSession) return
@@ -474,7 +191,6 @@ function AgentDetail() {
     }
 
     setSelectedSessionId(sessionId)
-    setMobileSidebar(null)
   }
 
   const handleStartSession = async () => {
@@ -535,426 +251,235 @@ function AgentDetail() {
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="h-full flex flex-col min-h-0 gap-3">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-tui-border pb-4 md:pb-6">
-        <div className="flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 md:w-16 md:h-16 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40 shrink-0">
-            <Cpu size={24} className="text-tui-accent md:hidden" />
-            <Cpu size={32} className="text-tui-accent hidden md:block" />
-          </div>
-          <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tighter">{agent.name}</h2>
-              <span className={`text-xs px-2 py-0.5 border font-bold ${activeSession ? 'border-tui-accent text-tui-accent' : 'border-tui-border-dim text-tui-dim'}`}>
-                {agent.status}
-              </span>
-              <button 
-                onClick={() => setEditModalOpen(true)}
-                disabled={!agentData}
-                className="p-1 text-tui-dim hover:text-tui-accent transition-colors focus:outline-none"
-                title="Edit Agent"
-              >
-                <Pencil size={14} />
-              </button>
+      <div className="border border-tui-border bg-ctp-crust/20">
+        <div className="p-3 md:p-4 space-y-3">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+            <div className="flex items-center gap-3 md:gap-4 min-w-0">
+              <div className="w-12 h-12 md:w-16 md:h-16 border border-tui-border-dim flex items-center justify-center bg-ctp-crust/40 shrink-0">
+                <Cpu size={24} className="text-tui-accent md:hidden" />
+                <Cpu size={32} className="text-tui-accent hidden md:block" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className="text-2xl md:text-3xl font-bold tracking-tighter truncate">{agent.name}</h2>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 border font-bold uppercase tracking-widest ${activeSession ? 'border-tui-accent text-tui-accent bg-tui-accent/5' : 'border-tui-border-dim text-tui-dim'}`}
+                  >
+                    {agent.status}
+                  </span>
+                  <button
+                    onClick={() => setEditModalOpen(true)}
+                    disabled={!agentData}
+                    className="p-1 text-tui-dim hover:text-tui-accent transition-colors focus:outline-none"
+                    title="Edit Agent"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </div>
+                <p className="text-tui-dim font-bold tracking-widest text-[10px] mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="truncate">{agent.role}</span>
+                  <span>•</span>
+                  <span
+                    className="truncate"
+                    title={
+                      activeModelInfo
+                        ? `Context: ${activeModelInfo.context_window || '?'} • Output: ${activeModelInfo.max_output || '?'}`
+                        : 'Model details unavailable'
+                    }
+                  >
+                    {agent.model}
+                    {activeModelInfo && (activeModelInfo.context_window || activeModelInfo.max_output) && (
+                      <span className="ml-1 text-[10px] opacity-70">
+                        ({activeModelInfo.context_window ? `${Math.round(activeModelInfo.context_window / 1000)}k` : '?'} /{' '}
+                        {activeModelInfo.max_output ? `${Math.round(activeModelInfo.max_output / 1000)}k` : '?'})
+                      </span>
+                    )}
+                  </span>
+                </p>
+              </div>
             </div>
-            <p className="text-tui-dim font-bold tracking-widest text-xs mt-1 flex items-center gap-2 flex-wrap">
-              <span>{agent.role}</span>
-              <span>•</span>
-              <span title={activeModelInfo ? `Context: ${activeModelInfo.context_window || '?'} • Output: ${activeModelInfo.max_output || '?'}` : 'Model details unavailable'}>
-                {agent.model}
-                {activeModelInfo && (activeModelInfo.context_window || activeModelInfo.max_output) && (
-                   <span className="ml-1 text-[10px] opacity-70">
-                     ({activeModelInfo.context_window ? `${Math.round(activeModelInfo.context_window / 1000)}k` : '?'} / {activeModelInfo.max_output ? `${Math.round(activeModelInfo.max_output / 1000)}k` : '?'})
-                   </span>
-                )}
-              </span>
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-start justify-end gap-2 sm:gap-3">
-          <div className="flex sm:hidden gap-1">
-            <button
-              onClick={() => setMobileSidebar('history')}
-              className={cn(
-                "p-2 border border-tui-border hover:text-tui-accent transition-colors",
-                mobileSidebar === 'history' && "text-tui-accent border-tui-accent bg-tui-accent/10"
-              )}
-              title="Session History"
-            >
-              <History size={16} />
-            </button>
-            <button
-              onClick={() => setMobileSidebar('info')}
-              className={cn(
-                "p-2 border border-tui-border hover:text-tui-accent transition-colors",
-                mobileSidebar === 'info' && "text-tui-accent border-tui-accent bg-tui-accent/10"
-              )}
-              title="Agent Info"
-            >
-              <Info size={16} />
-            </button>
-          </div>
-          <div className="text-left sm:text-right space-y-1 hidden xs:block">
-            <div className="text-xs text-tui-dim tracking-widest">
-              {currentSession?.status === 'running' ? 'Active session' : 'Historical session'}
-            </div>
-            <div className="text-sm font-bold text-tui-text font-mono truncate max-w-[200px] sm:max-w-none">
-              {currentSession?.id || 'NONE'}
-            </div>
-          </div>
-          <button
-            onClick={handleStartSession}
-            disabled={!agentData || createSession.isPending}
-            className="p-2 border border-tui-accent text-tui-accent hover:bg-tui-accent/10 transition-colors focus:outline-none disabled:opacity-50"
-            title="Start New Session"
-            aria-label="Start new session"
-          >
-            {createSession.isPending ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-          </button>
-        </div>
-      </div>
+            <div className="flex flex-wrap items-start justify-end gap-2 shrink-0">
+              <div className="text-left lg:text-right space-y-1 hidden sm:block">
+                <div className="text-[10px] text-tui-dim tracking-widest uppercase font-bold">
+                  {currentSession?.status === 'running' ? 'Active session' : currentSession ? 'Historical session' : 'No session'}
+                </div>
+                <div className="text-[10px] font-bold text-tui-text font-mono truncate max-w-[240px]">
+                  {currentSession?.id || 'NONE'}
+                </div>
+              </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0 flex-1 overflow-hidden relative">
-        {/* Mobile Sidebar Overlay */}
-        {mobileSidebar && (
-          <div 
-            className="fixed inset-0 bg-black/60 z-40 lg:hidden transition-opacity duration-300"
-            onClick={() => setMobileSidebar(null)}
-          />
-        )}
-
-        {/* Sidebar: Session History */}
-          <aside className={cn(
-            "w-full sm:w-80 lg:w-72 shrink-0 flex flex-col border border-tui-border lg:h-full transition-transform duration-300 ease-in-out",
-            "lg:static lg:translate-x-0",
-            "fixed inset-y-0 left-0 z-50 bg-ctp-mantle lg:bg-transparent",
-            mobileSidebar === 'history' 
-              ? "translate-x-0" 
-              : "-translate-x-full lg:translate-x-0"
-          )}>
-            <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold tracking-widest">
-                    <Archive size={14} />
-                    Session history
-                  </div>
-
-              <div className="flex items-center gap-1">
+              {activeSession ? (
+                <button
+                  onClick={handleStopSession}
+                  disabled={stopSession.isPending}
+                  className="px-3 py-2 border border-red-900/50 bg-red-950/20 text-red-500 font-bold text-[10px] hover:bg-red-900/30 transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {stopSession.isPending ? 'Terminating...' : 'Terminate'}
+                </button>
+              ) : (
                 <button
                   onClick={handleStartSession}
                   disabled={!agentData || createSession.isPending}
-                  className="p-1 hover:text-tui-accent transition-colors disabled:opacity-50"
-                  title="New Session"
+                  className="px-3 py-2 border border-tui-accent bg-tui-accent/10 text-tui-accent font-bold text-[10px] hover:bg-tui-accent hover:text-tui-bg transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  <Pencil size={14} />
+                  {createSession.isPending ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                  {createSession.isPending ? 'Starting...' : 'Start session'}
                 </button>
-                <button
-                  onClick={() => setMobileSidebar(null)}
-                  className="p-1 hover:text-tui-accent transition-colors lg:hidden"
-                  title="Close"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 border border-tui-border p-0.5 bg-ctp-crust/40">
-               {(['active', 'history', 'all'] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setHistoryFilter(f)}
-                  className={cn(
-                    "flex-1 px-1 py-0.5 text-[8px] font-bold uppercase tracking-widest transition-colors",
-                    historyFilter === f ? "bg-tui-accent text-tui-bg" : "text-tui-dim hover:text-tui-text"
-                  )}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-tui-border/50 bg-ctp-mantle/50">
-            {sessions
-              .map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleSelectSession(s.id)}
-                  className={cn(
-                    'w-full text-left p-3 transition-colors hover:bg-tui-dim/5',
-                    selectedSessionId === s.id ? 'bg-tui-accent/10 border-l-2 border-l-tui-accent' : ''
-                  )}
-                >
-                  <div className="flex justify-between items-start mb-1 gap-2">
-                    <span className={cn(
-                      "text-[10px] font-bold uppercase px-1 border",
-                      s.status === 'running' ? 'border-tui-accent text-tui-accent' : 'border-tui-border-dim text-tui-dim'
-                    )}>
-                      {s.status}
-                    </span>
-                    <span className="text-[9px] text-tui-dim font-mono">{new Date(s.inserted_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="text-xs font-bold text-tui-text truncate mb-1">
-                    {(s.metadata?.title as string) || s.ticket_key || `Session ${s.id.slice(0, 8)}`}
-                  </div>
-                  <div className="text-[10px] text-tui-dim font-mono truncate">
-                    {new Date(s.inserted_at).toLocaleTimeString()}
-                  </div>
-                </button>
-              ))}
-            {sessions.length === 0 && (
-              <div className="p-4 text-xs text-tui-dim italic text-center">
-                No history found.
-              </div>
-            )}
-          </div>
-        </aside>
-
-        {/* Main Content: Chat & Events */}
-        <div className="flex-1 flex flex-col gap-4 md:gap-6 min-w-0">
-          {/* Chat Panel */}
-          <section className="border border-tui-border flex flex-col flex-[2] min-h-[400px] lg:min-h-[500px]">
-            {currentSession ? (
-              <div className="flex-1 flex flex-col">
-                <div className="flex items-center justify-between border-b border-tui-border bg-ctp-crust/40 p-1">
-                  <div className="flex items-center gap-1">
-                      <TabButton 
-                       active={activeTab === 'chat'} 
-                       onClick={() => setActiveTab('chat')}
-                       icon={<Terminal size={12} />}
-                       label="Chat"
-                     />
-                     <TabButton 
-                       active={activeTab === 'todos'} 
-                       onClick={() => setActiveTab('todos')}
-                       icon={<ListTodo size={12} />}
-                       label="Tasks"
-                     />
-                     <TabButton 
-                       active={activeTab === 'diff'} 
-                       onClick={() => setActiveTab('diff')}
-                       icon={<FileDiff size={12} />}
-                       label="Diff"
-                     />
-                     <TabButton 
-                       active={activeTab === 'history'} 
-                       onClick={() => setActiveTab('history')}
-                       icon={<History size={12} />}
-                       label="History"
-                     />
-                  </div>
-                  {currentSession.status === 'running' && (
-                      <div className="px-2 py-0.5 text-[10px] font-bold text-tui-accent flex items-center gap-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-tui-accent animate-pulse" />
-                        Running
-                      </div>
-                  )}
-                </div>
-
-                <div className="flex-1 min-h-0 overflow-hidden relative">
-                  {activeTab === 'chat' && (
-                    <SessionChat
-                      session={currentSession}
-                      mode={sessionModes[currentSession.id] || 'plan'}
-                      onModeChange={(mode) => handleModeChange(currentSession.id, mode)}
-                      onNewSession={handleStartSession}
-                      showModeToggle={currentSession.status === 'running'}
-                      showHeader={false}
-                      className="h-full"
-                    />
-                  )}
-                  {activeTab === 'todos' && (
-                      <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto">
-                        <div className="text-xs font-bold tracking-tui text-tui-dim mb-4">Session tasks</div>
-                        <SessionTodos sessionId={currentSession.id} />
-                      </div>
-                    )}
-                    {activeTab === 'diff' && (
-                      <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto font-mono text-xs">
-                        <div className="text-xs font-bold tracking-tui text-tui-dim mb-4">Pending changes</div>
-                        <SessionDiff sessionId={currentSession.id} />
-                      </div>
-                    )}
-                    {activeTab === 'history' && (
-                      <div className="h-full flex flex-col p-4 bg-ctp-mantle/50 overflow-y-auto">
-                        <div className="text-xs font-bold tracking-tui text-tui-dim mb-4">Event timeline</div>
-                        <EventTimeline events={events} />
-                      </div>
-                    )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center text-tui-dim gap-2 bg-ctp-mantle/50 p-4">
-                <div className="text-xs uppercase tracking-tui font-bold">No session selected</div>
-                <div className="text-[10px] italic">Start a session to begin chatting with this agent.</div>
-                <button
-                  onClick={handleStartSession}
-                  className="mt-4 px-4 py-2 border border-tui-accent text-tui-accent hover:bg-tui-accent/10 text-xs font-bold uppercase tracking-widest"
-                >
-                  Start New Session
-                </button>
-              </div>
-            )}
-          </section>
-
-          {/* Events Section */}
-          <section className="border border-tui-border flex flex-col flex-1 min-h-[200px] lg:min-h-[250px]">
-            <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold">
-                <Activity size={14} />
-                Agent events
-              </div>
-              <span className="text-xs text-tui-dim italic hidden sm:block">tail -f /logs/agent.log</span>
-            </div>
-             <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-ctp-crust/40 font-mono text-[10px] sm:text-xs space-y-1">
-              {events.length === 0 && (
-                <div className="text-tui-dim italic">No events recorded for this agent.</div>
               )}
-              {events.map((event) => (
-                <LogEntry 
-                  key={event.id}
-                  time={new Date(event.occurred_at).toLocaleTimeString()} 
-                  level={event.kind.includes('fail') || event.kind.includes('error') ? 'ERROR' : 'INFO'} 
-                        msg={`${event.kind.charAt(0).toUpperCase() + event.kind.slice(1)}: ${JSON.stringify(event.payload)}`} 
-                      />
-                    ))}
-              {activeSession && (
-                <div className="animate-pulse inline-block w-2 h-4 bg-tui-text ml-1 align-middle" />
+
+              {currentSession && currentSession.status !== 'archived' && (
+                <button
+                  onClick={handleArchiveSession}
+                  disabled={archiveSession.isPending}
+                  className="px-3 py-2 border border-tui-border bg-ctp-crust/40 text-tui-dim font-bold text-[10px] hover:text-tui-text hover:border-tui-accent transition-colors uppercase tracking-tui disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {archiveSession.isPending ? 'Archiving...' : 'Archive'}
+                </button>
               )}
             </div>
-          </section>
+          </div>
+
+          <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="text-[10px] text-tui-dim font-mono truncate">
+                {currentSession ? `${currentSession.status.toUpperCase()} • ${currentSession.id.slice(0, 8)}` : 'No session'}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <HeaderStat label="Total sessions" value={allSessions.length.toString()} />
+              <HeaderStat label="Total events" value={events.length.toString()} />
+              <HeaderStat label="Last active" value={agent.last_active} />
+            </div>
+          </div>
         </div>
+      </div>
 
-        {/* Right Sidebar: Context & Info */}
-        <aside className={cn(
-          "w-full sm:w-80 lg:w-80 shrink-0 flex flex-col lg:h-full gap-4 md:gap-6 transition-transform duration-300 ease-in-out",
-          "lg:static lg:translate-x-0",
-          "fixed inset-y-0 right-0 z-50 bg-ctp-mantle lg:bg-transparent p-4 lg:p-0 overflow-y-auto",
-          mobileSidebar === 'info' 
-            ? "translate-x-0" 
-            : "translate-x-full lg:translate-x-0"
-        )}>
-          {mobileSidebar === 'info' && (
-            <div className="flex justify-between items-center mb-4 lg:hidden">
-                 <div className="text-xs font-bold tracking-tui flex items-center gap-2">
-                <Info size={16} className="text-tui-accent" />
-                Agent information
-              </div>
-              <button
-                onClick={() => setMobileSidebar(null)}
-                className="p-2 border border-tui-border hover:text-tui-accent transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-          )}
-          <section className="border border-tui-border">
-              <div className="flex items-center gap-2 text-xs font-bold tracking-tui">
-                <Activity size={14} />
-                Statistics
-              </div>
-            <div className="p-3 md:p-4 space-y-4">
-              <StatItem label="Total sessions" value={sessions.length.toString()} />
-              <StatItem label="Last active" value={agent.last_active} />
-              <StatItem label="Total events" value={events.length.toString()} />
-            </div>
-          </section>
-
-          <section className="border border-tui-border shrink-0">
-            <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold">
-                <Mail size={14} />
-                Mailbox
-              </div>
-              <Link to="/mail">
-                <ChevronRight size={14} className="text-tui-dim hover:text-tui-accent" />
-              </Link>
-            </div>
-            <div className="divide-y divide-tui-border">
-              {agentThreads.length === 0 ? (
-                <div className="p-4 text-xs text-tui-dim italic text-center">
-                  No active mail for this agent.
+      {/* Main View */}
+      <section className="border border-tui-border flex flex-col flex-1 min-h-0 overflow-hidden">
+        {currentSession ? (
+          <AgentLayout
+            agentId={agentId}
+            currentSession={currentSession}
+            sessions={allSessions}
+            selectedSessionId={selectedSessionId || ''}
+            onSessionSelect={handleSelectSession}
+            onNewSession={handleStartSession}
+            messages={messages}
+            diffs={sessionDiff}
+            onViewDiff={() => {}}
+            logsContent={
+              <div className="h-full flex flex-col">
+                <div className="p-3 border-b border-tui-border bg-ctp-crust/40">
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <Activity size={14} />
+                    Agent events
+                  </div>
+                  <span className="text-xs text-tui-dim italic ml-auto">tail -f /logs/agent.log</span>
                 </div>
-              ) : (
-                agentThreads.slice(0, 5).map(thread => (
-                  <Link 
-                    key={thread.id} 
-                    to="/mail" 
-                    className="p-3 block hover:bg-tui-dim/5 transition-colors"
-                  >
-                    <div className="flex justify-between items-start mb-1 gap-2">
-                      <span className="text-xs font-bold text-tui-text truncate">{thread.subject}</span>
-                      <span className="text-xs text-tui-dim whitespace-nowrap">{new Date(thread.last_message_at).toLocaleTimeString()}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Inbox size={12} className={thread.unread_count > 0 ? 'text-tui-accent' : 'text-tui-dim'} />
-                      <span className="text-xs text-tui-dim uppercase">{thread.message_count} msgs</span>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </section>
 
-          {activeSession ? (
-            <button 
-              onClick={handleStopSession}
-              disabled={stopSession.isPending}
-              className="w-full border border-red-900/50 bg-red-950/20 py-3 text-red-500 font-bold text-xs hover:bg-red-900/30 transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-            >
-              {stopSession.isPending ? 'Terminating...' : 'Terminate Session'}
-            </button>
-          ) : (
+                <div className="flex-1 overflow-y-auto p-3 md:p-4 font-mono text-[10px] sm:text-xs space-y-1">
+                  {currentSession.status !== 'running' && currentSession.metadata && (
+                    <div className="mb-4 border border-tui-border bg-ctp-crust/20">
+                      <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center gap-2 text-xs font-bold">
+                        <Archive size={14} />
+                        Termination metadata
+                      </div>
+                      <div className="p-3 space-y-2 text-[10px] font-mono">
+                        {currentSession.metadata.terminated_by ? (
+                          <div className="flex justify-between">
+                            <span className="text-tui-dim">By:</span>
+                            <span className="text-tui-text font-bold">{currentSession.metadata.terminated_by as string}</span>
+                          </div>
+                        ) : null}
+                        {currentSession.metadata.terminated_at ? (
+                          <div className="flex justify-between">
+                            <span className="text-tui-dim">At:</span>
+                            <span className="text-tui-text">{new Date(currentSession.metadata.terminated_at as string).toLocaleString()}</span>
+                          </div>
+                        ) : null}
+                        {currentSession.metadata.termination_reason ? (
+                          <div className="mt-1 border-t border-tui-border/30 pt-1">
+                            <div className="text-tui-dim mb-0.5">Reason:</div>
+                            <div className="text-tui-text italic">{currentSession.metadata.termination_reason as string}</div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+
+                  {events.length === 0 && <div className="text-tui-dim italic">No events recorded for this agent.</div>}
+                  {events.map((event) => (
+                    <LogEntry
+                      key={event.id}
+                      time={new Date(event.occurred_at).toLocaleTimeString()}
+                      level={event.kind.includes('fail') || event.kind.includes('error') ? 'ERROR' : 'INFO'}
+                      msg={`${event.kind.charAt(0).toUpperCase() + event.kind.slice(1)}: ${JSON.stringify(event.payload)}`}
+                    />
+                  ))}
+
+                  {activeSession && <div className="animate-pulse inline-block w-2 h-4 bg-tui-text ml-1 align-middle" />}
+                </div>
+              </div>
+            }
+            statsContent={
+              <div className="p-4">
+                <div className="text-xs font-bold text-tui-dim mb-4 uppercase tracking-widest">Session Stats</div>
+                <div className="space-y-2">
+                  <div className="border border-tui-border bg-ctp-crust/20 p-3">
+                    <div className="text-[10px] text-tui-dim uppercase tracking-widest mb-1">Status</div>
+                    <div className="text-sm font-bold text-tui-text">{currentSession.status.toUpperCase()}</div>
+                  </div>
+                  <div className="border border-tui-border bg-ctp-crust/20 p-3">
+                    <div className="text-[10px] text-tui-dim uppercase tracking-widest mb-1">Model</div>
+                    <div className="text-sm font-bold text-tui-text">{currentSession.model}</div>
+                  </div>
+                  <div className="border border-tui-border bg-ctp-crust/20 p-3">
+                    <div className="text-[10px] text-tui-dim uppercase tracking-widest mb-1">Created</div>
+                    <div className="text-sm font-bold text-tui-text">{new Date(currentSession.inserted_at).toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+            }
+            timelineContent={
+              <div className="p-4">
+                <div className="text-xs font-bold text-tui-dim mb-4 uppercase tracking-widest">Event Timeline</div>
+                <EventTimeline events={events} />
+              </div>
+            }
+            todosContent={
+              <div className="p-4">
+                <div className="text-xs font-bold text-tui-dim mb-4 uppercase tracking-widest">Session Tasks</div>
+                <SessionTodos sessionId={currentSession.id} />
+              </div>
+            }
+          >
+            <SessionChat
+              session={currentSession}
+              mode={sessionModes[currentSession.id] || 'plan'}
+              onModeChange={(mode) => handleModeChange(currentSession.id, mode)}
+              onNewSession={handleStartSession}
+              showModeToggle={currentSession.status === 'running'}
+              showHeader={false}
+              className="h-full"
+            />
+          </AgentLayout>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-center text-tui-dim gap-2 bg-ctp-mantle/50 p-4">
+            <div className="text-xs uppercase tracking-tui font-bold">No session selected</div>
+            <div className="text-[10px] italic">Start a session to begin chatting with this agent.</div>
             <button
               onClick={handleStartSession}
-              disabled={!agentData || createSession.isPending}
-              className="w-full border border-tui-accent bg-tui-accent/10 py-3 text-tui-accent font-bold text-xs hover:bg-tui-accent hover:text-tui-bg transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shrink-0"
+              className="mt-4 px-4 py-2 border border-tui-accent text-tui-accent hover:bg-tui-accent/10 text-xs font-bold uppercase tracking-widest"
             >
-              {createSession.isPending ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-              {createSession.isPending ? 'Starting...' : 'Start Session'}
+              Start New Session
             </button>
-          )}
-
-          {currentSession && currentSession.status !== 'archived' && (
-            <button
-              onClick={handleArchiveSession}
-              disabled={archiveSession.isPending}
-              className="w-full border border-tui-border bg-ctp-crust/40 py-2 text-tui-dim font-bold text-[10px] hover:text-tui-text hover:border-tui-accent transition-colors uppercase tracking-tui disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {archiveSession.isPending ? 'Archiving...' : 'Archive Session'}
-            </button>
-          )}
-
-          {currentSession?.status !== 'running' && currentSession?.metadata && (
-            <section className="border border-tui-border shrink-0">
-              <div className="p-2 border-b border-tui-border bg-ctp-crust/40 flex items-center gap-2 text-xs font-bold">
-                <Archive size={14} />
-                Termination metadata
-              </div>
-              <div className="p-3 space-y-2 text-[10px] font-mono">
-                {currentSession.metadata.terminated_by ? (
-                  <div className="flex justify-between">
-                    <span className="text-tui-dim">By:</span>
-                    <span className="text-tui-text font-bold">{currentSession.metadata.terminated_by as string}</span>
-                  </div>
-                ) : null}
-                {currentSession.metadata.terminated_at ? (
-                  <div className="flex justify-between">
-                    <span className="text-tui-dim">At:</span>
-                    <span className="text-tui-text">{new Date(currentSession.metadata.terminated_at as string).toLocaleString()}</span>
-                  </div>
-                ) : null}
-                {currentSession.metadata.termination_reason ? (
-                  <div className="mt-1 border-t border-tui-border/30 pt-1">
-                    <div className="text-tui-dim mb-0.5">Reason:</div>
-                    <div className="text-tui-text italic">{currentSession.metadata.termination_reason as string}</div>
-                  </div>
-                ) : null}
-              </div>
-            </section>
-          )}
-        </aside>
-      </div>
+          </div>
+        )}
+      </section>
 
       {agentData && activeProject && (
         <EditAgentModal
@@ -985,11 +510,11 @@ function LogEntry({ time, level, msg }: { time: string; level: string; msg: stri
   )
 }
 
-function StatItem({ label, value }: { label: string; value: string }) {
+function HeaderStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-center">
-      <span className="text-xs text-tui-dim font-bold tracking-widest">{label}</span>
-      <span className="text-sm font-bold">{value}</span>
+    <div className="border border-tui-border bg-ctp-crust/40 px-2 py-1">
+      <div className="text-[8px] text-tui-dim font-bold uppercase tracking-widest">{label}</div>
+      <div className="text-[10px] font-mono font-bold text-tui-text">{value}</div>
     </div>
   )
 }

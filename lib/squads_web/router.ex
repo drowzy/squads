@@ -55,6 +55,18 @@ defmodule SquadsWeb.Router do
 
       # Autocomplete endpoints
       get "/files", ProjectController, :files
+
+      # Filesystem issues
+      get "/fs/issues", FsIssueController, :index
+      get "/fs/issues/:id", FsIssueController, :show
+      post "/fs/issues", FsIssueController, :create
+      patch "/fs/issues/:id", FsIssueController, :update
+
+      # Filesystem reviews
+      get "/fs/reviews", FsReviewController, :index
+      get "/fs/reviews/:id", FsReviewController, :show
+      post "/fs/reviews", FsReviewController, :create
+      post "/fs/reviews/:id/submit", FsReviewController, :submit
     end
 
     # Standalone provider endpoint
@@ -94,9 +106,9 @@ defmodule SquadsWeb.Router do
       get "/transcript", SessionController, :transcript
       get "/diff", SessionController, :diff
       get "/todos", SessionController, :todos
+      get "/stream", SessionController, :stream
       post "/prompt", SessionController, :prompt
       post "/prompt_async", SessionController, :prompt_async
-      post "/prompt_stream", SessionController, :prompt_stream
       post "/command", SessionController, :command
       post "/shell", SessionController, :shell
     end
@@ -142,6 +154,7 @@ defmodule SquadsWeb.Router do
     patch "/mcp/:name", MCPController, :update
     get "/mcp/:name/connect", MCPController, :connect_stream
     post "/mcp/:name/connect", MCPController, :connect
+    options "/mcp/:name/connect", MCPController, :options_connect
     post "/mcp/:name/disconnect", MCPController, :disconnect
     get "/mcp/:name/auth", MCPController, :auth
     post "/mcp/:name/auth", MCPController, :auth
